@@ -1,5 +1,6 @@
 //! Portable authored scene features, simulation constraints, and deformation systems.
 use crate::model::common::IntoOwned;
+use crate::model::error::{Location, PhysicsError, ReferenceError};
 /// Compiled particle programmes and their typed host boundary.
 pub mod popcorn;
 /// Region-local illumination and cookie programs.
@@ -35,45 +36,88 @@ impl ValidateLinks for PhysicsSystem<'_> {
 impl<'a> PhysicsSystem<'a> {
     /// Validates local collision geometry and constraint relationships.
     pub fn validate(&self) -> Result<(), Error> {
-        for (_, body) in &self.bodies {
-            if body.shapes.iter().any(|shape| self.shape(*shape).is_none())
-                || body.follow.as_ref().is_some_and(|follow| {
-                    follow
-                        .parent
-                        .is_some_and(|parent| self.body(parent).is_none())
-                })
-            {
-                return Err(Error::new(
-                    "physics.bodies",
-                    "shape or following-body identity does not exist",
-                ));
+        for (id, body) in &self.bodies {
+            for (index, &shape) in body.shapes.iter().enumerate() {
+                if self.shape(shape).is_none() {
+                    return Err(Error::at(
+                        Location::for_owner(*id).field("shapes").index(index),
+                        if self.scope.contains(shape) {
+                            ReferenceError::Unknown {
+                                target: shape.into(),
+                            }
+                        } else {
+                            ReferenceError::Foreign {
+                                target: shape.into(),
+                            }
+                        },
+                    ));
+                }
             }
-            if body
-                .damping
-                .to_array()
-                .iter()
-                .chain([&body.inertia_scale, &body.gravity_scale])
-                .any(|v| !v.is_finite())
-            {
-                return Err(Error::new(
-                    "physics.bodies",
-                    "simulation parameters must be finite",
-                ));
+            if let Some(parent) = body.follow.as_ref().and_then(|follow| follow.parent) {
+                if self.body(parent).is_none() {
+                    return Err(Error::at(
+                        Location::for_owner(*id).field("follow").field("parent"),
+                        if self.scope.contains(parent) {
+                            ReferenceError::Unknown {
+                                target: parent.into(),
+                            }
+                        } else {
+                            ReferenceError::Foreign {
+                                target: parent.into(),
+                            }
+                        },
+                    ));
+                }
+            }
+            for (index, value) in body.damping.to_array().into_iter().enumerate() {
+                if !value.is_finite() {
+                    return Err(Error::at(
+                        Location::for_owner(*id).field("damping").index(index),
+                        PhysicsError::NonFiniteValue {
+                            value: f64::from(value),
+                        },
+                    ));
+                }
+            }
+            for (field, value) in [
+                ("inertia_scale", body.inertia_scale),
+                ("gravity_scale", body.gravity_scale),
+            ] {
+                if !value.is_finite() {
+                    return Err(Error::at(
+                        Location::for_owner(*id).field(field),
+                        PhysicsError::NonFiniteValue {
+                            value: f64::from(value),
+                        },
+                    ));
+                }
             }
         }
-        for (_, joint) in &self.joints {
-            if joint.bodies.iter().any(|body| self.body(*body).is_none()) {
-                return Err(Error::new(
-                    "physics.joints",
-                    "constrained body does not exist",
-                ));
+        for (id, joint) in &self.joints {
+            for (index, &body) in joint.bodies.iter().enumerate() {
+                if self.body(body).is_none() {
+                    return Err(Error::at(
+                        Location::for_owner(*id).field("bodies").index(index),
+                        if self.scope.contains(body) {
+                            ReferenceError::Unknown {
+                                target: body.into(),
+                            }
+                        } else {
+                            ReferenceError::Foreign {
+                                target: body.into(),
+                            }
+                        },
+                    ));
+                }
             }
         }
-        for (_, shape) in &self.shapes {
+        for (id, shape) in &self.shapes {
             if !shape.transform.is_finite() {
-                return Err(Error::new(
-                    "physics.shapes",
-                    "shape transform must be finite",
+                return Err(Error::at(
+                    Location::for_owner(*id).field("transform"),
+                    PhysicsError::NonFiniteMatrix {
+                        matrix: shape.transform,
+                    },
                 ));
             }
             if let Geometry::Triangles {
@@ -81,16 +125,33 @@ impl<'a> PhysicsSystem<'a> {
                 triangles,
             } = &shape.geometry
             {
-                if positions.iter().any(|v| !v.is_finite())
-                    || triangles
-                        .iter()
-                        .flatten()
-                        .any(|index| index as usize >= positions.len())
-                {
-                    return Err(Error::new(
-                        "physics.shapes",
-                        "collision triangle geometry is invalid",
-                    ));
+                for (index, position) in positions.iter().enumerate() {
+                    if !position.is_finite() {
+                        return Err(Error::at(
+                            Location::for_owner(*id)
+                                .field("geometry")
+                                .field("positions")
+                                .index(index),
+                            PhysicsError::NonFinitePosition { position },
+                        ));
+                    }
+                }
+                for (index, triangle) in triangles.iter().enumerate() {
+                    for (corner, vertex) in triangle.into_iter().enumerate() {
+                        if vertex as usize >= positions.len() {
+                            return Err(Error::at(
+                                Location::for_owner(*id)
+                                    .field("geometry")
+                                    .field("triangles")
+                                    .index(index)
+                                    .index(corner),
+                                PhysicsError::TriangleVertexOutOfBounds {
+                                    vertex,
+                                    positions: positions.len(),
+                                },
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -127,9 +188,13 @@ impl<'a> PhysicsSystem<'a> {
             .iter()
             .position(|(key, _)| *key == id)
             .ok_or_else(|| {
-                Error::new(
-                    "physics.shapes",
-                    "identity belongs to a different simulation system or does not exist",
+                Error::at(
+                    Location::for_owner(id),
+                    if self.scope.contains(id) {
+                        ReferenceError::Unknown { target: id.into() }
+                    } else {
+                        ReferenceError::Foreign { target: id.into() }
+                    },
                 )
             })?;
         let old = replace(&mut self.shapes[index].1, value);
@@ -170,9 +235,13 @@ impl<'a> PhysicsSystem<'a> {
             .iter()
             .position(|(key, _)| *key == id)
             .ok_or_else(|| {
-                Error::new(
-                    "physics.bodies",
-                    "identity belongs to a different simulation system or does not exist",
+                Error::at(
+                    Location::for_owner(id),
+                    if self.scope.contains(id) {
+                        ReferenceError::Unknown { target: id.into() }
+                    } else {
+                        ReferenceError::Foreign { target: id.into() }
+                    },
                 )
             })?;
         let old = replace(&mut self.bodies[index].1, value);
@@ -213,9 +282,13 @@ impl<'a> PhysicsSystem<'a> {
             .iter()
             .position(|(key, _)| *key == id)
             .ok_or_else(|| {
-                Error::new(
-                    "physics.joints",
-                    "identity belongs to a different simulation system or does not exist",
+                Error::at(
+                    Location::for_owner(id),
+                    if self.scope.contains(id) {
+                        ReferenceError::Unknown { target: id.into() }
+                    } else {
+                        ReferenceError::Foreign { target: id.into() }
+                    },
                 )
             })?;
         let old = replace(&mut self.joints[index].1, value);

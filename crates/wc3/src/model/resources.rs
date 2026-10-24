@@ -1,5 +1,9 @@
 //! Model-owned external dependency declarations and profile-specific addressing.
 use crate::model::common::IntoOwned;
+use crate::model::error::{
+    Location, PayloadKind, ProfileError, ProfileKind, ProfileViolation, ReferenceError,
+    ResourceAddressKind, ResourceVocabulary,
+};
 use crate::model::{Error, Link, ValidateLinks};
 use std::borrow::Cow;
 
@@ -46,6 +50,20 @@ pub enum ImageResource<'a> {
     },
 }
 
+impl ImageResource<'_> {
+    /// The authored addressing form, independent of bytes or display spelling.
+    pub fn address_kind(&self) -> ResourceAddressKind {
+        match self {
+            Self::Root => ResourceAddressKind::Root,
+            Self::Relative { .. } => ResourceAddressKind::Relative,
+            Self::Path(_) => ResourceAddressKind::Path,
+            Self::FileDataId { .. } => ResourceAddressKind::FileDataId,
+            Self::Replaceable { .. } => ResourceAddressKind::Replaceable,
+            Self::EmbeddedImage { .. } => ResourceAddressKind::EmbeddedImage,
+            Self::Named { .. } => ResourceAddressKind::Named,
+        }
+    }
+}
 impl ValidateLinks for ImageResource<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Self::FileDataId { filename, .. } | Self::Replaceable { filename, .. } = self {
@@ -74,9 +92,12 @@ impl<'a> TryFrom<ImageResource<'a>> for PathResource<'a> {
     fn try_from(value: ImageResource<'a>) -> Result<Self, Error> {
         match value {
             ImageResource::Path(value) => Ok(Self::Path(value)),
-            _ => Err(Error::new(
-                "resources",
-                "address is not admitted by the destination resource vocabulary",
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ReferenceError::ResourceAddress {
+                    vocabulary: ResourceVocabulary::Path,
+                    actual: other.address_kind(),
+                },
             )),
         }
     }
@@ -119,9 +140,15 @@ impl<'a> TryFrom<ResourceLocator<'a>> for M2ModelResource<'a> {
         match value {
             ResourceLocator::Path(path) => Ok(Self::Path(path)),
             ResourceLocator::FileDataId(id) => Ok(Self::FileDataId(id)),
-            _ => Err(Error::new(
-                "m2.model_resource",
-                "child models require a native path or file-data identity",
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::UnsupportedResourceAddress {
+                        owner: PayloadKind::ModelResource,
+                        actual: other.address_kind(),
+                    },
+                ),
             )),
         }
     }
@@ -156,9 +183,15 @@ impl<'a> TryFrom<ImageResource<'a>> for MdlxImageResource<'a> {
         match value {
             ImageResource::Path(value) => Ok(Self::Path(value)),
             ImageResource::Replaceable { id, filename } => Ok(Self::Replaceable { id, filename }),
-            _ => Err(Error::new(
-                "resources",
-                "address is not admitted by the destination resource vocabulary",
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::UnsupportedResourceAddress {
+                        owner: PayloadKind::ImageResource,
+                        actual: other.address_kind(),
+                    },
+                ),
             )),
         }
     }
@@ -212,9 +245,15 @@ impl<'a> TryFrom<ImageResource<'a>> for M2ImageResource<'a> {
             ImageResource::Path(value) => Ok(Self::Path(value)),
             ImageResource::FileDataId { id, filename } => Ok(Self::FileDataId { id, filename }),
             ImageResource::Replaceable { id, filename } => Ok(Self::Replaceable { id, filename }),
-            _ => Err(Error::new(
-                "resources",
-                "address is not admitted by the destination resource vocabulary",
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::UnsupportedResourceAddress {
+                        owner: PayloadKind::ImageResource,
+                        actual: other.address_kind(),
+                    },
+                ),
             )),
         }
     }
@@ -268,9 +307,21 @@ impl<'a> TryFrom<ImageResource<'a>> for WorldImageResource<'a> {
                 Ok(Self::FileDataId(id))
             }
             ImageResource::EmbeddedImage { bytes } => Ok(Self::EmbeddedImage { bytes }),
-            _ => Err(Error::new(
-                "resources",
-                "address is not admitted by the destination resource vocabulary",
+            ImageResource::FileDataId { filename, .. } => Err(Error::at(
+                Location::new().field("filename"),
+                ReferenceError::FilenameNotRepresentable {
+                    filename: filename.into_owned(),
+                },
+            )),
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::UnsupportedResourceAddress {
+                        owner: PayloadKind::ImageResource,
+                        actual: other.address_kind(),
+                    },
+                ),
             )),
         }
     }
@@ -305,9 +356,21 @@ impl<'a> TryFrom<ImageResource<'a>> for WorldModelResource<'a> {
             ImageResource::FileDataId { id, filename } if filename.is_empty() => {
                 Ok(Self::FileDataId(id))
             }
-            _ => Err(Error::new(
-                "resources",
-                "address is not admitted by the destination resource vocabulary",
+            ImageResource::FileDataId { filename, .. } => Err(Error::at(
+                Location::new().field("filename"),
+                ReferenceError::FilenameNotRepresentable {
+                    filename: filename.into_owned(),
+                },
+            )),
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::UnsupportedResourceAddress {
+                        owner: PayloadKind::ModelResource,
+                        actual: other.address_kind(),
+                    },
+                ),
             )),
         }
     }
@@ -342,6 +405,18 @@ pub enum ResourceLocator<'a> {
     },
 }
 
+impl ResourceLocator<'_> {
+    /// The authored addressing form, independent of bytes or display spelling.
+    pub fn address_kind(&self) -> ResourceAddressKind {
+        match self {
+            Self::Root => ResourceAddressKind::Root,
+            Self::Relative { .. } => ResourceAddressKind::Relative,
+            Self::Path(_) => ResourceAddressKind::Path,
+            Self::FileDataId(_) => ResourceAddressKind::FileDataId,
+            Self::Named { .. } => ResourceAddressKind::Named,
+        }
+    }
+}
 impl ValidateLinks for ResourceLocator<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
@@ -372,9 +447,18 @@ impl<'a> TryFrom<ImageResource<'a>> for ResourceLocator<'a> {
             }
 
             ImageResource::Named { namespace, name } => Ok(Self::Named { namespace, name }),
-            _ => Err(Error::new(
-                "resources",
-                "image-only declaration cannot address an external dependency",
+            ImageResource::FileDataId { filename, .. } => Err(Error::at(
+                Location::new().field("filename"),
+                ReferenceError::FilenameNotRepresentable {
+                    filename: filename.into_owned(),
+                },
+            )),
+            other => Err(Error::at(
+                Location::new().field("resource"),
+                ReferenceError::ResourceAddress {
+                    vocabulary: ResourceVocabulary::ExternalDependency,
+                    actual: other.address_kind(),
+                },
             )),
         }
     }
@@ -469,10 +553,13 @@ impl<'a> TryFrom<ResourceLocator<'a>> for M2ResourceLocator<'a> {
             },
             ResourceLocator::Path(path) => Self::Path(path),
             ResourceLocator::FileDataId(id) => Self::FileDataId(id),
-            _ => {
-                return Err(Error::new(
-                    "m2.resources",
-                    "companion address is unavailable in the M2 vocabulary",
+            other => {
+                return Err(Error::at(
+                    Location::new().field("resource"),
+                    ReferenceError::ResourceAddress {
+                        vocabulary: ResourceVocabulary::M2Companion,
+                        actual: other.address_kind(),
+                    },
                 ))
             }
         })

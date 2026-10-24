@@ -1,6 +1,7 @@
 //! Profile-specific joint binding with borrowed matrix inspection.
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
+use crate::model::error::{Location, TransformError};
 use crate::model::profiles::{Either, Unavailable};
 use crate::model::{Error, Link, PackedArray, ValidateLinks};
 use glam::Mat4;
@@ -93,14 +94,30 @@ impl<'data> BindingSchema<'data> for ExplicitBinding<'data> {
         BindMatrices::Explicit(&self.matrices)
     }
     fn validate(&self, joints: usize) -> Result<(), Error> {
-        if joints != self.matrices.len() || self.matrices.iter().any(|value| !value.is_finite()) {
-            Err(Error::new(
-                "skin.binding",
-                "expected one finite inverse bind transform per joint",
-            ))
-        } else {
-            Ok(())
+        if joints != self.matrices.len() {
+            return Err(Error::at(
+                Location::new().field("binding").field("matrices"),
+                TransformError::BindMatrixCount {
+                    expected: joints,
+                    actual: self.matrices.len(),
+                },
+            ));
         }
+        if let Some((index, matrix)) = self
+            .matrices
+            .iter()
+            .enumerate()
+            .find(|(_, matrix)| !matrix.is_finite())
+        {
+            return Err(Error::at(
+                Location::new()
+                    .field("binding")
+                    .field("matrices")
+                    .index(index),
+                TransformError::NonFiniteMatrix { matrix },
+            ));
+        }
+        Ok(())
     }
 }
 

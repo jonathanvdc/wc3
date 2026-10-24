@@ -130,3 +130,145 @@ fn successful_try_edit_returns_the_operation_result_after_publication() {
         .unwrap();
     assert_eq!(model.node(result).unwrap().name, "Published");
 }
+
+#[test]
+fn rest_constant_conflicts_retain_slot_and_both_typed_values() {
+    use wc3::model::error::ConstantValue;
+    use wc3::model::PropertyValues;
+    let mut values = PropertyValues::default();
+    let slot = values.add(1f32);
+    let mut different = values.clone();
+    different.set(slot, 2.).unwrap();
+    let mut builder = Model::<Mdlx>::builder("Example");
+    builder.import_values(&values).unwrap();
+    let error = builder.import_values(&different).unwrap_err();
+    assert!(
+        matches!(error.location().segments(),[Segment::Owner(Owner::Value(id))] if *id==slot.slot())
+    );
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Reference(ReferenceError::ConflictingConstants {
+            existing: ConstantValue::Scalar(1.),
+            incoming: ConstantValue::Scalar(2.)
+        })
+    ));
+}
+
+#[test]
+fn resource_failures_distinguish_address_form_from_authored_filename_loss() {
+    use wc3::model::error::{
+        PayloadKind, ProfileKind, ProfileViolation, ReferenceError, ResourceAddressKind,
+        ResourceVocabulary,
+    };
+    use wc3::model::{ImageResource, MdlxImageResource, PathResource, WorldImageResource};
+    let error = PathResource::try_from(ImageResource::Root).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Reference(ReferenceError::ResourceAddress {
+            vocabulary: ResourceVocabulary::Path,
+            actual: ResourceAddressKind::Root
+        })
+    ));
+    let error = MdlxImageResource::try_from(ImageResource::FileDataId {
+        id: 7,
+        filename: [].as_slice().into(),
+    })
+    .unwrap_err();
+    assert!(
+        matches!(error.kind(),ErrorKind::Profile(cause) if cause.target==ProfileKind::Mdlx && matches!(cause.violation,ProfileViolation::UnsupportedResourceAddress {owner:PayloadKind::ImageResource,actual:ResourceAddressKind::FileDataId}))
+    );
+    let error = WorldImageResource::try_from(ImageResource::FileDataId {
+        id: 7,
+        filename: [0xff, 1].as_slice().into(),
+    })
+    .unwrap_err();
+    assert!(
+        matches!(error.kind(),ErrorKind::Reference(ReferenceError::FilenameNotRepresentable {filename}) if filename==&[0xff,1])
+    );
+}
+
+#[test]
+fn bind_matrix_failures_retain_cardinality_or_the_actual_nonfinite_matrix() {
+    use wc3::model::error::TransformError;
+    use wc3::model::{BindingSchema, ExplicitBinding, Mat4};
+    let binding = ExplicitBinding::new([Mat4::IDENTITY]).unwrap();
+    let error = binding.validate(2).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::BindMatrixCount {
+            expected: 2,
+            actual: 1
+        })
+    ));
+    let error =
+        ExplicitBinding::new([Mat4::IDENTITY, Mat4::from_cols_array(&[f32::NAN; 16])]).unwrap_err();
+    assert!(
+        matches!(error.location().segments(),[Segment::Field(binding),Segment::Field(matrices),Segment::Index(1)] if binding=="binding" && matrices=="matrices")
+    );
+    assert!(
+        matches!(error.kind(),ErrorKind::Transform(TransformError::NonFiniteMatrix {matrix}) if !matrix.is_finite())
+    );
+}
+
+#[test]
+fn portable_collision_errors_retain_triangle_corner_and_preserve_failed_add_rollback() {
+    use wc3::model::common::IntoZeroVec;
+    use wc3::model::error::PhysicsError;
+    use wc3::model::scene::{ContactMaterial, Geometry, PhysicsSystem, Shape};
+    use wc3::model::{Mat4, PackedArray};
+    let mut system = PhysicsSystem::default();
+    let error = system
+        .add_shape(Shape {
+            geometry: Geometry::Triangles {
+                positions: PackedArray::from_storage(vec![[0f32; 3]].into_zero_vec()),
+                triangles: PackedArray::from_storage(vec![[0u32, 2, 0]].into_zero_vec()),
+            },
+            transform: Mat4::IDENTITY,
+            material: ContactMaterial::default(),
+            callback_categories: 0,
+        })
+        .unwrap_err();
+    assert_eq!(system.shapes().len(), 0);
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Physics(PhysicsError::TriangleVertexOutOfBounds {
+            vertex: 2,
+            positions: 1
+        })
+    ));
+    assert!(
+        matches!(error.location().segments(),[Segment::Owner(Owner::Shape(_)),Segment::Field(geometry),Segment::Field(triangles),Segment::Index(0),Segment::Index(1)] if geometry=="geometry" && triangles=="triangles")
+    );
+}
+
+#[test]
+fn graph_timing_failures_retain_clip_or_clock_identity_and_actual_duration() {
+    use wc3::model::error::AnimationError;
+    use wc3::model::{Clip, SharedClock, Time};
+    let mut builder = Model::<Mdlx>::builder("Example");
+    let clip = builder
+        .add_clip(Clip::named("invalid").with_duration(Time::seconds(-1.).unwrap()))
+        .unwrap();
+    let error = builder.finish().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Animation(AnimationError::NegativeDuration { value: -1. })
+    ));
+    assert!(
+        matches!(error.location().segments(),[Segment::Owner(Owner::Clip(id)),Segment::Field(field)] if *id==clip && field=="duration")
+    );
+    let mut builder = Model::<Mdlx>::builder("Example");
+    let clock = builder
+        .add_clock(SharedClock::Repeating {
+            period: Time::default(),
+        })
+        .unwrap();
+    let error = builder.finish().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Animation(AnimationError::NonPositivePeriod { value: 0. })
+    ));
+    assert!(
+        matches!(error.location().segments(),[Segment::Owner(Owner::Clock(id)),Segment::Field(field)] if *id==clock && field=="period")
+    );
+}

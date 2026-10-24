@@ -7,7 +7,7 @@ pub use edit::EditError;
 mod location;
 pub use location::{Location, Owner, Segment};
 mod reference;
-pub use reference::{ConstantValue, ReferenceError};
+pub use reference::{ConstantValue, ReferenceError, ResourceVocabulary};
 mod geometry;
 pub use geometry::*;
 mod animation;

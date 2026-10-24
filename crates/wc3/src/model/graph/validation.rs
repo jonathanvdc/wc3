@@ -1,5 +1,5 @@
 //! Structural and relationship checks before publishing a graph.
-use crate::model::error::{Location, Owner, ReferenceError};
+use crate::model::error::{AnimationError, Location, Owner, ReferenceError};
 use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::ValueSlot;
 use crate::model::{
@@ -99,16 +99,24 @@ impl<P: Profile> Model<'_, P> {
             Time::seconds(clip.source_start.as_seconds() + clip.duration.as_seconds())
                 .map_err(|error| error.with_owner(id))?;
             if clip.duration.as_seconds() < 0. {
-                return Err(
-                    Error::new("clip.duration", "duration must be nonnegative").with_owner(id)
-                );
+                return Err(Error::at(
+                    Location::for_owner(id).field("duration"),
+                    AnimationError::NegativeDuration {
+                        value: clip.duration.as_seconds(),
+                    },
+                ));
             }
         }
         for (id, clock) in self.clocks.iter() {
-            if matches!(clock, SharedClock::Repeating { period } if period.as_seconds() <= 0.) {
-                return Err(
-                    Error::new("clock.period", "repeating period must be positive").with_owner(id),
-                );
+            if let SharedClock::Repeating { period } = clock {
+                if period.as_seconds() <= 0. {
+                    return Err(Error::at(
+                        Location::for_owner(id).field("period"),
+                        AnimationError::NonPositivePeriod {
+                            value: period.as_seconds(),
+                        },
+                    ));
+                }
             }
         }
         for (id, skin) in self.skins.iter() {
@@ -437,9 +445,10 @@ impl<P: Profile> Model<'_, P> {
                         Location::for_owner(id)
                             .field("bindings")
                             .index(index)
-                            .with_owner(binding.instance),
-                        ReferenceError::Unknown {
-                            target: binding.draw.into(),
+                            .field("draw"),
+                        ReferenceError::UnknownDraw {
+                            instance: binding.instance,
+                            draw: binding.draw,
                         },
                     ));
                 }
@@ -458,10 +467,9 @@ impl<P: Profile> Model<'_, P> {
             for draw in &instance.draws {
                 if mesh.subset(draw.subset).is_none() {
                     return Err(Error::at(
-                        Location::for_owner(id)
-                            .field("draws")
-                            .with_owner(draw.id())
-                            .field("subset"),
+                        Location::for_owner(draw.id())
+                            .field("subset")
+                            .prefixed_by(Location::for_owner(id).field("draws")),
                         ReferenceError::Unknown {
                             target: draw.subset.into(),
                         },

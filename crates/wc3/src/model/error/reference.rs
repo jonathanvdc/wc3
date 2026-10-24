@@ -1,5 +1,5 @@
 //! Typed references and relationship constraints in checked semantic models.
-use super::Owner;
+use super::{Owner, ResourceAddressKind};
 use crate::model::{
     DrawId, FeatureId, FeatureKind, GeometryKind, InstanceId, LookId, MeshId, Quat, Texture,
     ValueSlot,
@@ -89,6 +89,13 @@ pub enum ReferenceError {
     },
     /// A model containing draws has no complete look to select.
     RequiredLook,
+    /// An instance does not contain the referenced draw.
+    UnknownDraw {
+        /// Referenced placement.
+        instance: InstanceId,
+        /// Draw that could not be resolved.
+        draw: DrawId,
+    },
     /// A particular draw lacks a material assignment in the selected look.
     MissingDrawAssignment {
         /// Placement containing the draw.
@@ -116,6 +123,18 @@ pub enum ReferenceError {
         joint: usize,
         /// Available joint count.
         joints: usize,
+    },
+    /// A general resource boundary cannot retain this address form.
+    ResourceAddress {
+        /// Destination address contract.
+        vocabulary: ResourceVocabulary,
+        /// Rejected address form.
+        actual: ResourceAddressKind,
+    },
+    /// Numeric-only addressing cannot retain an additional authored filename.
+    FilenameNotRepresentable {
+        /// Authored bytes that would otherwise be lost.
+        filename: Vec<u8>,
     },
     /// Traversal reported an invalid authored value without more specific evidence.
     /// The `ValidateLinks` contract currently carries no constraint or value payload.
@@ -170,6 +189,9 @@ impl Display for ReferenceError {
                 "the sole look {expected:?} must remain the default; requested {actual:?}"
             ),
             Self::RequiredLook => f.write_str("draws require a complete material look"),
+            Self::UnknownDraw { instance, draw } => {
+                write!(f, "placement {instance:?} has no draw {draw:?}")
+            }
             Self::MissingDrawAssignment { instance, draw } => write!(
                 f,
                 "draw {draw:?} in placement {instance:?} has no material assignment"
@@ -183,6 +205,13 @@ impl Display for ReferenceError {
             Self::JointOutOfBounds { joint, joints } => {
                 write!(f, "joint {joint} exceeds skin palette of {joints} joints")
             }
+            Self::ResourceAddress { vocabulary, actual } => {
+                write!(f, "{vocabulary:?} addressing cannot retain {actual:?}")
+            }
+            Self::FilenameNotRepresentable { filename } => write!(
+                f,
+                "numeric-only addressing cannot retain the additional filename bytes {filename:?}"
+            ),
             Self::InvalidValue => {
                 f.write_str("relationship traversal reported an invalid authored value")
             }
@@ -222,4 +251,15 @@ pub enum ConstantValue {
     Texture(Texture),
     /// A value from the `OptionalTexture` slot domain.
     OptionalTexture(Option<Texture>),
+}
+
+/// A general address contract independent of an entire model profile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceVocabulary {
+    /// A native path without other addressing forms.
+    Path,
+    /// A non-image external dependency, without replacement or embedded-image data.
+    ExternalDependency,
+    /// M2 native companions addressed by root, relative path, path, or file-data ID.
+    M2Companion,
 }
