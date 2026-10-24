@@ -1,7 +1,8 @@
 //! Load complete native models without choosing a filesystem or asynchronous runtime.
 //!
-//! A [`Reader`] requests the supporting documents required by the native format.
-//! Supply each [`Request`] from an archive, filesystem, or network, then poll again.
+//! A [`Reader`](crate::model::io::asset::Reader) requests the supporting documents
+//! required by the native format. Supply each [`Request`](crate::model::io::asset::Request)
+//! from an archive, filesystem, or network, then poll again.
 //! Images and optional scene children remain semantic dependencies rather than
 //! required model companions. Completion returns independently owned checked
 //! semantics together with the report from the session's explicit import policy.
