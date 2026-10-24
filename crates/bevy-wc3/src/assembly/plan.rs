@@ -10,12 +10,12 @@ fn source_model<'view, 'data>(
     models
         .get(&source.model)
         .copied()
-        .ok_or_else(|| ModelError(format!("missing assembly model {:?}", source.model)))
+        .ok_or_else(|| ModelError::new(format!("missing assembly model {:?}", source.model)))
 }
 fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError> {
     if matches!(source.material, MaterialSelection::Draw(look) if model.look(look).is_none()) {
-        return Err(ModelError(
-            "assembly selection references an absent or foreign material look".into(),
+        return Err(ModelError::new(
+            "assembly selection references an absent or foreign material look",
         ));
     }
     let draws: HashSet<_> = model
@@ -29,21 +29,21 @@ fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError>
         .as_ref()
         .is_some_and(|selected| !selected.is_subset(&draws))
     {
-        return Err(ModelError(
-            "assembly selection references an absent draw".into(),
+        return Err(ModelError::new(
+            "assembly selection references an absent draw",
         ));
     }
     for &id in &source.draws.hidden_instances {
         if model.instance(id).is_none() {
-            return Err(ModelError(
-                "assembly selection references an absent instance".into(),
+            return Err(ModelError::new(
+                "assembly selection references an absent instance",
             ));
         }
     }
     for (id, replacement) in &source.images {
         if model.image_resource(*id).is_none() {
-            return Err(ModelError(
-                "assembly replacement references an absent image resource".into(),
+            return Err(ModelError::new(
+                "assembly replacement references an absent image resource",
             ));
         }
         replacement.validate()?;
@@ -51,8 +51,8 @@ fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError>
     let requests = texture_requests(model);
     for (input, replacement) in &source.inputs {
         if !requests.iter().any(|request| request.input == Some(*input)) {
-            return Err(ModelError(
-                "assembly replacement references an absent image input".into(),
+            return Err(ModelError::new(
+                "assembly replacement references an absent image input",
             ));
         }
         replacement.validate()?;
@@ -100,8 +100,8 @@ pub(super) fn plan<B: Clone + PartialEq>(
             if source_model(&assembly.root, models)?.clip(*host).is_none()
                 || model.clip(*child).is_none()
             {
-                return Err(ModelError(
-                    "assembly clip mapping references an absent clip".into(),
+                return Err(ModelError::new(
+                    "assembly clip mapping references an absent clip",
                 ));
             }
         }
@@ -135,7 +135,7 @@ pub(super) fn plan<B: Clone + PartialEq>(
                 None
             };
             if let Some(conflict) = conflict {
-                return Err(ModelError(format!(
+                return Err(ModelError::new(format!(
                     "shared assembly resource {:?} has incompatible {conflict}",
                     part.source.model
                 )));

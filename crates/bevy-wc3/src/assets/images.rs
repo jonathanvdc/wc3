@@ -46,7 +46,9 @@ impl ImageLoadCache {
                         continue;
                     }
                     Err(error) => {
-                        return Err(ModelError(format!("cannot load image at {path}: {error}")));
+                        return Err(ModelError::new(format!(
+                            "cannot load image at {path}: {error}"
+                        )));
                     }
                 }
             }
@@ -62,9 +64,11 @@ impl ImageLoadCache {
                 })
                 .load_untyped_value_from_reader(path.clone(), &mut reader)
                 .await
-                .map_err(|error| ModelError(format!("cannot decode image at {path}: {error}")))?;
+                .map_err(|error| {
+                    ModelError::new(format!("cannot decode image at {path}: {error}"))
+                })?;
             let image = loaded.take::<Image>().ok_or_else(|| {
-                ModelError(format!("resource at {path} resolved to a non-image asset"))
+                ModelError::new(format!("resource at {path} resolved to a non-image asset"))
             })?;
             let handle = context.add_labeled_asset(format!("Image{}", self.variants.len()), image);
             self.variants.insert(key, handle.clone());

@@ -182,7 +182,11 @@ fn unresolved_armor_cannot_silently_produce_a_partial_character() {
     let result = compile_character(&definition(), &models, &mut Assets::default(), |_| {
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     });
-    assert!(result.err().unwrap().0.contains("missing assembly model"));
+    assert!(result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("missing assembly model"));
 }
 #[test]
 fn repeated_atlas_sources_are_decoded_once() {
@@ -266,7 +270,7 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
     compile_character(&definition, &models, &mut Assets::default(), |resource| {
         if *resource == ImageResource::replaceable(6) {
             requested_hair = true;
-            return Err(ModelError("missing selected hair texture".into()));
+            return Err(ModelError::new("missing selected hair texture"));
         }
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     })
@@ -275,14 +279,14 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
     definition.geosets.visible = [0].into_iter().collect();
     let result = compile_character(&definition, &models, &mut Assets::default(), |resource| {
         if *resource == ImageResource::replaceable(6) {
-            return Err(ModelError("missing selected hair texture".into()));
+            return Err(ModelError::new("missing selected hair texture"));
         }
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     });
     assert!(result
         .err()
         .unwrap()
-        .0
+        .to_string()
         .contains("missing selected hair texture"));
 }
 
@@ -358,7 +362,7 @@ fn collection_policy_conflicts_fail_before_images_are_resolved() {
     .err()
     .unwrap();
     assert_eq!(calls, 0);
-    assert!(error.0.contains("incompatible"));
+    assert!(error.to_string().contains("incompatible"));
 }
 
 #[test]
@@ -445,7 +449,7 @@ fn selected_native_bone_resources_are_checked_and_retained_in_compiled_pose() {
     let mut images = Assets::default();
     definition.bone_sets.insert(resource);
     let compiled = compile_character(&definition, &models, &mut images, |_| {
-        RgbaImage::new(1, 1, vec![255; 4]).map_err(|e| ModelError(e.to_string()))
+        RgbaImage::new(1, 1, vec![255; 4]).map_err(ModelError::from_source)
     })
     .unwrap();
     assert_eq!(
@@ -477,7 +481,7 @@ fn selected_native_bone_resources_are_checked_and_retained_in_compiled_pose() {
         ))
         .err()
         .unwrap()
-        .0
+        .to_string()
         .contains("overlap")
     );
     definition.bone_sets = [ResourceLocator::FileDataId(99)].into_iter().collect();
@@ -487,12 +491,12 @@ fn selected_native_bone_resources_are_checked_and_retained_in_compiled_pose() {
         ))
         .err()
         .unwrap()
-        .0
+        .to_string()
         .contains("absent")
     );
     definition.bone_sets.clear();
     let compiled = compile_character(&definition, &models, &mut images, |_| {
-        RgbaImage::new(1, 1, vec![255; 4]).map_err(|e| ModelError(e.to_string()))
+        RgbaImage::new(1, 1, vec![255; 4]).map_err(ModelError::from_source)
     })
     .unwrap();
     assert!(compiled.nodes.iter().all(|node| node.correction.is_none()));

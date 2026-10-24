@@ -41,7 +41,7 @@ pub(super) fn compile_draw_geometry(
         }
         let source = model
             .mesh(instance.mesh)
-            .ok_or_else(|| ModelError("instance geometry is absent".into()))?;
+            .ok_or_else(|| ModelError::new("instance geometry is absent"))?;
         let skin_id = instance.skin.or(source.skin());
         let color_adjustment = ColorAdjustment::new(model, instance);
         if let Some(message) = color_adjustment
@@ -61,10 +61,10 @@ pub(super) fn compile_draw_geometry(
             .map(|draw| {
                 let material = model
                     .resolve_material(instance_id, draw.id(), options.material)
-                    .map_err(|error| ModelError(error.to_string()))?;
+                    .map_err(ModelError::from_source)?;
                 let subset = source
                     .subset(draw.subset)
-                    .ok_or_else(|| ModelError("draw subset is absent".into()))?
+                    .ok_or_else(|| ModelError::new("draw subset is absent"))?
                     .clone();
                 Ok((
                     DrawSource::Draw(draw.id()),
@@ -113,7 +113,7 @@ pub(super) fn compile_draw_geometry(
                             let compact_skin = if let Some(id) = skin_id {
                                 let skin = model
                                     .skin(id)
-                                    .ok_or_else(|| ModelError("instance skin is absent".into()))?;
+                                    .ok_or_else(|| ModelError::new("instance skin is absent"))?;
                                 let retained = apply_skin(&mut part, source, &skin.joints)?;
                                 let next = skins.len();
                                 let index = *skin_cache
@@ -140,9 +140,9 @@ pub(super) fn compile_draw_geometry(
                             } else {
                                 None
                             };
-                            part.mesh.merge_duplicate_vertices().map_err(|e| {
-                                ModelError(format!("cannot index compiled mesh: {e}"))
-                            })?;
+                            part.mesh
+                                .merge_duplicate_vertices()
+                                .map_err(|e| ModelError::from_source(e))?;
                             Ok((mesh_interner.intern(part.mesh), compact_skin))
                         })
                         .collect::<Result<Vec<_>, ModelError>>()?;

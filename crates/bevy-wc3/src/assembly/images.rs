@@ -51,7 +51,7 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                         blend: layer.blend,
                     })
                     .collect();
-                compose_atlas(*atlas, &layers).map_err(|error| ModelError(error.to_string()))
+                compose_atlas(*atlas, &layers).map_err(ModelError::from_source)
             }
         }
     }

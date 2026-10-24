@@ -52,7 +52,7 @@ pub(super) fn compile_geometry_with_color(
     color: impl Fn(usize, Vec4) -> Vec4,
 ) -> Result<Vec<GeometryPart>, ModelError> {
     mesh.project_with_color(subset, coordinate, additional, color)
-        .map_err(|error| ModelError(error.to_string()))?
+        .map_err(ModelError::from_source)?
         .into_iter()
         .map(|part| {
             let topology = match part.kind {
@@ -104,9 +104,9 @@ pub(super) fn apply_skin(
     joints: &[NodeId],
 ) -> Result<Vec<usize>, ModelError> {
     let resolved = skin_weights(part.vertices.iter().copied(), source, joints)
-        .map_err(|error| ModelError(error.to_string()))?;
+        .map_err(ModelError::from_source)?;
     if let Some(row) = resolved.rows.iter().find(|row| row.len() > 8) {
-        return Err(ModelError(format!(
+        return Err(ModelError::new(format!(
             "{} active influences exceed the Universal PBR limit of eight",
             row.len()
         )));
@@ -114,7 +114,7 @@ pub(super) fn apply_skin(
     let palette = resolved.palette;
     let contributions = resolved.rows;
     if palette.len() > usize::from(u16::MAX) + 1 {
-        return Err(ModelError("compiled skin palette exceeds u16".into()));
+        return Err(ModelError::new("compiled skin palette exceeds u16"));
     }
     let mut indices = Vec::with_capacity(contributions.len());
     let mut weights = Vec::with_capacity(contributions.len());
@@ -128,7 +128,7 @@ pub(super) fn apply_skin(
         let mut extra_ws = [0f32; 4];
         for (slot, (joint, weight)) in active.into_iter().enumerate() {
             let id =
-                u16::try_from(joint).map_err(|_| ModelError("skin palette exceeds u16".into()))?;
+                u16::try_from(joint).map_err(|_| ModelError::new("skin palette exceeds u16"))?;
             if slot < 4 {
                 ids[slot] = id;
                 ws[slot] = weight;

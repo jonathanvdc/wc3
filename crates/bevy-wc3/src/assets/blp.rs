@@ -32,8 +32,8 @@ impl AssetLoader for BlpImageLoader {
         reader
             .read_to_end(&mut bytes)
             .await
-            .map_err(|error| ModelError(error.to_string()))?;
-        let mut blp = Blp::read(&bytes).map_err(|error| ModelError(error.to_string()))?;
+            .map_err(ModelError::from_source)?;
+        let mut blp = Blp::read(&bytes).map_err(ModelError::from_source)?;
         let external;
         if let Blp::Blp0(texture) = &mut blp {
             let path = AssetPath::from(context.path().path().with_extension("b00"))
@@ -41,7 +41,7 @@ impl AssetLoader for BlpImageLoader {
             external = context
                 .read_asset_bytes(path.clone())
                 .await
-                .map_err(|error| ModelError(format!("BLP0 mipmap 0 at {path}: {error}")))?;
+                .map_err(|error| ModelError::new(format!("BLP0 mipmap 0 at {path}: {error}")))?;
             texture.mipmaps[0] = Some(Cow::Borrowed(&external));
         }
         decode_image(&blp, settings)
@@ -55,9 +55,7 @@ impl AssetLoader for BlpImageLoader {
 fn decode_image(blp: &Blp<'_>, settings: &ImageLoaderSettings) -> Result<Image, ModelError> {
     let two_channel = !settings.is_srgb
         && matches!(blp, Blp::Blp2(texture) if matches!(texture.content, Blp2Content::Dxt { format: DxtFormat::Bc5, .. }));
-    let rgba = blp
-        .decode_mip(0)
-        .map_err(|error| ModelError(error.to_string()))?;
+    let rgba = blp.decode_mip(0).map_err(ModelError::from_source)?;
     let extent = Extent3d {
         width: rgba.width(),
         height: rgba.height(),

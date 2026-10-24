@@ -472,5 +472,9 @@ fn absent_input_is_rejected_before_resolving_images() {
         &mut Assets::<Image>::default(),
         |_| panic!("invalid input reached image resolution"),
     );
-    assert!(result.err().unwrap().0.contains("absent image input"));
+    assert!(result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("absent image input"));
 }

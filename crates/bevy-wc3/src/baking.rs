@@ -138,16 +138,14 @@ impl PoseBaker {
     ) -> Result<BakedPose, ModelError> {
         let default_playback = Playback::default();
         let playback = options.playback.unwrap_or(&default_playback);
-        let selection = playback
-            .selection()
-            .map_err(|error| ModelError(error.to_string()))?;
+        let selection = playback.selection().map_err(ModelError::from_source)?;
         let sample = prepared
             .animation
             .sample(selection)
-            .map_err(|error| ModelError(error.to_string()))?;
+            .map_err(ModelError::from_source)?;
         if prepared.camera_sensitive && options.camera.is_none() {
-            return Err(ModelError(
-                "pose requires a driving camera in authored coordinates".into(),
+            return Err(ModelError::new(
+                "pose requires a driving camera in authored coordinates",
             ));
         }
         if options.camera.is_some_and(|camera| {
@@ -157,8 +155,8 @@ impl PoseBaker {
                 || !camera.scale.is_finite()
                 || camera.scale.abs().min_element() <= 1e-12
         }) {
-            return Err(ModelError(
-                "pose camera must have a finite nonsingular transform".into(),
+            return Err(ModelError::new(
+                "pose camera must have a finite nonsingular transform",
             ));
         }
         let camera = options.camera.map(|camera| camera.compute_affine());
@@ -200,16 +198,16 @@ impl PoseBaker {
         for draw in prepared.draws.iter() {
             let source = meshes
                 .get(&draw.mesh)
-                .ok_or_else(|| ModelError("baking source mesh is missing".into()))?;
+                .ok_or_else(|| ModelError::new("baking source mesh is missing"))?;
             self.joints.clear();
             if let Some(index) = draw.skin {
                 let skin = &prepared.skins[index];
                 let palette = binds
                     .get(&skin.binds)
-                    .ok_or_else(|| ModelError("baking inverse bind palette is missing".into()))?;
+                    .ok_or_else(|| ModelError::new("baking inverse bind palette is missing"))?;
                 if palette.len() != skin.joints.len() {
-                    return Err(ModelError(
-                        "baking bind palette has an inconsistent joint count".into(),
+                    return Err(ModelError::new(
+                        "baking bind palette has an inconsistent joint count",
                     ));
                 }
                 self.joints.extend(
@@ -258,7 +256,7 @@ impl PoseBaker {
         for liquid in prepared.liquids.iter() {
             let source = meshes
                 .get(&liquid.mesh)
-                .ok_or_else(|| ModelError("baking liquid mesh is missing".into()))?;
+                .ok_or_else(|| ModelError::new("baking liquid mesh is missing"))?;
             let mesh = bake_mesh(
                 source,
                 &[],
@@ -366,10 +364,10 @@ fn bake_mesh(
     let positions = mesh
         .attribute(Mesh::ATTRIBUTE_POSITION)
         .and_then(VertexAttributeValues::as_float3)
-        .ok_or_else(|| ModelError("pose mesh has no positions".into()))?;
+        .ok_or_else(|| ModelError::new("pose mesh has no positions"))?;
     if !joints.is_empty() && !mesh.contains_attribute(Mesh::ATTRIBUTE_JOINT_INDEX) {
-        return Err(ModelError(
-            "skinned pose mesh is missing its base joint stream".into(),
+        return Err(ModelError::new(
+            "skinned pose mesh is missing its base joint stream",
         ));
     }
     for (attribute, valid) in [
@@ -389,16 +387,14 @@ fn bake_mesh(
         ),
     ] {
         if !valid {
-            return Err(ModelError(
-                "unsupported pose normal or tangent format".into(),
-            ));
+            return Err(ModelError::new("unsupported pose normal or tangent format"));
         }
         if mesh
             .attribute(attribute)
             .is_some_and(|values| values.len() != positions.len())
         {
-            return Err(ModelError(
-                "pose attribute has inconsistent vertex count".into(),
+            return Err(ModelError::new(
+                "pose attribute has inconsistent vertex count",
             ));
         }
     }
@@ -417,7 +413,7 @@ fn bake_mesh(
                     .iter()
                     .flatten()
                     .all(|weight| weight.is_finite() && *weight >= 0.) => {}
-            _ => return Err(ModelError("malformed pose skin attribute pair".into())),
+            _ => return Err(ModelError::new("malformed pose skin attribute pair")),
         }
     }
     if mesh.contains_attribute(Mesh::ATTRIBUTE_JOINT_INDEX) {
@@ -444,7 +440,7 @@ fn bake_mesh(
                 .flatten()
             })
         });
-        skin_matrices(rows, joints, transforms).map_err(|error| ModelError(error.to_string()))?;
+        skin_matrices(rows, joints, transforms).map_err(ModelError::from_source)?;
     } else {
         transforms.clear();
         transforms.resize(positions.len(), placement);
@@ -469,7 +465,7 @@ fn bake_mesh(
         tangents: &mut tangents,
     }
     .deform(transforms)
-    .map_err(|error| ModelError(error.to_string()))?;
+    .map_err(ModelError::from_source)?;
     baked.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     if mesh.contains_attribute(Mesh::ATTRIBUTE_NORMAL) {
         baked.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);

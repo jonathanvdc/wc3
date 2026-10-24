@@ -27,7 +27,7 @@ fn resource(name: &'static str) -> ResourceLocator<'static> {
     }
 }
 fn pixels(_: &ImageResource<'static>) -> Result<RgbaImage, ModelError> {
-    RgbaImage::new(1, 1, vec![255; 4]).map_err(|error| ModelError::new(error.to_string()))
+    RgbaImage::new(1, 1, vec![255; 4]).map_err(ModelError::from_source)
 }
 fn effect() -> ParticleEffect {
     let document =

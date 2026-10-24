@@ -14,5 +14,5 @@ pub(super) fn basis(model: &Model<'_>) -> Result<Transform, ModelError> {
     model
         .coordinate_transform(render_basis(), LengthUnit::MetersPerUnit(1.))
         .map(Transform::from_matrix)
-        .map_err(|error| ModelError(error.to_string()))
+        .map_err(ModelError::from_source)
 }

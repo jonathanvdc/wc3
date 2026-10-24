@@ -24,7 +24,7 @@ pub(super) fn materials(
                     selected.insert(
                         model
                             .resolve_material(id, draw.id(), options.material)
-                            .map_err(|e| ModelError(e.to_string()))?,
+                            .map_err(ModelError::from_source)?,
                     );
                 }
             }

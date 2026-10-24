@@ -53,20 +53,20 @@ impl PortalView {
         planes: impl IntoIterator<Item = Vec4>,
     ) -> Result<Self, ModelError> {
         if !eye.is_finite() {
-            return Err(ModelError("portal view eye must be finite".into()));
+            return Err(ModelError::new("portal view eye must be finite"));
         }
         let planes = planes
             .into_iter()
             .map(|plane| {
                 let length = plane.truncate().length();
                 if !plane.is_finite() || !length.is_finite() || length <= f32::EPSILON {
-                    return Err(ModelError(
-                        "portal view planes need finite nonzero normals".into(),
+                    return Err(ModelError::new(
+                        "portal view planes need finite nonzero normals",
                     ));
                 }
                 let normalized = plane / length;
                 if !normalized.is_finite() {
-                    return Err(ModelError("normalized portal plane must be finite".into()));
+                    return Err(ModelError::new("normalized portal plane must be finite"));
                 }
                 Ok(normalized)
             })
@@ -919,8 +919,8 @@ fn liquid_mesh(liquid: &Liquid<'_>, spacing: Vec2) -> Result<Option<Mesh>, Model
             .iter()
             .any(|value| !value.height().is_finite())
     {
-        return Err(ModelError(
-            "world liquid coordinates must be finite with positive grid spacing".into(),
+        return Err(ModelError::new(
+            "world liquid coordinates must be finite with positive grid spacing",
         ));
     }
     let [width, height] = liquid.dimensions.map(|v| v as usize);
@@ -933,7 +933,7 @@ fn liquid_mesh(liquid: &Liquid<'_>, spacing: Vec2) -> Result<Option<Mesh>, Model
             .checked_mul(height.saturating_sub(1))
             != Some(liquid.tiles.len())
     {
-        return Err(ModelError("world liquid grid cardinality mismatch".into()));
+        return Err(ModelError::new("world liquid grid cardinality mismatch"));
     }
     let mut positions = Vec::new();
     let mut uv = Vec::new();
@@ -942,7 +942,7 @@ fn liquid_mesh(liquid: &Liquid<'_>, spacing: Vec2) -> Result<Option<Mesh>, Model
             let vertex = liquid
                 .vertices
                 .get(y * width + x)
-                .ok_or_else(|| ModelError("missing world liquid vertex".into()))?;
+                .ok_or_else(|| ModelError::new("missing world liquid vertex"))?;
             positions.push([
                 liquid.position[0] + x as f32 * spacing[0],
                 liquid.position[1] + y as f32 * spacing[1],
@@ -959,7 +959,7 @@ fn liquid_mesh(liquid: &Liquid<'_>, spacing: Vec2) -> Result<Option<Mesh>, Model
             let tile = liquid
                 .tiles
                 .get(y * (width - 1) + x)
-                .ok_or_else(|| ModelError("missing world liquid tile".into()))?;
+                .ok_or_else(|| ModelError::new("missing world liquid tile"))?;
             if tile & 0x8 != 0 {
                 continue;
             }

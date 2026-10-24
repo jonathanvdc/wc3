@@ -183,7 +183,7 @@ impl TextureReplacement {
     /// Validate dimensions and declared rectangles before resolving images.
     pub fn validate(&self) -> Result<(), ModelError> {
         if let Self::Atlas { atlas, layers } = self {
-            atlas::pixel_len(atlas.width, atlas.height).map_err(|e| ModelError(e.to_string()))?;
+            atlas::pixel_len(atlas.width, atlas.height).map_err(ModelError::from_source)?;
             for layer in layers {
                 if !atlas::valid(layer.destination, atlas.width, atlas.height)
                     || layer.source.is_some_and(|r| {
@@ -193,7 +193,7 @@ impl TextureReplacement {
                             || r.y.checked_add(r.height).is_none()
                     })
                 {
-                    return Err(ModelError(AtlasError::Rectangle.to_string()));
+                    return Err(ModelError::from_source(AtlasError::Rectangle));
                 }
             }
         }
