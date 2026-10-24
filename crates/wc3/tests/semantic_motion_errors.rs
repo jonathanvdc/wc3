@@ -206,6 +206,16 @@ fn correction_failures_retain_the_actual_matrix_and_node() {
         Some(&Segment::Owner(Owner::Node(node)))
     );
 
+    let mut nodes = model.prepare_pose().unwrap().nodes().to_vec();
+    nodes[0].transform_semantics = TransformSemantics::PivotLocal;
+    nodes[0].correction = Some(Mat4::IDENTITY);
+    let error = PoseLayout::new(nodes).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::UnsupportedCorrectionBehavior { behavior })
+            if behavior.transform_semantics == TransformSemantics::PivotLocal
+    ));
+
     let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let mut node = draft.new_node("invalid pivot");
     node.transform.pivot = Vec3::new(f32::INFINITY, 0., 0.);
