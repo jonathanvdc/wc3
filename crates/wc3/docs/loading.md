@@ -67,6 +67,10 @@ await your source read, then call `provide(&request, bytes)` and poll again.
 pending returns that same request, so a failed source read need not restart
 decoding. The reader itself performs no I/O and depends on no executor.
 
+Direct M2 companion and WMO group discovery is prepared once for the session.
+Supplying those files advances the existing request plan; complete native bundle
+validation still runs before the Universal graph is returned.
+
 ## Import checked semantics
 
 The completed `Conversion<Model<'static, Universal>>` owns its semantic storage.
