@@ -57,6 +57,16 @@ pub enum PayloadKind {
 /// Vocabulary of a rejected payload, without retaining the payload itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PayloadVocabulary {
+    /// A single material assignment.
+    SingleAppearance,
+    /// Draw-based material alternatives.
+    DrawAppearance,
+    /// Implicit model-space joint binding.
+    IdentityBinding,
+    /// Explicit authored joint-space transforms.
+    ExplicitBinding,
+    /// Portable simulation bodies and constraints.
+    PortablePhysics,
     /// Warcraft III representation.
     Mdlx,
     /// World of Warcraft model representation.

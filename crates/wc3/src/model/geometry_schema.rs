@@ -2,6 +2,7 @@
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::common::PackedValue;
+use crate::model::error::{AttributeValueKind, ProfileError, ProfileKind, ProfileViolation};
 use crate::model::error::{
     GeometryError, GeometryOperation, Location, PolygonBoundaryRule, TopologyKind,
 };
@@ -272,18 +273,16 @@ impl<'data> GeometryData<'data> {
                 .expect("unique typed UV slot");
         }
     }
-    pub(crate) fn validate_vertex_streams(&self) -> Result<(), Error> {
+    pub(crate) fn validate_vertex_streams(&self, target: ProfileKind) -> Result<(), Error> {
         self.validate()?;
         if self.kind != GeometryKind::Display {
             return Err(Error::at(
                 Location::new().field("kind"),
-                GeometryError::UnsupportedOperation {
-                    operation: GeometryOperation::AdditionalAttributes,
-                },
+                ProfileError::new(target, ProfileViolation::GeometryKind { actual: self.kind }),
             ));
         }
-        self.validate_no_additional_domains()?;
-        if self.attributes.iter().any(|attribute| {
+        self.validate_no_additional_domains(target)?;
+        if let Some(attribute) = self.attributes.iter().find(|attribute| {
             attribute.domain != AttributeDomain::Vertex
                 || !matches!(
                     attribute.semantic,
@@ -294,26 +293,46 @@ impl<'data> GeometryData<'data> {
                 )
         }) {
             return Err(Error::at(
-                Location::new().field("attributes"),
-                GeometryError::UnsupportedOperation {
-                    operation: GeometryOperation::AdditionalAttributes,
-                },
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                ProfileError::new(
+                    target,
+                    ProfileViolation::GeometryAttribute {
+                        semantic: attribute.semantic.clone().into_owned(),
+                        domain: attribute.domain,
+                        values: AttributeValueKind::from(&attribute.values),
+                    },
+                ),
             ));
         }
         Ok(())
     }
-    pub(crate) fn validate_no_additional_domains(&self) -> Result<(), Error> {
-        if !self.connectivity.additional().is_empty()
-            || self.attributes.iter().any(|attribute| {
-                attribute.domain == AttributeDomain::Pool
-                    || attribute.semantic == AttributeSemantic::TriangleProperties
-            })
-        {
+    pub(crate) fn validate_no_additional_domains(&self, target: ProfileKind) -> Result<(), Error> {
+        if !self.connectivity.additional().is_empty() {
             return Err(Error::at(
-                Location::new().field("connectivity"),
-                GeometryError::UnsupportedOperation {
-                    operation: GeometryOperation::AdditionalConnectivity,
-                },
+                Location::new().field("connectivity").field("additional"),
+                ProfileError::new(
+                    target,
+                    ProfileViolation::AdditionalConnectivity {
+                        maximum: 0,
+                        actual: self.connectivity.additional().len(),
+                    },
+                ),
+            ));
+        }
+        if let Some(attribute) = self.attributes.iter().find(|attribute| {
+            attribute.domain == AttributeDomain::Pool
+                || attribute.semantic == AttributeSemantic::TriangleProperties
+        }) {
+            return Err(Error::at(
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                ProfileError::new(
+                    target,
+                    ProfileViolation::GeometryAttribute {
+                        semantic: attribute.semantic.clone().into_owned(),
+                        domain: attribute.domain,
+                        values: AttributeValueKind::from(&attribute.values),
+                    },
+                ),
             ));
         }
         Ok(())
@@ -456,8 +475,15 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
     }
     fn validate(&self) -> Result<(), Error> {
         validate_geometry(self)?;
-        for topology in self.connectivity.additional() {
-            validate_topology(topology, self.positions.len())?;
+        for (index, topology) in self.connectivity.additional().iter().enumerate() {
+            validate_topology(topology, self.positions.len()).map_err(|error| {
+                error.with_context(
+                    Location::new()
+                        .field("connectivity")
+                        .field("additional")
+                        .index(index),
+                )
+            })?;
         }
         if let Some(values) = self.triangle_properties() {
             if !matches!(self.connectivity.primary, Topology::Triangles(_)) {

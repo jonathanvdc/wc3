@@ -5,8 +5,12 @@ use crate::model::TextureCoordinates;
 use glam::{Vec2, Vec3, Vec4};
 use std::collections::BTreeMap;
 
+use crate::model::error::{
+    AttributeValueKind, GeometryError, InfluenceKind, Location, ProfileError, ProfileKind,
+    ProfileViolation, TopologyKind,
+};
 use crate::model::geometry_edit::check_edit;
-use crate::model::geometry_schema::validate_geometry;
+use crate::model::geometry_schema::{check_finite, validate_geometry};
 use crate::model::vertex_geometry::VertexStreams;
 use crate::model::VertexData;
 use crate::model::{
@@ -235,43 +239,78 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
     }
     fn validate(&self) -> Result<(), Error> {
         validate_geometry(self)?;
-        if self
+        if let Some((index, value)) = self
             .pools
             .triangle_strip_indices
             .iter()
-            .any(|index| index as usize >= self.streams.positions.len())
-            || !self.pools.tangent_vectors.iter().all(|v| v.is_finite())
+            .enumerate()
+            .find(|(_, value)| *value as usize >= self.streams.positions.len())
         {
-            return Err(Error::new(
-                "geometry.draw_streams",
-                "strip indices must address vertices and tangent vectors must be finite",
+            return Err(Error::at(
+                Location::new()
+                    .field("pools")
+                    .field("triangle_strip_indices")
+                    .index(index),
+                GeometryError::IndexOutOfBounds {
+                    index: value as usize,
+                    len: self.streams.positions.len(),
+                },
             ));
         }
+        check_finite(
+            self.pools.tangent_vectors.iter().map(|v| v.to_array()),
+            || Location::new().field("pools").field("tangent_vectors"),
+        )?;
         if !self.triangle_properties.is_empty()
             && self.triangle_properties.len() != self.streams.topology.primitive_count()
         {
-            return Err(Error::new(
-                "geometry.triangle_properties",
-                "properties must match triangle count",
+            return Err(Error::at(
+                Location::new().field("triangle_properties"),
+                GeometryError::CountMismatch {
+                    expected: self.streams.topology.primitive_count(),
+                    actual: self.triangle_properties.len(),
+                },
             ));
         }
-        if !self.streams.extras.is_empty()
-            && (self.streams.extras.len() != self.streams.positions.len()
-                || !self.streams.extras.iter().all(|v| v.is_finite()))
-        {
-            return Err(Error::new(
-                "geometry.lightmap_coordinates",
-                "baked-light coordinates must contain one finite coordinate per vertex",
-            ));
-        }
-        for colors in &self.streams.colors {
-            if colors.len() != self.streams.positions.len() || !colors.iter().all(|v| v.is_finite())
-            {
-                return Err(Error::new(
-                    "geometry.colors",
-                    "color streams must contain one finite color per vertex",
+        if !self.streams.extras.is_empty() {
+            if self.streams.extras.len() != self.streams.positions.len() {
+                return Err(Error::at(
+                    Location::new().attribute(
+                        AttributeSemantic::LightmapCoordinates,
+                        AttributeDomain::Vertex,
+                    ),
+                    GeometryError::CountMismatch {
+                        expected: self.streams.positions.len(),
+                        actual: self.streams.extras.len(),
+                    },
                 ));
             }
+            check_finite(self.streams.extras.iter().map(|v| v.to_array()), || {
+                Location::new().attribute(
+                    AttributeSemantic::LightmapCoordinates,
+                    AttributeDomain::Vertex,
+                )
+            })?;
+        }
+        for (slot, colors) in self.streams.colors.iter().enumerate() {
+            if colors.len() != self.streams.positions.len() {
+                return Err(Error::at(
+                    Location::new().attribute(
+                        AttributeSemantic::Color(slot as u32),
+                        AttributeDomain::Vertex,
+                    ),
+                    GeometryError::CountMismatch {
+                        expected: self.streams.positions.len(),
+                        actual: colors.len(),
+                    },
+                ));
+            }
+            check_finite(colors.iter().map(|v| v.to_array()), || {
+                Location::new().attribute(
+                    AttributeSemantic::Color(slot as u32),
+                    AttributeDomain::Vertex,
+                )
+            })?;
         }
         Ok(())
     }
@@ -349,27 +388,79 @@ impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
         value.validate()?;
-        if value.connectivity.additional().len() > 1
-            || value
-                .connectivity
-                .additional()
-                .iter()
-                .any(|topology| !matches!(topology, Topology::TriangleStrip(_)))
+        if value.connectivity.additional().len() > 1 {
+            return Err(Error::at(
+                Location::new().field("connectivity").field("additional"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::AdditionalConnectivity {
+                        maximum: 1,
+                        actual: value.connectivity.additional().len(),
+                    },
+                ),
+            ));
+        }
+        if let Some((index, topology)) = value
+            .connectivity
+            .additional()
+            .iter()
+            .enumerate()
+            .find(|(_, topology)| !matches!(topology, Topology::TriangleStrip(_)))
         {
-            return Err(Error::new(
-                "world.geometry.connectivity",
-                "world geometry retains primary triangles and one strip set",
+            return Err(Error::at(
+                Location::new()
+                    .field("connectivity")
+                    .field("additional")
+                    .index(index),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::GeometryTopology {
+                        actual: TopologyKind::from(topology),
+                    },
+                ),
             ));
         }
         let value = value.into_parts();
-        if value.kind != GeometryKind::Display
-            || !matches!(value.topology, Topology::Triangles(_))
-            || !value.tangents.is_empty()
-            || !matches!(value.influences, GeometryInfluences::None)
-        {
-            return Err(Error::new(
-                "world.geometry",
-                "expected unskinned display triangles without vertex tangent frames",
+        if value.kind != GeometryKind::Display {
+            return Err(Error::at(
+                Location::new().field("kind"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::GeometryKind { actual: value.kind },
+                ),
+            ));
+        }
+        if !matches!(value.topology, Topology::Triangles(_)) {
+            return Err(Error::at(
+                Location::new().field("topology"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::GeometryTopology {
+                        actual: TopologyKind::from(&value.topology),
+                    },
+                ),
+            ));
+        }
+        if !value.tangents.is_empty() {
+            return Err(Error::at(
+                Location::new().field("tangents"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::GeometryStream {
+                        semantic: AttributeSemantic::Tangent,
+                    },
+                ),
+            ));
+        }
+        if !matches!(value.influences, GeometryInfluences::None) {
+            return Err(Error::at(
+                Location::new().field("influences"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::GeometryInfluences {
+                        actual: InfluenceKind::from(&value.influences),
+                    },
+                ),
             ));
         }
         let mut colors = BTreeMap::new();
@@ -379,9 +470,38 @@ impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
         let mut lightmap = None;
         for attribute in value.attributes {
             if attribute.domain != AttributeDomain::Vertex {
-                return Err(Error::new(
-                    "world.geometry.attributes",
-                    "expected vertex-domain attributes",
+                return Err(Error::at(
+                    Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                    ProfileError::new(
+                        ProfileKind::Wmo,
+                        ProfileViolation::GeometryAttribute {
+                            semantic: attribute.semantic.clone().into_owned(),
+                            domain: attribute.domain,
+                            values: AttributeValueKind::from(&attribute.values),
+                        },
+                    ),
+                ));
+            }
+            let admissible = match (&attribute.semantic, &attribute.values) {
+                (AttributeSemantic::Color(slot), AttributeValues::Vector4(_)) => {
+                    !colors.contains_key(slot)
+                }
+                (AttributeSemantic::LightmapCoordinates, AttributeValues::Vector2(values)) => {
+                    lightmap.is_none() && !values.is_empty()
+                }
+                _ => false,
+            };
+            if !admissible {
+                return Err(Error::at(
+                    Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                    ProfileError::new(
+                        ProfileKind::Wmo,
+                        ProfileViolation::GeometryAttribute {
+                            semantic: attribute.semantic.clone().into_owned(),
+                            domain: attribute.domain,
+                            values: AttributeValueKind::from(&attribute.values),
+                        },
+                    ),
                 ));
             }
             match (attribute.semantic, attribute.values) {
@@ -395,23 +515,24 @@ impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
                 {
                     lightmap = Some(values)
                 }
-                _ => {
-                    return Err(Error::new(
-                        "world.geometry.attributes",
-                        "unsupported, duplicate, empty, or incorrectly typed attribute",
-                    ))
-                }
+                _ => unreachable!("checked attribute projection"),
             }
         }
-        if colors
+        if let Some((expected, actual)) = colors
             .keys()
             .copied()
             .enumerate()
-            .any(|(index, slot)| index as u32 != slot)
+            .find(|(index, slot)| *index as u32 != *slot)
         {
-            return Err(Error::new(
-                "world.geometry.colors",
-                "color slots must be contiguous from zero",
+            return Err(Error::at(
+                Location::new().field("colors"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::ColorSlot {
+                        expected: expected as u32,
+                        actual,
+                    },
+                ),
             ));
         }
         let result = Self {

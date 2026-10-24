@@ -1,7 +1,13 @@
 //! Exact checked projections of complete owner payloads.
 use super::Profile;
+use crate::model::error::{
+    FeatureFamily, PayloadKind, PayloadVocabulary, ProfileError, ProfileKind, ProfileViolation,
+};
 use crate::model::PropertyValues;
-use crate::model::{Error, Model};
+use crate::model::{
+    ClipProperties, DrawProperties, Error, EventSource, InstanceProperties, MeshProperties, Model,
+    ModelMetadata, NodeFeature, NodeProperties, System, UniversalAppearance, UniversalBinding,
+};
 mod m2;
 
 mod mdlx;
@@ -12,8 +18,9 @@ mod wmo;
 pub trait Narrows<Source: Profile>: Profile {
     /// Checks exactness constraints requiring the complete source graph.
     fn validate_projection(source: &Model<'_, Source>) -> Result<(), Error> {
-        for feature in source.features().values() {
-            Self::validate_feature(source, &feature.payload)?;
+        for (id, feature) in source.features() {
+            Self::validate_feature(source, &feature.payload)
+                .map_err(|error| error.with_owner(id))?;
         }
         Ok(())
     }
@@ -153,9 +160,102 @@ impl<P: Profile> Narrows<P> for P {
         Ok(value)
     }
 }
-fn incompatible(owner: &str) -> Error {
-    Error::new(
-        "profile.narrow",
-        format!("{owner} payload is absent or belongs to an incompatible vocabulary"),
+fn incompatible(target: ProfileKind, owner: PayloadKind, actual: PayloadVocabulary) -> Error {
+    let violation = if actual == PayloadVocabulary::None {
+        ProfileViolation::RequiredPayload { owner }
+    } else {
+        ProfileViolation::UnsupportedPayload { owner, actual }
+    };
+    ProfileError::new(target, violation).into()
+}
+fn appearance(value: &UniversalAppearance<'_>) -> PayloadVocabulary {
+    match value {
+        UniversalAppearance::Single(_) => PayloadVocabulary::SingleAppearance,
+        UniversalAppearance::Draw(_) => PayloadVocabulary::DrawAppearance,
+    }
+}
+fn binding(value: &UniversalBinding<'_>) -> PayloadVocabulary {
+    match value {
+        UniversalBinding::Identity(_) => PayloadVocabulary::IdentityBinding,
+        UniversalBinding::Explicit(_) => PayloadVocabulary::ExplicitBinding,
+    }
+}
+fn metadata(value: &ModelMetadata<'_>) -> PayloadVocabulary {
+    match value {
+        ModelMetadata::Mdlx(_) => PayloadVocabulary::Mdlx,
+        ModelMetadata::M2(_) => PayloadVocabulary::M2,
+        ModelMetadata::Wmo(_) => PayloadVocabulary::Wmo,
+    }
+}
+fn event(value: &EventSource) -> PayloadVocabulary {
+    match value {
+        EventSource::Mdlx(_) => PayloadVocabulary::Mdlx,
+        EventSource::M2(_) => PayloadVocabulary::M2,
+    }
+}
+fn system(value: &System<'_>) -> PayloadVocabulary {
+    match value {
+        System::M2(_) => PayloadVocabulary::M2,
+        System::Wmo(_) => PayloadVocabulary::Wmo,
+        System::Physics(_) => PayloadVocabulary::PortablePhysics,
+    }
+}
+fn node(value: &Option<NodeProperties>) -> PayloadVocabulary {
+    match value {
+        None => PayloadVocabulary::None,
+        Some(NodeProperties::Mdlx(_)) => PayloadVocabulary::Mdlx,
+        Some(NodeProperties::M2(_)) => PayloadVocabulary::M2,
+    }
+}
+fn mesh(value: &Option<MeshProperties>) -> PayloadVocabulary {
+    match value {
+        None => PayloadVocabulary::None,
+        Some(MeshProperties::Mdlx(_)) => PayloadVocabulary::Mdlx,
+        Some(MeshProperties::M2(_)) => PayloadVocabulary::M2,
+    }
+}
+fn instance(value: &Option<InstanceProperties<'_>>) -> PayloadVocabulary {
+    match value {
+        None => PayloadVocabulary::None,
+        Some(InstanceProperties::Wmo(_)) => PayloadVocabulary::Wmo,
+    }
+}
+fn draw(value: &Option<DrawProperties>) -> PayloadVocabulary {
+    match value {
+        None => PayloadVocabulary::None,
+        Some(DrawProperties::M2(_)) => PayloadVocabulary::M2,
+        Some(DrawProperties::Wmo(_)) => PayloadVocabulary::Wmo,
+    }
+}
+fn clip(value: &Option<ClipProperties>) -> PayloadVocabulary {
+    match value {
+        None => PayloadVocabulary::None,
+        Some(ClipProperties::Mdlx(_)) => PayloadVocabulary::Mdlx,
+        Some(ClipProperties::M2(_)) => PayloadVocabulary::M2,
+    }
+}
+fn feature_family(value: &NodeFeature<'_>) -> FeatureFamily {
+    match value {
+        NodeFeature::Light(_) => FeatureFamily::Light,
+        NodeFeature::Camera(_) => FeatureFamily::Camera,
+        NodeFeature::Attachment(_) => FeatureFamily::Attachment,
+        NodeFeature::Particle(_) => FeatureFamily::Particle,
+        NodeFeature::Ribbon(_) => FeatureFamily::Ribbon,
+        NodeFeature::GeometryAnimation(_) => FeatureFamily::GeometryAnimation,
+        NodeFeature::CollisionShape(_) => FeatureFamily::CollisionShape,
+        NodeFeature::ParticleProgram(_) => FeatureFamily::ParticleProgram,
+        NodeFeature::FaceActor(_) => FeatureFamily::FaceActor,
+        NodeFeature::LightProgram(_) => FeatureFamily::LightProgram,
+        NodeFeature::Particle2(_) => FeatureFamily::Particle2,
+        NodeFeature::PointLight(_) => FeatureFamily::PointLight,
+    }
+}
+fn incompatible_feature(target: ProfileKind, value: &NodeFeature<'_>) -> Error {
+    ProfileError::new(
+        target,
+        ProfileViolation::UnsupportedFeature {
+            family: feature_family(value),
+        },
     )
+    .into()
 }

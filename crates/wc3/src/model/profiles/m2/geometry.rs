@@ -1,14 +1,18 @@
 //! Geometry streams and connectivity available to this model family.
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
+use crate::model::error::{
+    GeometryError, InfluenceKind, Location, ProfileError, ProfileKind, ProfileViolation,
+    TopologyKind,
+};
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::geometry_schema::validate_geometry;
 use crate::model::vertex_geometry::{GeometryStreams, VertexStreams};
-use crate::model::TextureCoordinates;
 use crate::model::{
     Attribute, Error, GeometrySchema, Influence, InfluenceRows, Link, PackedArray, Topology,
     ValidateLinks,
 };
+use crate::model::{AttributeDomain, AttributeSemantic, TextureCoordinates};
 use crate::model::{GeometryData, GeometryInfluences, GeometryKind, GeometryParts, VertexData};
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use glam::{Vec2, Vec3, Vec4};
@@ -95,9 +99,16 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
             result.streams.normals = values;
         }
         if let Some(values) = edit.texture_coordinates {
-            result.streams.texture_coordinates = values
-                .try_into()
-                .map_err(|_| Error::new("geometry.edit.uv", "expected two UV streams"))?;
+            result.streams.texture_coordinates = values.try_into().map_err(|values: Vec<_>| {
+                Error::at(
+                    Location::new().field("texture_coordinates"),
+                    GeometryError::TextureCoordinateCount {
+                        minimum: 2,
+                        maximum: Some(2),
+                        actual: values.len(),
+                    },
+                )
+            })?;
         }
 
         result.validate()?;
@@ -129,30 +140,34 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
         InfluenceRows::Four(&self.streams.influences)
     }
     fn validate(&self) -> Result<(), Error> {
-        if self
-            .streams
-            .texture_coordinates
-            .iter()
-            .any(|stream| stream.len() != self.streams.positions.len())
-        {
-            return Err(Error::new(
-                "geometry.texture_coordinates",
-                "M2 vertices require both texture-coordinate slots",
-            ));
-        }
         let count = self.streams.positions.len();
-        if self.streams.normals.len() != count
-            || self
-                .streams
-                .texture_coordinates
-                .iter()
-                .any(|stream| stream.len() != count)
-            || self.streams.influences.len() != count
-        {
-            return Err(Error::new(
-                "geometry.streams",
-                "M2 vertices require normals, two UV streams, and four joint slots",
-            ));
+        for (slot, values) in self.streams.texture_coordinates.iter().enumerate() {
+            if values.len() != count {
+                return Err(Error::at(
+                    Location::new().attribute(
+                        AttributeSemantic::TexCoord(slot as u32),
+                        AttributeDomain::Vertex,
+                    ),
+                    GeometryError::CountMismatch {
+                        expected: count,
+                        actual: values.len(),
+                    },
+                ));
+            }
+        }
+        for (field, actual) in [
+            ("normals", self.streams.normals.len()),
+            ("influences", self.streams.influences.len()),
+        ] {
+            if actual != count {
+                return Err(Error::at(
+                    Location::new().field(field),
+                    GeometryError::CountMismatch {
+                        expected: count,
+                        actual,
+                    },
+                ));
+            }
         }
         validate_geometry(self)
     }
@@ -209,34 +224,68 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
 impl<'data> TryFrom<GeometryData<'data>> for M2Geometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
-        value.validate_vertex_streams()?;
+        value.validate_vertex_streams(ProfileKind::M2)?;
         let vertices = value.into_parts();
         let topology = vertices.topology;
         let influences = vertices.influences;
-        if !vertices.tangents.is_empty() || !vertices.colors.is_empty() {
-            return Err(Error::new(
-                "geometry.streams",
-                "M2 geometry has no tangent or vertex color streams",
+        if !vertices.tangents.is_empty() {
+            return Err(Error::at(
+                Location::new().field("tangents"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::GeometryStream {
+                        semantic: AttributeSemantic::Tangent,
+                    },
+                ),
+            ));
+        }
+        if !vertices.colors.is_empty() {
+            return Err(Error::at(
+                Location::new().field("colors"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::GeometryStream {
+                        semantic: AttributeSemantic::Color(0),
+                    },
+                ),
             ));
         }
         if !matches!(topology, Topology::Triangles(_)) {
-            return Err(Error::new(
-                "geometry.topology",
-                "M2 geometry requires triangle connectivity",
+            return Err(Error::at(
+                Location::new().field("topology"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::GeometryTopology {
+                        actual: TopologyKind::from(&topology),
+                    },
+                ),
             ));
         }
         let GeometryInfluences::Four(influences) = influences else {
-            return Err(Error::new(
-                "geometry.influences",
-                "M2 geometry requires four authored joint slots",
+            return Err(Error::at(
+                Location::new().field("influences"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::GeometryInfluences {
+                        actual: InfluenceKind::from(&influences),
+                    },
+                ),
             ));
         };
-        let texture_coordinates = vertices.texture_coordinates.try_into().map_err(|_| {
-            Error::new(
-                "geometry.texture_coordinates",
-                "M2 geometry requires exactly two UV streams",
-            )
-        })?;
+        let texture_coordinates =
+            vertices
+                .texture_coordinates
+                .try_into()
+                .map_err(|values: Vec<_>| {
+                    Error::at(
+                        Location::new().field("texture_coordinates"),
+                        GeometryError::TextureCoordinateCount {
+                            minimum: 2,
+                            maximum: Some(2),
+                            actual: values.len(),
+                        },
+                    )
+                })?;
         let result = Self {
             streams: VertexStreams {
                 vertices: VertexData {

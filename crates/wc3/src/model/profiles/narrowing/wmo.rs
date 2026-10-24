@@ -1,5 +1,6 @@
 //! Exact projections of Wmo owner payloads.
-use super::{incompatible, Narrows};
+use super::{incompatible, incompatible_feature, Narrows};
+use crate::model::error::{PayloadKind, PayloadVocabulary, ProfileKind};
 use crate::model::profiles::{NoProperties, Profile, Universal, Wmo};
 use crate::model::PropertyValues;
 use crate::model::{
@@ -19,17 +20,29 @@ impl Narrows<Universal> for Wmo {
     fn effect_resource<'a>(
         _value: <Universal as Profile>::EffectResource<'a>,
     ) -> Result<Self::EffectResource<'a>, Error> {
-        Err(incompatible("effect resource"))
+        Err(incompatible(
+            ProfileKind::Wmo,
+            PayloadKind::EffectResource,
+            PayloadVocabulary::Universal,
+        ))
     }
     fn physics_resource<'a>(
         _value: <Universal as Profile>::PhysicsResource<'a>,
     ) -> Result<Self::PhysicsResource<'a>, Error> {
-        Err(incompatible("physics resource"))
+        Err(incompatible(
+            ProfileKind::Wmo,
+            PayloadKind::PhysicsResource,
+            PayloadVocabulary::M2,
+        ))
     }
     fn bone_override_resource<'a>(
         _value: <Universal as Profile>::BoneOverrideResource<'a>,
     ) -> Result<Self::BoneOverrideResource<'a>, Error> {
-        Err(incompatible("boneoverride resource"))
+        Err(incompatible(
+            ProfileKind::Wmo,
+            PayloadKind::BoneOverrideResource,
+            PayloadVocabulary::M2,
+        ))
     }
 
     fn appearance<'a>(
@@ -37,13 +50,21 @@ impl Narrows<Universal> for Wmo {
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
             UniversalAppearance::Single(value) => Ok(value),
-            _ => Err(incompatible("appearance")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::Appearance,
+                super::appearance(&value),
+            )),
         }
     }
     fn binding<'a>(
         _value: <Universal as Profile>::Binding<'a>,
     ) -> Result<Self::Binding<'a>, Error> {
-        Err(incompatible("binding"))
+        Err(incompatible(
+            ProfileKind::Wmo,
+            PayloadKind::Binding,
+            super::binding(&_value),
+        ))
     }
     fn geometry<'a>(
         value: <Universal as Profile>::Geometry<'a>,
@@ -55,18 +76,30 @@ impl Narrows<Universal> for Wmo {
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
             ModelMetadata::Wmo(value) => Ok(value),
-            _ => Err(incompatible("model")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::ModelMetadata,
+                super::metadata(&value),
+            )),
         }
     }
     fn event_source<'a>(
         _value: <Universal as Profile>::EventSource<'a>,
     ) -> Result<Self::EventSource<'a>, Error> {
-        Err(Error::new("event.source", "WMO has no event sources"))
+        Err(incompatible(
+            ProfileKind::Wmo,
+            PayloadKind::EventSource,
+            super::event(&_value),
+        ))
     }
     fn system<'a>(value: <Universal as Profile>::System<'a>) -> Result<Self::System<'a>, Error> {
         match value {
             System::Wmo(value) => Ok(value),
-            _ => Err(incompatible("system")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::System,
+                super::system(&value),
+            )),
         }
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
@@ -76,14 +109,20 @@ impl Narrows<Universal> for Wmo {
         value: <Universal as Profile>::Feature<'a>,
         _values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error> {
-        value.try_into().map_err(|_| incompatible("feature"))
+        value
+            .try_into()
+            .map_err(|value: Box<_>| incompatible_feature(ProfileKind::Wmo, &value))
     }
     fn node<'a>(
         value: <Universal as Profile>::NodeProperties<'a>,
     ) -> Result<Self::NodeProperties<'a>, Error> {
         match value {
             None => Ok(NoProperties),
-            _ => Err(incompatible("node")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::NodeProperties,
+                super::node(&value),
+            )),
         }
     }
     fn mesh<'a>(
@@ -91,7 +130,11 @@ impl Narrows<Universal> for Wmo {
     ) -> Result<Self::MeshProperties<'a>, Error> {
         match value {
             None => Ok(NoProperties),
-            _ => Err(incompatible("mesh")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::MeshProperties,
+                super::mesh(&value),
+            )),
         }
     }
     fn instance<'a>(
@@ -99,14 +142,22 @@ impl Narrows<Universal> for Wmo {
     ) -> Result<Self::InstanceProperties<'a>, Error> {
         match value {
             Some(InstanceProperties::Wmo(value)) => Ok(*value),
-            _ => Err(incompatible("instance")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::InstanceProperties,
+                super::instance(&value),
+            )),
         }
     }
     fn draw(value: <Universal as Profile>::DrawProperties) -> Result<Self::DrawProperties, Error> {
         match value {
             None => Ok(None),
             Some(DrawProperties::Wmo(value)) => Ok(Some(value)),
-            _ => Err(incompatible("draw")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::DrawProperties,
+                super::draw(&value),
+            )),
         }
     }
     fn clip<'a>(
@@ -114,7 +165,11 @@ impl Narrows<Universal> for Wmo {
     ) -> Result<Self::ClipProperties<'a>, Error> {
         match value {
             None => Ok(NoProperties),
-            _ => Err(incompatible("clip")),
+            value => Err(incompatible(
+                ProfileKind::Wmo,
+                PayloadKind::ClipProperties,
+                super::clip(&value),
+            )),
         }
     }
 }

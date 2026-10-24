@@ -2,6 +2,7 @@
 use super::vertex_geometry::RemapStreams;
 use super::{Error, Influence, InfluenceRows, JointInfluences, PackedArray};
 use crate::model::common::IntoOwned;
+use crate::model::error::{InfluenceKind, Location, ProfileError, ProfileKind, ProfileViolation};
 use crate::model::ValueGroups;
 
 /// Authored joint distributions in the shared geometry representation.
@@ -64,9 +65,14 @@ impl<'data> TryFrom<GeometryInfluences<'data>> for JointInfluences<'data> {
             GeometryInfluences::None => Ok(Self::None),
             GeometryInfluences::Four(value) => Ok(Self::Four(value)),
             GeometryInfluences::MatrixGroups(value) => Ok(Self::MatrixGroups(value)),
-            _ => Err(Error::new(
-                "geometry.influences",
-                "MDLX requires absent, four-slot, or equal-weight matrix-group influences",
+            value => Err(Error::at(
+                Location::new().field("influences"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::GeometryInfluences {
+                        actual: InfluenceKind::from(&value),
+                    },
+                ),
             )),
         }
     }

@@ -1,5 +1,7 @@
 //! Exact projections of M2 owner payloads.
-use super::{incompatible, Narrows};
+use super::{incompatible, incompatible_feature, Narrows};
+use crate::model::error::{PayloadKind, PayloadVocabulary, ProfileKind};
+use crate::model::features::TryFromFeature;
 use crate::model::profiles::{NoProperties, Profile, Universal, M2};
 use crate::model::EventSource;
 use crate::model::PropertyValues;
@@ -21,7 +23,11 @@ impl Narrows<Universal> for M2 {
     fn effect_resource<'a>(
         _value: <Universal as Profile>::EffectResource<'a>,
     ) -> Result<Self::EffectResource<'a>, Error> {
-        Err(incompatible("effect resource"))
+        Err(incompatible(
+            ProfileKind::M2,
+            PayloadKind::EffectResource,
+            PayloadVocabulary::Universal,
+        ))
     }
     fn physics_resource<'a>(
         value: <Universal as Profile>::PhysicsResource<'a>,
@@ -39,13 +45,21 @@ impl Narrows<Universal> for M2 {
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
             UniversalAppearance::Draw(value) => Ok(value),
-            _ => Err(incompatible("appearance")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::Appearance,
+                super::appearance(&value),
+            )),
         }
     }
     fn binding<'a>(value: <Universal as Profile>::Binding<'a>) -> Result<Self::Binding<'a>, Error> {
         match value {
             UniversalBinding::Identity(value) => Ok(value),
-            _ => Err(incompatible("binding")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::Binding,
+                super::binding(&value),
+            )),
         }
     }
     fn geometry<'a>(
@@ -58,7 +72,11 @@ impl Narrows<Universal> for M2 {
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
             ModelMetadata::M2(value) => Ok(value),
-            _ => Err(incompatible("model")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::ModelMetadata,
+                super::metadata(&value),
+            )),
         }
     }
     fn event_source<'a>(
@@ -66,16 +84,21 @@ impl Narrows<Universal> for M2 {
     ) -> Result<Self::EventSource<'a>, Error> {
         match value {
             EventSource::M2(value) => Ok(value),
-            _ => Err(Error::new(
-                "event.source",
-                "event source belongs to another profile",
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::EventSource,
+                super::event(&value),
             )),
         }
     }
     fn system<'a>(value: <Universal as Profile>::System<'a>) -> Result<Self::System<'a>, Error> {
         match value {
             System::M2(value) => Ok(value),
-            _ => Err(incompatible("system")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::System,
+                super::system(&value),
+            )),
         }
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
@@ -85,8 +108,8 @@ impl Narrows<Universal> for M2 {
         value: <Universal as Profile>::Feature<'a>,
         values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error> {
-        crate::model::features::TryFromFeature::try_from_feature(value, values)
-            .map_err(|_| incompatible("feature"))
+        TryFromFeature::try_from_feature(value, values)
+            .map_err(|value: Box<_>| incompatible_feature(ProfileKind::M2, &value))
     }
     fn node<'a>(
         value: <Universal as Profile>::NodeProperties<'a>,
@@ -94,7 +117,11 @@ impl Narrows<Universal> for M2 {
         match value {
             None => Ok(None),
             Some(NodeProperties::M2(value)) => Ok(Some(value)),
-            _ => Err(incompatible("node")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::NodeProperties,
+                super::node(&value),
+            )),
         }
     }
     fn mesh<'a>(
@@ -103,7 +130,11 @@ impl Narrows<Universal> for M2 {
         match value {
             None => Ok(None),
             Some(MeshProperties::M2(value)) => Ok(Some(value)),
-            _ => Err(incompatible("mesh")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::MeshProperties,
+                super::mesh(&value),
+            )),
         }
     }
     fn instance<'a>(
@@ -111,14 +142,22 @@ impl Narrows<Universal> for M2 {
     ) -> Result<Self::InstanceProperties<'a>, Error> {
         match value {
             None => Ok(NoProperties),
-            _ => Err(incompatible("instance")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::InstanceProperties,
+                super::instance(&value),
+            )),
         }
     }
     fn draw(value: <Universal as Profile>::DrawProperties) -> Result<Self::DrawProperties, Error> {
         match value {
             None => Ok(None),
             Some(DrawProperties::M2(value)) => Ok(Some(value)),
-            _ => Err(incompatible("draw")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::DrawProperties,
+                super::draw(&value),
+            )),
         }
     }
     fn clip<'a>(
@@ -126,7 +165,11 @@ impl Narrows<Universal> for M2 {
     ) -> Result<Self::ClipProperties<'a>, Error> {
         match value {
             Some(ClipProperties::M2(value)) => Ok(value),
-            _ => Err(incompatible("clip")),
+            value => Err(incompatible(
+                ProfileKind::M2,
+                PayloadKind::ClipProperties,
+                super::clip(&value),
+            )),
         }
     }
 }

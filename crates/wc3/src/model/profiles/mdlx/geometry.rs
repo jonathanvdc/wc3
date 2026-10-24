@@ -1,15 +1,18 @@
 //! Geometry streams and connectivity available to this model family.
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
+use crate::model::error::{
+    GeometryError, Location, ProfileError, ProfileKind, ProfileViolation, TopologyKind,
+};
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::geometry_schema::{present, validate_geometry};
 use crate::model::vertex_geometry::RemapStreams;
 use crate::model::vertex_geometry::{GeometryStreams, VertexStreams};
-use crate::model::TextureCoordinates;
 use crate::model::{
     Attribute, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, PackedArray, Topology,
     ValidateLinks,
 };
+use crate::model::{AttributeDomain, AttributeSemantic, TextureCoordinates};
 use crate::model::{GeometryData, GeometryKind, GeometryParts, VertexData};
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use glam::{Vec2, Vec3, Vec4};
@@ -197,16 +200,19 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
         }
     }
     fn validate(&self) -> Result<(), Error> {
-        if self
-            .streams
-            .texture_coordinates
-            .iter()
-            .any(|stream| stream.len() != self.streams.positions.len())
-        {
-            return Err(Error::new(
-                "geometry.texture_coordinates",
-                "MDLX texture-coordinate sets must cover every vertex",
-            ));
+        for (slot, values) in self.streams.texture_coordinates.iter().enumerate() {
+            if values.len() != self.streams.positions.len() {
+                return Err(Error::at(
+                    Location::new().attribute(
+                        AttributeSemantic::TexCoord(slot as u32),
+                        AttributeDomain::Vertex,
+                    ),
+                    GeometryError::CountMismatch {
+                        expected: self.streams.positions.len(),
+                        actual: values.len(),
+                    },
+                ));
+            }
         }
         fn native_topology(topology: &Topology<'_>) -> bool {
             match topology {
@@ -216,9 +222,14 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
             }
         }
         if !native_topology(&self.streams.topology) {
-            return Err(Error::new(
-                "geometry.topology",
-                "Warcraft III geometry requires known triangle primitive groups",
+            return Err(Error::at(
+                Location::new().field("topology"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::GeometryTopology {
+                        actual: TopologyKind::from(&self.streams.topology),
+                    },
+                ),
             ));
         }
         validate_geometry(self)
@@ -276,14 +287,19 @@ impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
 impl<'data> TryFrom<GeometryData<'data>> for MdlxGeometry<'data> {
     type Error = Error;
     fn try_from(value: GeometryData<'data>) -> Result<Self, Error> {
-        value.validate_vertex_streams()?;
+        value.validate_vertex_streams(ProfileKind::Mdlx)?;
         let vertices = value.into_parts();
         let topology = vertices.topology;
         let influences = vertices.influences;
         if !vertices.colors.is_empty() {
-            return Err(Error::new(
-                "geometry.colors",
-                "MDLX geometry has no vertex color stream",
+            return Err(Error::at(
+                Location::new().field("colors"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::GeometryStream {
+                        semantic: AttributeSemantic::Color(0),
+                    },
+                ),
             ));
         }
         let influences = influences.try_into()?;

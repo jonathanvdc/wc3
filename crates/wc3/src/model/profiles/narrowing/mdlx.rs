@@ -1,5 +1,9 @@
 //! Exact projections of Mdlx owner payloads.
-use super::{incompatible, Narrows};
+use super::{incompatible, incompatible_feature, Narrows};
+use crate::model::error::{
+    Location, PayloadKind, PayloadVocabulary, ProfileError, ProfileKind, ProfileViolation,
+};
+use crate::model::features::TryFromFeature;
 use crate::model::profiles::{Mdlx, NoProperties, Profile, Universal};
 use crate::model::EventSource;
 use crate::model::PropertyValues;
@@ -14,9 +18,9 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<(), Error> {
         if let NodeFeature::Camera(Camera::LookAt(camera)) = feature {
             if source.is_animated(camera.projection.field_of_view) {
-                return Err(Error::new(
-                    "camera.projection.field_of_view",
-                    "Warcraft III cameras require a constant field of view",
+                return Err(Error::at(
+                    Location::new().field("projection").field("field_of_view"),
+                    ProfileError::new(ProfileKind::Mdlx, ProfileViolation::AnimatedField),
                 ));
             }
         }
@@ -41,12 +45,20 @@ impl Narrows<Universal> for Mdlx {
     fn physics_resource<'a>(
         _value: <Universal as Profile>::PhysicsResource<'a>,
     ) -> Result<Self::PhysicsResource<'a>, Error> {
-        Err(incompatible("physics resource"))
+        Err(incompatible(
+            ProfileKind::Mdlx,
+            PayloadKind::PhysicsResource,
+            PayloadVocabulary::M2,
+        ))
     }
     fn bone_override_resource<'a>(
         _value: <Universal as Profile>::BoneOverrideResource<'a>,
     ) -> Result<Self::BoneOverrideResource<'a>, Error> {
-        Err(incompatible("boneoverride resource"))
+        Err(incompatible(
+            ProfileKind::Mdlx,
+            PayloadKind::BoneOverrideResource,
+            PayloadVocabulary::M2,
+        ))
     }
 
     fn appearance<'a>(
@@ -54,13 +66,21 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<Self::Appearance<'a>, Error> {
         match value {
             UniversalAppearance::Single(value) => Ok(value),
-            _ => Err(incompatible("appearance")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::Appearance,
+                super::appearance(&value),
+            )),
         }
     }
     fn binding<'a>(value: <Universal as Profile>::Binding<'a>) -> Result<Self::Binding<'a>, Error> {
         match value {
             UniversalBinding::Identity(value) => Ok(value),
-            _ => Err(incompatible("binding")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::Binding,
+                super::binding(&value),
+            )),
         }
     }
     fn geometry<'a>(
@@ -73,7 +93,11 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
             ModelMetadata::Mdlx(value) => Ok(value),
-            _ => Err(incompatible("model")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::ModelMetadata,
+                super::metadata(&value),
+            )),
         }
     }
     fn event_source<'a>(
@@ -81,14 +105,19 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<Self::EventSource<'a>, Error> {
         match value {
             EventSource::Mdlx(value) => Ok(value),
-            _ => Err(Error::new(
-                "event.source",
-                "event source belongs to another profile",
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::EventSource,
+                super::event(&value),
             )),
         }
     }
     fn system<'a>(_value: <Universal as Profile>::System<'a>) -> Result<Self::System<'a>, Error> {
-        Err(incompatible("system"))
+        Err(incompatible(
+            ProfileKind::Mdlx,
+            PayloadKind::System,
+            super::system(&_value),
+        ))
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         value.try_into()
@@ -97,15 +126,19 @@ impl Narrows<Universal> for Mdlx {
         value: <Universal as Profile>::Feature<'a>,
         values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error> {
-        crate::model::features::TryFromFeature::try_from_feature(value, values)
-            .map_err(|_| incompatible("feature"))
+        TryFromFeature::try_from_feature(value, values)
+            .map_err(|value: Box<_>| incompatible_feature(ProfileKind::Mdlx, &value))
     }
     fn node<'a>(
         value: <Universal as Profile>::NodeProperties<'a>,
     ) -> Result<Self::NodeProperties<'a>, Error> {
         match value {
             Some(NodeProperties::Mdlx(value)) => Ok(value),
-            _ => Err(incompatible("node")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::NodeProperties,
+                super::node(&value),
+            )),
         }
     }
     fn mesh<'a>(
@@ -113,7 +146,11 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<Self::MeshProperties<'a>, Error> {
         match value {
             Some(MeshProperties::Mdlx(value)) => Ok(value),
-            _ => Err(incompatible("mesh")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::MeshProperties,
+                super::mesh(&value),
+            )),
         }
     }
     fn instance<'a>(
@@ -121,13 +158,21 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<Self::InstanceProperties<'a>, Error> {
         match value {
             None => Ok(NoProperties),
-            _ => Err(incompatible("instance")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::InstanceProperties,
+                super::instance(&value),
+            )),
         }
     }
     fn draw(value: <Universal as Profile>::DrawProperties) -> Result<Self::DrawProperties, Error> {
         match value {
             None => Ok(NoProperties),
-            _ => Err(incompatible("draw")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::DrawProperties,
+                super::draw(&value),
+            )),
         }
     }
     fn clip<'a>(
@@ -135,7 +180,11 @@ impl Narrows<Universal> for Mdlx {
     ) -> Result<Self::ClipProperties<'a>, Error> {
         match value {
             Some(ClipProperties::Mdlx(value)) => Ok(value),
-            _ => Err(incompatible("clip")),
+            value => Err(incompatible(
+                ProfileKind::Mdlx,
+                PayloadKind::ClipProperties,
+                super::clip(&value),
+            )),
         }
     }
 }
