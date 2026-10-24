@@ -510,10 +510,9 @@ fn project_geometry_with_color(
                             target.push(values.get(index).unwrap());
                         } else {
                             return Err(Error::at(
-                                Location::new().attribute(
-                                    AttributeSemantic::TexCoord(coordinate),
-                                    AttributeDomain::Vertex,
-                                ),
+                                Location::new()
+                                    .field("texture_coordinates")
+                                    .index(coordinate as usize),
                                 GeometryError::MissingTextureCoordinates { slot: coordinate },
                             ));
                         }
@@ -615,10 +614,9 @@ fn project_geometry_with_color(
                 output.texture_coordinates[0] = uvs;
             } else if coordinate != 0 {
                 return Err(Error::at(
-                    Location::new().attribute(
-                        AttributeSemantic::TexCoord(coordinate),
-                        AttributeDomain::Vertex,
-                    ),
+                    Location::new()
+                        .field("texture_coordinates")
+                        .index(coordinate as usize),
                     GeometryError::MissingTextureCoordinates { slot: coordinate },
                 ));
             } else {

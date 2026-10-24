@@ -1,13 +1,15 @@
 use super::*;
 use bevy::math::{Vec2, Vec4};
 use bevy::prelude::Vec3;
+use std::error::Error as _;
 use wc3::model::common::PackedArray;
+use wc3::model::error::{ErrorKind, GeometryError, Location};
 use wc3::model::profiles::Universal;
-use wc3::model::ModelMetadata;
 use wc3::model::{
     Attribute, ConnectivitySets, GeometryData, Mesh as ModelMesh, ModelBuilder, PrimitiveSelection,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use wc3::model::{Error as SemanticError, ModelMetadata};
 
 fn positions(mesh: &Mesh) -> &[[f32; 3]] {
     let Some(VertexAttributeValues::Float32x3(values)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
@@ -389,12 +391,25 @@ fn third_texture_route_preserves_corner_domain_and_omits_unused_streams() {
     let plain = compile_geometry(&source, subset, 0).unwrap();
     assert!(plain[0].mesh.attribute(EXTRA_TEXCOORD).is_none());
     assert!(plain[0].mesh.attribute(Mesh::ATTRIBUTE_UV_1).is_none());
-    let error = compile_geometry_with_uvs(&source, subset, 0, Some(1), Some(3))
-        .err()
-        .unwrap();
-    assert!(error
-        .to_string()
-        .contains("texture coordinate set 3 is absent"));
+    for result in [
+        compile_geometry_with_uvs(&source, subset, 0, Some(1), Some(3)),
+        compile_geometry_with_uvs(&source, subset, 3, None, None),
+    ] {
+        let error = result.err().unwrap();
+        let source = error
+            .source()
+            .unwrap()
+            .downcast_ref::<SemanticError>()
+            .unwrap();
+        assert!(matches!(
+            source.kind(),
+            ErrorKind::Geometry(GeometryError::MissingTextureCoordinates { slot: 3 })
+        ));
+        assert_eq!(
+            source.location(),
+            &Location::new().field("texture_coordinates").index(3)
+        );
+    }
 }
 
 #[test]
