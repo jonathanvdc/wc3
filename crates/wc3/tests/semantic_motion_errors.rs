@@ -1,8 +1,9 @@
 use std::error::Error as _;
-use wc3::model::error::{AnimationError, ErrorKind, Segment};
+use wc3::model::error::{AnimationError, ErrorKind, Owner, Segment, TransformError};
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    AnimationProgram, AnimationSample, Clip, Curve, Model, ModelMetadata, SharedClock, Time,
+    AnimationProgram, AnimationSample, Axis, Basis, Clip, Curve, Handedness, LengthUnit, Mat4,
+    Model, ModelMetadata, PoseLayout, SharedClock, Time, TransformSemantics, Vec3,
 };
 
 fn time(seconds: f64) -> Time {
@@ -122,5 +123,92 @@ fn composition_retains_the_conflicting_clock_and_both_periods() {
         ErrorKind::Animation(AnimationError::ClockPeriodConflict {
             clock: actual, existing, incoming,
         }) if *actual == clock && *existing == time(1.) && *incoming == time(2.)
+    ));
+}
+
+#[test]
+fn coordinate_failures_retain_axis_choices_and_unrepresentable_scale() {
+    let error = Basis::new(Axis::PositiveX, Axis::NegativeX, Handedness::Right).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::DependentBasisAxes {
+            up: Axis::PositiveX,
+            forward: Axis::NegativeX,
+        })
+    ));
+    let model = Model::<Universal>::empty(ModelMetadata::Mdlx(Default::default())).unwrap();
+    let error = model
+        .coordinate_transform(
+            Basis::default(),
+            LengthUnit::MetersPerUnit(f64::MIN_POSITIVE),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::UnrepresentableScale {
+            source: LengthUnit::Unspecified,
+            target: LengthUnit::MetersPerUnit(value), scale,
+        }) if *value == f64::MIN_POSITIVE && *scale == 1. / f64::MIN_POSITIVE
+    ));
+}
+
+#[test]
+fn prepared_pose_failures_keep_source_identity_and_parent_count() {
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let first = draft.add_named_node("first").unwrap();
+    let second = draft.add_named_node("second").unwrap();
+    let model = draft.finish().unwrap();
+    let layout = model.prepare_pose().unwrap();
+    let mut nodes = layout.nodes().to_vec();
+    nodes[1].id = first;
+    let error = PoseLayout::new(nodes).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::DuplicatePoseNode { node }) if *node == first
+    ));
+    let mut nodes = layout.nodes().to_vec();
+    nodes[1].parent = Some(42);
+    let error = PoseLayout::new(nodes).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::ParentIndexOutOfBounds {
+            parent: 42,
+            nodes: 2
+        })
+    ));
+    assert_eq!(
+        error.location().segments().first(),
+        Some(&Segment::Owner(Owner::Node(second)))
+    );
+}
+
+#[test]
+fn correction_failures_retain_the_actual_matrix_and_node() {
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let node = draft.add_named_node("corrected").unwrap();
+    let model = draft.finish().unwrap();
+    let mut nodes = model.prepare_pose().unwrap().nodes().to_vec();
+    nodes[0].transform_semantics = TransformSemantics::Affine;
+    let mut matrix = Mat4::IDENTITY;
+    matrix.x_axis.w = 0.5;
+    nodes[0].correction = Some(matrix);
+    let error = PoseLayout::new(nodes).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::NonAffineMatrix { last_row }) if last_row.x == 0.5 && last_row.w == 1.
+    ));
+    assert_eq!(
+        error.location().segments().first(),
+        Some(&Segment::Owner(Owner::Node(node)))
+    );
+
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let mut node = draft.new_node("invalid pivot");
+    node.transform.pivot = Vec3::new(f32::INFINITY, 0., 0.);
+    draft.add_node(node).unwrap();
+    let error = draft.finish().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Transform(TransformError::NonFiniteVector { vector }) if vector.x == f32::INFINITY
     ));
 }
