@@ -1,6 +1,6 @@
 use super::*;
 use crate::model::ModelMetadata;
-use crate::model::{Clip, Curve, ModelBuilder, SharedClock};
+use crate::model::{Animation, Clip, Curve, ModelBuilder, PackedArray, SharedClock, TcbParameters};
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use glam::Vec3;
 use std::ptr::eq;
@@ -485,6 +485,271 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
     assert_eq!(shared.period, Some(time(2.)));
     assert_eq!(shared.origin, Time::default());
 }
+
+fn scalar_model<'data>(
+    curve: Curve<'data, f32>,
+) -> (Model<'data>, Property<f32>, AnimationId, ClipId) {
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let property = builder.add_value(0.0);
+    let animation = builder.add_animation(Animation {
+        tracks: vec![DynamicTrack::Scalar(Track {
+            target: property,
+            curve,
+            clock: TimeSource::Animation,
+        })],
+        ..Default::default()
+    });
+    let clip = builder
+        .add_clip(
+            Clip::named("keys")
+                .with_animation(animation)
+                .with_duration(time(2.))
+                .once(),
+        )
+        .unwrap();
+    (builder.finish().unwrap(), property, animation, clip)
+}
+
+fn compiled_scalar_curve(
+    program: &AnimationProgram,
+    animation: AnimationId,
+) -> &Curve<'static, f32> {
+    let DynamicTrack::Scalar(track) = &program.animations[&animation].tracks[0] else {
+        panic!("expected the scalar fixture track")
+    };
+    &track.curve
+}
+
+fn scalar_buffers<'view>(curve: &'view Curve<'_, f32>) -> Vec<&'view [u8]> {
+    let mut buffers = vec![curve.times().as_bytes(), curve.values().as_bytes()];
+    if let Some(controls) = curve.hermite_derivatives() {
+        buffers.extend([controls.incoming.as_bytes(), controls.outgoing.as_bytes()]);
+    }
+    if let Some(controls) = curve.bezier_controls() {
+        buffers.extend([controls.incoming.as_bytes(), controls.outgoing.as_bytes()]);
+    }
+    if let Some(parameters) = curve.tcb_parameters() {
+        buffers.push(parameters.as_bytes());
+    }
+    buffers
+}
+
+fn scalar_at(
+    program: &AnimationProgram,
+    property: Property<f32>,
+    clip: ClipId,
+    seconds: f64,
+) -> f32 {
+    program
+        .sample(AnimationSample {
+            clip: Some(clip),
+            clip_time: time(seconds),
+            ..Default::default()
+        })
+        .unwrap()
+        .override_value(&property)
+        .unwrap()
+}
+
+#[test]
+fn separately_compiled_owned_programs_share_keys_and_all_spline_controls() {
+    let keys = [time(0.), time(1.), time(2.)];
+    let curves = [
+        Curve::linear(keys, [0., 4., 8.]).unwrap(),
+        Curve::hermite(keys, [0., 4., 8.], [4.; 3], [4.; 3]).unwrap(),
+        Curve::bezier(keys, [0., 4., 8.], [0., 2., 6.], [2., 6., 8.]).unwrap(),
+        Curve::tcb(keys, [0., 4., 8.], [TcbParameters::default(); 3]).unwrap(),
+    ];
+    for curve in curves {
+        let authored_buffers = scalar_buffers(&curve)
+            .into_iter()
+            .map(|bytes| bytes.as_ptr())
+            .collect::<Vec<_>>();
+        let (model, property, animation, clip) = scalar_model(curve);
+        let first = AnimationProgram::compile(&model);
+        let second = AnimationProgram::compile(&model);
+        assert!(!eq(
+            &first.animations[&animation],
+            &second.animations[&animation]
+        ));
+        for program in [&first, &second] {
+            let buffers = scalar_buffers(compiled_scalar_curve(program, animation));
+            assert_eq!(buffers.len(), authored_buffers.len());
+            for (bytes, authored) in buffers.iter().zip(&authored_buffers) {
+                assert!(!bytes.is_empty());
+                assert_eq!(bytes.as_ptr(), *authored);
+            }
+        }
+        let expected: Vec<_> = [0.25, 1., 1.75]
+            .into_iter()
+            .map(|seconds| {
+                model
+                    .animation_sample(AnimationSample {
+                        clip: Some(clip),
+                        clip_time: time(seconds),
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .override_value(&property)
+                    .unwrap()
+            })
+            .collect();
+        drop(model);
+        for (seconds, expected) in [0.25, 1., 1.75].into_iter().zip(expected) {
+            assert_eq!(scalar_at(&first, property, clip, seconds), expected);
+            assert_eq!(scalar_at(&second, property, clip, seconds), expected);
+        }
+    }
+}
+
+#[test]
+fn borrowed_program_keys_detach_before_source_bytes_are_changed_and_dropped() {
+    let mut times = PackedArray::alloc_from_slice(&[time(0.), time(1.), time(2.)])
+        .as_bytes()
+        .to_vec();
+    let mut values = PackedArray::alloc_from_slice(&[0f32, 4., 8.])
+        .as_bytes()
+        .to_vec();
+    let mut incoming = PackedArray::alloc_from_slice(&[4f32; 3])
+        .as_bytes()
+        .to_vec();
+    let mut outgoing = incoming.clone();
+    let curve = Curve::hermite(
+        PackedArray::parse_bytes(&times).unwrap(),
+        PackedArray::parse_bytes(&values).unwrap(),
+        PackedArray::parse_bytes(&incoming).unwrap(),
+        PackedArray::parse_bytes(&outgoing).unwrap(),
+    )
+    .unwrap();
+    let (model, property, animation, clip) = scalar_model(curve);
+    let first = AnimationProgram::compile(&model);
+    let second = AnimationProgram::compile(&model);
+    for ((first, second), source) in scalar_buffers(compiled_scalar_curve(&first, animation))
+        .into_iter()
+        .zip(scalar_buffers(compiled_scalar_curve(&second, animation)))
+        .zip([&times, &values, &incoming, &outgoing])
+    {
+        assert_eq!(first, source.as_slice());
+        assert_eq!(second, source.as_slice());
+        assert_ne!(first.as_ptr(), source.as_ptr());
+        assert_ne!(second.as_ptr(), source.as_ptr());
+        assert_ne!(first.as_ptr(), second.as_ptr());
+    }
+    drop(model);
+    times.fill(0);
+    values.fill(0);
+    incoming.fill(0);
+    outgoing.fill(0);
+    drop((times, values, incoming, outgoing));
+    assert_eq!(scalar_at(&first, property, clip, 0.25), 1.);
+    assert_eq!(scalar_at(&second, property, clip, 1.75), 7.);
+}
+
+#[test]
+fn program_clone_and_composition_share_keys_but_keep_property_tables_independent() {
+    let (host_model, host_property, host_animation, host_clip) =
+        scalar_model(Curve::linear([time(0.), time(2.)], [0., 8.]).unwrap());
+    let (part_model, part_property, part_animation, part_clip) =
+        scalar_model(Curve::hermite([time(0.), time(2.)], [2., 6.], [4.; 2], [4.; 2]).unwrap());
+    assert_ne!(host_property, part_property);
+    let host = AnimationProgram::compile(&host_model);
+    let part = AnimationProgram::compile(&part_model);
+    let mut cloned = host.clone();
+    let combined = host
+        .compose(&part, &[(host_clip, part_clip)], |_| true)
+        .unwrap();
+    for (original, reused, animation) in [
+        (&host, &cloned, host_animation),
+        (&host, &combined, host_animation),
+        (&part, &combined, part_animation),
+    ] {
+        assert!(!eq(
+            &original.animations[&animation],
+            &reused.animations[&animation]
+        ));
+        for (original, reused) in scalar_buffers(compiled_scalar_curve(original, animation))
+            .into_iter()
+            .zip(scalar_buffers(compiled_scalar_curve(reused, animation)))
+        {
+            assert_eq!(original.as_ptr(), reused.as_ptr());
+        }
+    }
+    cloned.values.set(host_property, -5.).unwrap();
+    assert_eq!(host.values().get(host_property), Some(&0.));
+    assert_eq!(combined.values().get(host_property), Some(&0.));
+    assert_eq!(cloned.values().get(host_property), Some(&-5.));
+    assert!(host.values().get(part_property).is_none());
+    assert!(cloned.values().get(part_property).is_none());
+    assert_eq!(combined.values().get(part_property), Some(&0.));
+    assert_eq!(host.animations.len(), 1);
+    assert_eq!(part.animations.len(), 1);
+    assert_eq!(combined.animations.len(), 2);
+    assert!(!combined.clips.contains_key(&part_clip));
+    drop((host_model, part_model, host, part));
+    assert_eq!(scalar_at(&cloned, host_property, host_clip, 1.), 4.);
+    assert_eq!(scalar_at(&combined, host_property, host_clip, 1.), 4.);
+    assert_eq!(scalar_at(&combined, part_property, host_clip, 1.), 4.);
+}
+
+#[test]
+fn editing_a_shared_model_detaches_changed_keys_and_keeps_existing_programs_valid() {
+    let (model, property, animation, clip) = scalar_model(
+        Curve::hermite(
+            [time(0.), time(1.), time(2.)],
+            [0., 4., 8.],
+            [4.; 3],
+            [4.; 3],
+        )
+        .unwrap(),
+    );
+    let original = AnimationProgram::compile(&model);
+    let mut edited = model.clone();
+    edited
+        .edit(|builder| {
+            let mut definition = builder.model().animation(animation).unwrap().clone();
+            let DynamicTrack::Scalar(track) = &mut definition.tracks[0] else {
+                unreachable!()
+            };
+            let mut values = track.curve.values().clone();
+            assert_eq!(values.set(1, 12.), Some(4.));
+            let derivatives = track.curve.hermite_derivatives().unwrap();
+            let mut incoming = derivatives.incoming.clone();
+            incoming.for_each_mut(|value| *value = 0.);
+            track.curve = Curve::hermite(
+                track.curve.times().clone(),
+                values,
+                incoming,
+                derivatives.outgoing.clone(),
+            )?;
+            builder.set_animation(animation, definition)?;
+            builder.values_mut().set(property, 100.)?;
+            Ok(())
+        })
+        .unwrap();
+    let changed = AnimationProgram::compile(&edited);
+    let original_buffers = scalar_buffers(compiled_scalar_curve(&original, animation));
+    let changed_curve = compiled_scalar_curve(&changed, animation);
+    let changed_buffers = scalar_buffers(changed_curve);
+    assert_eq!(original_buffers[0].as_ptr(), changed_buffers[0].as_ptr());
+    assert_ne!(original_buffers[1].as_ptr(), changed_buffers[1].as_ptr());
+    assert_ne!(original_buffers[2].as_ptr(), changed_buffers[2].as_ptr());
+    assert_eq!(original_buffers[3].as_ptr(), changed_buffers[3].as_ptr());
+    assert_eq!(changed_curve.values().to_vec(), [0., 12., 8.]);
+    assert_eq!(
+        changed_curve
+            .hermite_derivatives()
+            .unwrap()
+            .incoming
+            .to_vec(),
+        [0.; 3]
+    );
+    assert_eq!(model.values().get(property), Some(&0.));
+    assert_eq!(edited.values().get(property), Some(&100.));
+    drop((model, edited));
+    assert_eq!(scalar_at(&original, property, clip, 1.), 4.);
+    assert_eq!(scalar_at(&changed, property, clip, 1.), 12.);
+}
+
 #[test]
 #[ignore = "explicit animation throughput measurement"]
 fn compiled_property_sampling_throughput() {
