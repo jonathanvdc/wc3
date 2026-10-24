@@ -20,15 +20,15 @@ pub enum Owner {
     Material(MaterialId),
     /// A clip definition or reference.
     Clip(ClipId),
-    /// A instance definition or reference.
+    /// An instance definition or reference.
     Instance(InstanceId),
     /// A skin definition or reference.
     Skin(SkinId),
     /// A clock definition or reference.
     Clock(ClockId),
-    /// A eventsource definition or reference.
+    /// An event-source definition or reference.
     EventSource(EventSourceId),
-    /// A event definition or reference.
+    /// An event definition or reference.
     Event(EventId),
     /// A look definition or reference.
     Look(LookId),
@@ -40,19 +40,19 @@ pub enum Owner {
     Draw(DrawId),
     /// A connectivity definition or reference.
     Connectivity(ConnectivityId),
-    /// A drawsubset definition or reference.
+    /// A draw-subset definition or reference.
     DrawSubset(DrawSubsetId),
-    /// A animation definition or reference.
+    /// An animation definition or reference.
     Animation(AnimationId),
-    /// A imageresource definition or reference.
+    /// An image-resource definition or reference.
     ImageResource(ImageResourceId),
-    /// A modelresource definition or reference.
+    /// A model-resource definition or reference.
     ModelResource(ModelResourceId),
-    /// A effectresource definition or reference.
+    /// An effect-resource definition or reference.
     EffectResource(EffectResourceId),
-    /// A physicsresource definition or reference.
+    /// A physics-resource definition or reference.
     PhysicsResource(PhysicsResourceId),
-    /// A boneoverrideresource definition or reference.
+    /// A bone-override resource definition or reference.
     BoneOverrideResource(BoneOverrideResourceId),
     /// A typed authored property slot.
     Value(ValueSlot),

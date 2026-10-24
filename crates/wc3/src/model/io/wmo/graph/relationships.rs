@@ -3,6 +3,7 @@ use super::scene::Identities;
 use crate::model::conversion::Error;
 use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
+use crate::model::formats::wmo::resources::string_at;
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Dialect, Group, Root};
 use crate::model::profiles::wmo as profile;
@@ -311,13 +312,12 @@ pub(super) fn name<'a, 'data: 'a>(
     if names.is_empty() {
         return Ok(Cow::Borrowed(""));
     }
-    let bytes =
-        crate::model::formats::wmo::resources::string_at(names, offset).map_err(|error| {
-            Error::from_source(
-                Location::new().field("world").field("region").field("name"),
-                error,
-            )
-        })?;
+    let bytes = string_at(names, offset).map_err(|error| {
+        Error::from_source(
+            Location::new().field("world").field("region").field("name"),
+            error,
+        )
+    })?;
     Ok(Cow::Borrowed(std::str::from_utf8(bytes).map_err(
         |error| {
             Error::from_source(

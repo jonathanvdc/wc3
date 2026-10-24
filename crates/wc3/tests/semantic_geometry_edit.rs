@@ -157,8 +157,11 @@ fn constraints_and_connectivity_changes_are_explicit() {
 
 #[test]
 fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
+    use std::error::Error as StdError;
+    use std::io;
+    use wc3::model::error::EditError;
     use wc3::model::profiles::Universal;
-    use wc3::model::{Error, Mesh, Model};
+    use wc3::model::{Mesh, Model};
     let source = ZeroVec::alloc_from_slice(&[[0., 0., 1.]; 3]);
     let geometry = MdlxGeometry::triangles(positions(), triangles())
         .unwrap()
@@ -186,7 +189,7 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
         })
         .unwrap();
     assert_eq!(collection.mesh(id).unwrap().positions().len(), 4);
-    let failed: Result<(), Error> = collection.edit(|draft| {
+    let failed = collection.try_edit(|draft| -> Result<(), Box<dyn StdError>> {
         let mut mesh = draft.model().mesh(id).unwrap().clone();
         mesh.geometry = mesh.geometry.edited(GeometryEdit {
             positions: Some(PackedArray::from_storage(
@@ -195,9 +198,10 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
             ..Default::default()
         })?;
         draft.set_mesh(id, mesh)?;
-        Err(Error::new("test", "abort transaction"))
+        Err(Box::new(io::Error::from(io::ErrorKind::Interrupted)))
     });
-    assert!(failed.is_err());
+    assert!(matches!(failed, Err(EditError::Operation(cause))
+        if cause.downcast_ref::<io::Error>().unwrap().kind() == io::ErrorKind::Interrupted));
     assert_eq!(
         collection.mesh(id).unwrap().positions().get(0),
         Some(Vec3::from_array([0., 1., 0.]))

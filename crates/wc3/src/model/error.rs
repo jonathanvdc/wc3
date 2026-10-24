@@ -36,8 +36,6 @@ pub enum ErrorKind {
     Profile(ProfileError),
     /// A custom semantic validator's original typed failure.
     Extension(Arc<dyn StdError + Send + Sync>),
-    #[doc(hidden)]
-    Migration(String),
 }
 impl Display for ErrorKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -49,7 +47,6 @@ impl Display for ErrorKind {
             Self::Physics(cause) => Display::fmt(cause, f),
             Self::Profile(cause) => Display::fmt(cause, f),
             Self::Extension(cause) => Display::fmt(cause, f),
-            Self::Migration(message) => f.write_str(message),
         }
     }
 }
@@ -92,21 +89,6 @@ impl Error {
         self.location = self.location.prefixed_by(context);
         self
     }
-    #[doc(hidden)]
-    pub fn new(path: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::at(
-            Location::new().field(path.into()),
-            ErrorKind::Migration(message.into()),
-        )
-    }
-    /// Formats the location for presentation; use `location()` for inspection.
-    pub fn path(&self) -> String {
-        self.location.to_string()
-    }
-    /// Formats the cause for presentation; use `kind()` for inspection.
-    pub fn message(&self) -> String {
-        self.kind.to_string()
-    }
 }
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -127,7 +109,6 @@ impl StdError for Error {
             ErrorKind::Physics(cause) => Some(cause),
             ErrorKind::Profile(cause) => Some(cause),
             ErrorKind::Extension(cause) => Some(cause.as_ref()),
-            ErrorKind::Migration(_) => None,
         }
     }
 }
