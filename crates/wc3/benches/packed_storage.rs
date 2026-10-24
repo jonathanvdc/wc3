@@ -10,6 +10,7 @@ fn packed_access(c: &mut Criterion) {
         let components: ZeroVec<[f32; 3]> =
             (0..count).map(|i| [i as f32 * 0.01, 2., -3.]).collect();
         let values = PackedArray::<Vec3>::from_storage(components.as_slice().as_zerovec());
+        let owned = values.clone().into_owned();
         let rotation = Quat::from_rotation_y(0.7);
         group.throughput(Throughput::Elements(count as u64));
         group.bench_with_input(
@@ -60,8 +61,41 @@ fn packed_access(c: &mut Criterion) {
                 black_box(sum)
             });
         });
+        group.bench_with_input(
+            BenchmarkId::new("owned_transform", count),
+            &count,
+            |b, _| {
+                b.iter(|| {
+                    let rotation = black_box(rotation);
+                    let sum = black_box(&owned)
+                        .iter()
+                        .map(|value| rotation * value)
+                        .sum::<Vec3>();
+                    black_box(sum)
+                });
+            },
+        );
     }
     group.finish();
 }
-criterion_group!(benches, packed_access);
+
+fn packed_ownership(c: &mut Criterion) {
+    let mut group = c.benchmark_group("packed_ownership");
+    for count in [0, 1, 16, 256, 16_384] {
+        let values: PackedArray<Vec3> = (0..count).map(|i| Vec3::splat(i as f32)).collect();
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_with_input(BenchmarkId::new("clone", count), &count, |b, _| {
+            b.iter(|| black_box(black_box(&values).clone()));
+        });
+        group.bench_with_input(BenchmarkId::new("clone_and_edit", count), &count, |b, _| {
+            b.iter(|| {
+                let mut edited = black_box(&values).clone();
+                black_box(edited.set(0, black_box(Vec3::Y)));
+                black_box(edited)
+            });
+        });
+    }
+    group.finish();
+}
+criterion_group!(benches, packed_access, packed_ownership);
 criterion_main!(benches);
