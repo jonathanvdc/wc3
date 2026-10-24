@@ -10,7 +10,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fs::{read, read_dir};
 use std::path::Path;
-use std::sync::Arc;
 use wc3::blp::Blp;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::m2::{Bundle, Chunked, FileKey, V274};
@@ -225,16 +224,20 @@ pub fn load(
                 .map_err(|error| format!("character model {id} conversion: {error}").into())
         })
         .collect::<Result<Vec<_>>>()?;
-    let mut models = Models::new();
-    for (id, converted) in model_ids.into_iter().zip(converted) {
-        for loss in &converted.report.issues {
-            eprintln!("Character import {id}: {loss:?}");
-        }
-        models.insert(
-            ResourceLocator::FileDataId(id),
-            Arc::new(converted.value.widen()),
-        );
-    }
+    let source_models: Vec<_> = model_ids
+        .into_iter()
+        .zip(converted)
+        .map(|(id, converted)| {
+            for loss in &converted.report.issues {
+                eprintln!("Character import {id}: {loss:?}");
+            }
+            (ResourceLocator::FileDataId(id), converted.value.widen())
+        })
+        .collect();
+    let models: Models<'_, '_> = source_models
+        .iter()
+        .map(|(resource, model)| (resource.clone(), model))
+        .collect();
     Ok(compile_character(
         &definition,
         &models,

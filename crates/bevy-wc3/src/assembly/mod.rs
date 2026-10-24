@@ -16,13 +16,14 @@ pub use image_sink::ImageSink;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
-use std::sync::Arc;
 use wc3::model::{
     ClipId, FeatureId, ImageResource, ImageResourceId, MaterialSelection, Model, ResourceLocator,
 };
 
-/// Shared immutable models resolved from a coherent application resource provider.
-pub type Models<'data> = HashMap<ResourceLocator<'static>, Arc<Model<'data>>>;
+/// Immutable model views resolved from a coherent application resource provider.
+/// The caller retains the models and any borrowed source data through compilation.
+/// Compiled output owns its render data independently of these views.
+pub type Models<'view, 'data> = HashMap<ResourceLocator<'static>, &'view Model<'data>>;
 /// Prepared optional dependencies shared by every occurrence of one source resource.
 ///
 /// Bindings use identities from that source's Universal model. Programme images,
@@ -145,7 +146,11 @@ pub trait Resolver<Selection> {
     /// Application resolver failure.
     type Error: Error;
     /// Resolve one selection using the available semantic models.
-    fn resolve(&self, selection: &Selection, models: &Models<'_>) -> Result<Assembly, Self::Error>;
+    fn resolve(
+        &self,
+        selection: &Selection,
+        models: &Models<'_, '_>,
+    ) -> Result<Assembly, Self::Error>;
 }
 /// One ordered contribution to a composed image.
 #[derive(Clone, Debug, PartialEq, Eq)]

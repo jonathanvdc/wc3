@@ -3,13 +3,13 @@ use crate::{texture_requests, DrawSelection, ModelError};
 use std::collections::{HashMap, HashSet};
 use wc3::model::{MaterialSelection, Model};
 
-fn source_model<'a, 'data>(
+fn source_model<'view, 'data>(
     source: &Source,
-    models: &'a Models<'data>,
-) -> Result<&'a Model<'data>, ModelError> {
+    models: &Models<'view, 'data>,
+) -> Result<&'view Model<'data>, ModelError> {
     models
         .get(&source.model)
-        .map(AsRef::as_ref)
+        .copied()
         .ok_or_else(|| ModelError(format!("missing assembly model {:?}", source.model)))
 }
 fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError> {
@@ -88,7 +88,7 @@ fn union(a: &DrawSelection, b: &DrawSelection, model: &Model<'_>) -> DrawSelecti
 }
 pub(super) fn plan<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     is_skinned: impl Fn(&B) -> bool,
 ) -> Result<Vec<PendingPart<B>>, ModelError> {
     validate_source(&assembly.root, source_model(&assembly.root, models)?)?;
