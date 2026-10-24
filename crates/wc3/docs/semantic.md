@@ -92,19 +92,15 @@ keeps the encoded representation separate from the aligned mathematical value:
 encoded storage without allocating an aligned vector collection. Keep that source
 alive while using the graph. `from_storage` and `into_storage` bridge native
 `ZeroVec` buffers; extracting a shared owned buffer copies its bytes, while a
-unique buffer moves without rebuilding it. Parsing checks the packed
-representation, while model publication checks semantic validity.
-
-The private `Inline` and `Shared` variants describe where the `ZeroVec`
-descriptor lives: directly in the array, or behind an `Arc`. A `ZeroVec` can
-itself borrow or own bytes, including borrowing static bytes. Constructors
-normalize nonempty owned buffers into shared owned storage and keep borrowed
-or empty buffers inline. These are constructor invariants, rather than ownership
-guarantees supplied by the variant field types. Shared storage can have one or
-several owners.
+unique buffer moves without rebuilding it. `storage()` borrows the encoded
+elements as a `ZeroSlice`, independent of whether the array owns its bytes.
+Parsing checks the packed representation, while model publication checks semantic
+validity.
 
 `IntoPackedArray` accepts existing packed arrays, arrays, vectors, and slices of
-semantic values. Cloning retains borrowed buffers and shares owned packed buffers.
+semantic values. Storage is either a borrowed little-endian element slice or an
+`Arc`-backed owned vector, which can have one or several owners. Cloning retains
+borrowed buffers and shares owned packed buffers.
 `into_owned` copies borrowed buffers and retains already owned storage without
 copying. `set` and `for_each_mut` copy borrowed or shared storage before its first
 edit, then reuse the unique owned buffer. Other clones keep their original values.

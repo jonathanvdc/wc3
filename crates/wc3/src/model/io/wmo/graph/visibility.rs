@@ -181,7 +181,9 @@ pub(super) fn write<'a, D: Dialect>(
     if !source.occluders.is_empty() {
         super::encode::append(
             root,
-            RootChunk::ConvexPlanes(super::encode::array(&source.occluders.storage().to_vec())?),
+            RootChunk::ConvexPlanes(super::encode::array(
+                &source.occluders.storage().iter().collect::<Vec<_>>(),
+            )?),
         )?;
     }
     Ok(())

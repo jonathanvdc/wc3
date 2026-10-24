@@ -228,7 +228,7 @@ fn quantize(weight: f32, context: &mut Context) -> Result<u16, Error> {
 }
 
 fn packed<'a, T: PackedValue>(values: &'a PackedArray<'_, T>) -> ZeroVec<'a, T::Storage> {
-    values.storage().as_slice().as_zerovec()
+    values.storage().as_zerovec()
 }
 
 fn triangles(topology: &Topology<'_>) -> Vec<[u32; 3]> {

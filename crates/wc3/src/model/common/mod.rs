@@ -20,7 +20,7 @@ mod ownership;
 pub use ownership::{Borrowed, Detached, IntoOwned};
 mod into_zero_vec;
 pub use into_zero_vec::IntoZeroVec;
-pub use zerovec::{ule::AsULE, ZeroVec};
+pub use zerovec::{ule::AsULE, ZeroSlice, ZeroVec};
 
 pub mod binary;
 
