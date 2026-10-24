@@ -1,4 +1,5 @@
 //! Checked logical graphs and transactional construction.
+use crate::model::error::{EditError, Location, ReferenceError};
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
@@ -220,9 +221,24 @@ impl<'a, P: Profile> Model<'a, P> {
         &mut self,
         edit: impl FnOnce(&mut ModelBuilder<'a, P>) -> Result<R, Error>,
     ) -> Result<R, Error> {
+        self.try_edit(edit).map_err(|error| match error {
+            EditError::Operation(cause) | EditError::Validation(cause) => cause,
+        })
+    }
+    /// Runs an application operation and publishes its draft only after validation.
+    ///
+    /// Operation failures retain the application's own error type. Validation
+    /// failures retain the semantic cause separately. Either failure leaves the
+    /// original model unchanged, and a successful operation result is returned
+    /// only after publication succeeds.
+    pub fn try_edit<R, E>(
+        &mut self,
+        edit: impl FnOnce(&mut ModelBuilder<'a, P>) -> Result<R, E>,
+    ) -> Result<R, EditError<E>> {
         let mut draft = ModelBuilder::from_model(self.clone());
-        let result = edit(&mut draft)?;
-        *self = draft.finish()?;
+        let result = edit(&mut draft).map_err(EditError::Operation)?;
+        let model = draft.finish().map_err(EditError::Validation)?;
+        *self = model;
         Ok(result)
     }
 
@@ -298,19 +314,45 @@ impl<'a, P: Profile> Model<'a, P> {
         look: Option<LookId>,
     ) -> Result<MaterialId, Error> {
         self.instance(instance)
-            .and_then(|instance| instance.draw(draw))
-            .ok_or_else(|| Error::new("draw", "instance draw is absent"))?;
-        let id = look
-            .or(self.default_look())
-            .ok_or_else(|| Error::new("look", "no material look selected"))?;
-        let look = self
-            .look(id)
-            .ok_or_else(|| Error::new("look", "look is absent or belongs to another graph"))?;
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(instance),
+                    ReferenceError::Unknown {
+                        target: instance.into(),
+                    },
+                )
+            })?
+            .draw(draw)
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(instance).field("draws"),
+                    ReferenceError::Unknown {
+                        target: draw.into(),
+                    },
+                )
+            })?;
+        let id = look.or(self.default_look()).ok_or_else(|| {
+            Error::at(
+                Location::new().field("appearance").field("default"),
+                ReferenceError::RequiredLook,
+            )
+        })?;
+        let look = self.look(id).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            )
+        })?;
         look.bindings
             .iter()
             .find(|binding| binding.instance == instance && binding.draw == draw)
             .map(|binding| binding.material)
-            .ok_or_else(|| Error::new("look.bindings", "draw has no material assignment"))
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(id).field("bindings"),
+                    ReferenceError::MissingDrawAssignment { instance, draw },
+                )
+            })
     }
     /// Hierarchy node definitions in stable identity order.
     pub fn nodes(&self) -> &Table<NodeObject, Node<'a, P>> {

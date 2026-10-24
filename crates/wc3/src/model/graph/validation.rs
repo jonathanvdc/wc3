@@ -1,13 +1,12 @@
 //! Structural and relationship checks before publishing a graph.
+use crate::model::error::{AnimationError, Location, Owner, ReferenceError};
 use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::ValueSlot;
 use crate::model::{
     AppearanceSchema, BindingSchema as _, Error, GeometrySchema, Link, Model, SharedClock,
     SystemPayload, Time, ValidateLinks, VertexInfluences,
 };
-use std::cell::Cell;
 use std::collections::{BTreeSet, HashSet};
-use std::iter::once;
 impl<P: Profile> Model<'_, P> {
     /// Checks that native programs only write slots represented by their consuming definitions.
     pub(crate) fn validate_animation_consumers(&self) -> Result<(), Error> {
@@ -44,10 +43,12 @@ impl<P: Profile> Model<'_, P> {
                 }
             }
         }
-        if self.tracks().any(|track| !slots.contains(&track.target())) {
-            return Err(Error::new(
-                "animation.target",
-                "native output has no consuming field for an animated slot",
+        if let Some(track) = self.tracks().find(|track| !slots.contains(&track.target())) {
+            return Err(Error::at(
+                Location::for_owner(track.target()),
+                ReferenceError::UnconsumedSlot {
+                    slot: track.target(),
+                },
             ));
         }
         Ok(())
@@ -59,221 +60,336 @@ impl<P: Profile> Model<'_, P> {
         self.values.validate_constants()?;
         self.appearance.validate()?;
         for (id, node) in self.nodes.iter() {
-            node.transform.validate(&self.values)?;
+            node.transform
+                .validate(&self.values)
+                .map_err(|error| error.with_context(Location::for_owner(id).field("transform")))?;
             let mut ancestors = BTreeSet::new();
             ancestors.insert(id);
             let mut parent = node.parent;
             while let Some(p) = parent {
                 if !ancestors.insert(p) {
-                    return Err(Error::new("nodes.parent", "hierarchy contains a cycle"));
+                    return Err(Error::at(
+                        Location::for_owner(id).field("parent"),
+                        ReferenceError::Cycle { target: p.into() },
+                    ));
                 }
                 parent = self
                     .nodes
                     .get(p)
-                    .ok_or_else(|| Error::new("nodes.parent", "parent is absent"))?
+                    .ok_or_else(|| {
+                        Error::at(
+                            Location::for_owner(id).field("parent"),
+                            if self.scope.contains(p) {
+                                ReferenceError::Unknown { target: p.into() }
+                            } else {
+                                ReferenceError::Foreign { target: p.into() }
+                            },
+                        )
+                    })?
                     .parent;
             }
         }
-        for mesh in self.meshes.values() {
-            mesh.validate()?;
+        for (id, mesh) in self.meshes.iter() {
+            mesh.validate().map_err(|error| error.with_owner(id))?;
         }
-        for material in self.materials.values() {
-            material.validate()?;
+        for (id, material) in self.materials.iter() {
+            material.validate().map_err(|error| error.with_owner(id))?;
         }
-        for clip in self.clips.values() {
-            Time::seconds(clip.source_start.as_seconds() + clip.duration.as_seconds())?;
+        for (id, clip) in self.clips.iter() {
+            Time::seconds(clip.source_start.as_seconds() + clip.duration.as_seconds())
+                .map_err(|error| error.with_owner(id))?;
             if clip.duration.as_seconds() < 0. {
-                return Err(Error::new("clip.duration", "duration must be nonnegative"));
-            }
-        }
-        for clock in self.clocks.values() {
-            if matches!(clock, SharedClock::Repeating { period } if period.as_seconds() <= 0.) {
-                return Err(Error::new(
-                    "clock.period",
-                    "repeating period must be positive",
+                return Err(Error::at(
+                    Location::for_owner(id).field("duration"),
+                    AnimationError::NegativeDuration {
+                        value: clip.duration.as_seconds(),
+                    },
                 ));
             }
         }
-        for skin in self.skins.values() {
-            skin.binding.validate(skin.joints.len())?;
+        for (id, clock) in self.clocks.iter() {
+            if let SharedClock::Repeating { period } = clock {
+                if period.as_seconds() <= 0. {
+                    return Err(Error::at(
+                        Location::for_owner(id).field("period"),
+                        AnimationError::NonPositivePeriod {
+                            value: period.as_seconds(),
+                        },
+                    ));
+                }
+            }
+        }
+        for (id, skin) in self.skins.iter() {
+            skin.binding
+                .validate(skin.joints.len())
+                .map_err(|error| error.with_owner(id))?;
         }
         self.validate_relationships()?;
         P::validate_model(self)?;
         P::validate_resources(self)
     }
-}
-impl<P: Profile> Model<'_, P> {
-    fn validate_relationships(&self) -> Result<(), Error> {
-        let mut missing = None;
-        let location = Cell::new(("values", 0));
-        let mut visit = |link| {
-            let invalid = match &link {
-                Link::Value(slot) => !self.values.contains(*slot),
-                Link::ImageResource(id) => !self.dependencies.images.contains_key(*id),
-                Link::ModelResource(id) => !self.dependencies.models.contains_key(*id),
-                Link::EffectResource(id) => !self.dependencies.effects.contains_key(*id),
-                Link::PhysicsResource(id) => !self.dependencies.physics.contains_key(*id),
-                Link::BoneOverrideResource(id) => {
-                    !self.dependencies.bone_overrides.contains_key(*id)
+    fn relationship_failure(&self, link: Link) -> Option<ReferenceError> {
+        macro_rules! reference {
+            ($id:expr, $table:expr) => {{
+                let id = $id;
+                if $table.contains_key(id) {
+                    None
+                } else if self.scope.contains(id) {
+                    Some(ReferenceError::Unknown { target: id.into() })
+                } else {
+                    Some(ReferenceError::Foreign { target: id.into() })
                 }
-
-                Link::SystemMember { system, member } => !self
-                    .systems
-                    .get(*system)
-                    .is_some_and(|value| value.contains(*member)),
-                Link::InvalidValue => true,
-                Link::Node(id) => !self.nodes.contains_key(*id),
-                Link::FeatureAlternatives { id, kinds } => self
-                    .features
-                    .get(*id)
-                    .is_none_or(|feature| !kinds.contains(&feature.payload.kind())),
-                Link::TypedFeature { id, kind } => self
-                    .features
-                    .get(*id)
-                    .is_none_or(|feature| feature.payload.kind() != *kind),
-                Link::EventSource(id) => !self.event_sources.contains_key(*id),
-                Link::Event(id) => self.event(*id).is_none(),
-                Link::Feature(id) => !self.features.contains_key(*id),
-                Link::Instance(id) => !self.instances.contains_key(*id),
-                Link::TypedMesh { id, kind } => self
-                    .meshes
-                    .get(*id)
-                    .is_none_or(|mesh| mesh.geometry.kind() != *kind),
-                Link::Mesh(id) => !self.meshes.contains_key(*id),
-                Link::Material(id) => !self.materials.contains_key(*id),
-                Link::SampledImage(_) => false,
-                Link::Clip(id) => !self.clips.contains_key(*id),
-                Link::Skin(id) => !self.skins.contains_key(*id),
-                Link::Clock(id) => !self.clocks.contains_key(*id),
-                Link::Animation(id) => !self.animations.contains_key(*id),
-                Link::System(id) => !self.systems.contains_key(*id),
-            };
-            if invalid && missing.is_none() {
-                missing = Some((location.get(), link));
+            }};
+        }
+        match link {
+            Link::Value(slot) => (!self.values.contains(slot)).then_some(ReferenceError::Unknown {
+                target: slot.into(),
+            }),
+            Link::ImageResource(id) => reference!(id, self.dependencies.images),
+            Link::ModelResource(id) => reference!(id, self.dependencies.models),
+            Link::EffectResource(id) => reference!(id, self.dependencies.effects),
+            Link::PhysicsResource(id) => reference!(id, self.dependencies.physics),
+            Link::BoneOverrideResource(id) => reference!(id, self.dependencies.bone_overrides),
+            Link::SystemMember { system, member } => match self.systems.get(system) {
+                None => reference!(system, self.systems),
+                Some(value) => (!value.contains(member)).then_some(ReferenceError::Unknown {
+                    target: Owner::SystemMember { system, member },
+                }),
+            },
+            Link::InvalidValue => Some(ReferenceError::InvalidValue),
+            Link::Node(id) => reference!(id, self.nodes),
+            Link::FeatureAlternatives { id, kinds } => match self.features.get(id) {
+                None => reference!(id, self.features),
+                Some(feature) if !kinds.contains(&feature.payload.kind()) => {
+                    Some(ReferenceError::FeatureKindMismatch {
+                        target: id,
+                        expected: kinds.to_vec(),
+                        actual: feature.payload.kind(),
+                    })
+                }
+                _ => None,
+            },
+            Link::TypedFeature { id, kind } => match self.features.get(id) {
+                None => reference!(id, self.features),
+                Some(feature) if feature.payload.kind() != kind => {
+                    Some(ReferenceError::FeatureKindMismatch {
+                        target: id,
+                        expected: vec![kind],
+                        actual: feature.payload.kind(),
+                    })
+                }
+                _ => None,
+            },
+            Link::EventSource(id) => reference!(id, self.event_sources),
+            Link::Event(id) => {
+                if self.event(id).is_some() {
+                    None
+                } else if self.scope.contains(id) {
+                    Some(ReferenceError::Unknown { target: id.into() })
+                } else {
+                    Some(ReferenceError::Foreign { target: id.into() })
+                }
             }
-        };
-        self.values.visit_values(&mut visit);
-        for (index, source) in self.event_sources.values().enumerate() {
-            location.set(("event_sources", index));
-            source.visit_links(&mut visit);
+            Link::Feature(id) => reference!(id, self.features),
+            Link::Instance(id) => reference!(id, self.instances),
+            Link::TypedMesh { id, kind } => match self.meshes.get(id) {
+                None => reference!(id, self.meshes),
+                Some(mesh) if mesh.geometry.kind() != kind => {
+                    Some(ReferenceError::GeometryKindMismatch {
+                        target: id,
+                        expected: kind,
+                        actual: mesh.geometry.kind(),
+                    })
+                }
+                _ => None,
+            },
+            Link::Mesh(id) => reference!(id, self.meshes),
+            Link::Material(id) => reference!(id, self.materials),
+            Link::SampledImage(_) => None,
+            Link::Clip(id) => reference!(id, self.clips),
+            Link::Skin(id) => reference!(id, self.skins),
+            Link::Clock(id) => reference!(id, self.clocks),
+            Link::Animation(id) => reference!(id, self.animations),
+            Link::System(id) => reference!(id, self.systems),
         }
-        for (index, value) in self.dependencies.images.values().enumerate() {
-            location.set(("image_resources", index));
-            value.visit_links(&mut visit);
-        }
-        for (index, value) in self.dependencies.models.values().enumerate() {
-            location.set(("model_resources", index));
-            value.visit_links(&mut visit);
-        }
-        for (index, value) in self.dependencies.effects.values().enumerate() {
-            location.set(("effect_resources", index));
-            value.visit_links(&mut visit);
-        }
-        for (index, value) in self.dependencies.physics.values().enumerate() {
-            location.set(("physics_resources", index));
-            value.visit_links(&mut visit);
-        }
-        for (index, value) in self.dependencies.bone_overrides.values().enumerate() {
-            location.set(("bone_override_resources", index));
-            value.visit_links(&mut visit);
-        }
-        for (index, node) in self.nodes.values().enumerate() {
-            location.set(("nodes", index));
-            node.parent.visit_links(&mut visit);
-            node.transform.translation.visit_links(&mut visit);
-            node.transform.rotation.visit_links(&mut visit);
-            node.transform.scale.visit_links(&mut visit);
-            node.visible.visit_links(&mut visit);
-            node.properties.visit_links(&mut visit);
-        }
-        for (index, clip) in self.clips.values().enumerate() {
-            location.set(("clips", index));
-            clip.properties.visit_links(&mut visit);
-        }
-        location.set(("global_animations", 0));
-        self.global_animations.visit_links(&mut visit);
-        for (index, animation) in self.animations.values().enumerate() {
-            location.set(("animations", index));
-            for track in &animation.tracks {
-                track.visit_links(&mut visit);
+    }
+    fn check_relationships<T: ValidateLinks + ?Sized>(
+        &self,
+        owner: Owner,
+        field: &'static str,
+        value: &T,
+    ) -> Result<(), Error> {
+        self.check_relationships_at(|| Location::for_owner(owner).field(field), value)
+    }
+    fn check_relationships_at<T: ValidateLinks + ?Sized>(
+        &self,
+        location: impl FnOnce() -> Location,
+        value: &T,
+    ) -> Result<(), Error> {
+        let mut failure = None;
+        value.visit_links(&mut |link| {
+            if failure.is_none() {
+                failure = self.relationship_failure(link);
             }
-            for event in animation.events.values() {
-                event.visit_links(&mut visit);
+        });
+        if let Some(cause) = failure {
+            Err(Error::at(location(), cause))
+        } else {
+            Ok(())
+        }
+    }
+    fn validate_relationships(&self) -> Result<(), Error> {
+        let mut failure = None;
+        self.values.visit_located_values(&mut |slot, link| {
+            if failure.is_none() {
+                if let Some(cause) = self.relationship_failure(link) {
+                    failure = Some((slot, cause));
+                }
+            }
+        });
+        if let Some((slot, cause)) = failure {
+            return Err(Error::at(Location::for_owner(slot).field("value"), cause));
+        }
+        for (id, source) in self.event_sources.iter() {
+            self.check_relationships(id.into(), "source", source)?;
+        }
+        for (id, value) in self.dependencies.images.iter() {
+            self.check_relationships(id.into(), "declaration", value)?;
+        }
+        for (id, value) in self.dependencies.models.iter() {
+            self.check_relationships(id.into(), "declaration", value)?;
+        }
+        for (id, value) in self.dependencies.effects.iter() {
+            self.check_relationships(id.into(), "declaration", value)?;
+        }
+        for (id, value) in self.dependencies.physics.iter() {
+            self.check_relationships(id.into(), "declaration", value)?;
+        }
+        for (id, value) in self.dependencies.bone_overrides.iter() {
+            self.check_relationships(id.into(), "declaration", value)?;
+        }
+        for (id, node) in self.nodes.iter() {
+            self.check_relationships(id.into(), "parent", &node.parent)?;
+            self.check_relationships_at(
+                || {
+                    Location::for_owner(id)
+                        .field("transform")
+                        .field("translation")
+                },
+                &node.transform.translation,
+            )?;
+            self.check_relationships_at(
+                || Location::for_owner(id).field("transform").field("rotation"),
+                &node.transform.rotation,
+            )?;
+            self.check_relationships_at(
+                || Location::for_owner(id).field("transform").field("scale"),
+                &node.transform.scale,
+            )?;
+            self.check_relationships(id.into(), "visible", &node.visible)?;
+            self.check_relationships(id.into(), "properties", &node.properties)?;
+        }
+        for (id, clip) in self.clips.iter() {
+            self.check_relationships(id.into(), "properties", &clip.properties)?;
+        }
+        for (index, &id) in self.global_animations.iter().enumerate() {
+            if let Some(cause) = self.relationship_failure(Link::Animation(id)) {
+                return Err(Error::at(
+                    Location::new().field("global_animations").index(index),
+                    cause,
+                ));
             }
         }
-        for (index, skin) in self.skins.values().enumerate() {
-            location.set(("skins", index));
-            skin.joints.visit_links(&mut visit);
-            skin.binding.visit_links(&mut visit);
+        for (id, animation) in self.animations.iter() {
+            self.check_relationships(id.into(), "tracks", &animation.tracks)?;
+            for (event_id, event) in &animation.events {
+                self.check_relationships((*event_id).into(), "source", event)?;
+            }
         }
-        for (index, mesh) in self.meshes.values().enumerate() {
-            location.set(("meshes", index));
-            mesh.properties.visit_links(&mut visit);
-            mesh.geometry.visit_links(&mut visit);
+        for (id, skin) in self.skins.iter() {
+            self.check_relationships(id.into(), "joints", &skin.joints)?;
+            self.check_relationships(id.into(), "binding", &skin.binding)?;
         }
-        for (index, instance) in self.instances.values().enumerate() {
-            location.set(("instances", index));
-            instance.properties.visit_links(&mut visit);
-            instance.node.visit_links(&mut visit);
-            instance.mesh.visit_links(&mut visit);
-            instance.skin.visit_links(&mut visit);
+        for (id, mesh) in self.meshes.iter() {
+            self.check_relationships(id.into(), "properties", &mesh.properties)?;
+            self.check_relationships(id.into(), "geometry", &mesh.geometry)?;
+        }
+        for (id, instance) in self.instances.iter() {
+            self.check_relationships(id.into(), "properties", &instance.properties)?;
+            self.check_relationships(id.into(), "node", &instance.node)?;
+            self.check_relationships(id.into(), "mesh", &instance.mesh)?;
+            self.check_relationships(id.into(), "skin", &instance.skin)?;
             for draw in &instance.draws {
-                draw.properties.visit_links(&mut visit);
+                self.check_relationships(draw.id().into(), "properties", &draw.properties)?;
             }
         }
-        for (index, material) in self.materials.values().enumerate() {
-            location.set(("materials", index));
-            material.surface.visit_links(&mut visit);
+        for (id, material) in self.materials.iter() {
+            self.check_relationships(id.into(), "surface", &material.surface)?;
         }
-        for (index, clip) in self.clips.values().enumerate() {
-            location.set(("clips", index));
-            clip.animations.visit_links(&mut visit);
+        for (id, clip) in self.clips.iter() {
+            self.check_relationships(id.into(), "animations", &clip.animations)?;
         }
-        for (index, feature) in self.features.values().enumerate() {
-            location.set(("features", index));
-            feature.node.visit_links(&mut visit);
-            feature.payload.visit_links(&mut visit);
+        for (id, feature) in self.features.iter() {
+            self.check_relationships(id.into(), "node", &feature.node)?;
+            self.check_relationships(id.into(), "payload", &feature.payload)?;
         }
-        location.set(("appearance", 0));
-        self.appearance.visit_links(&mut visit);
-        location.set(("metadata", 0));
-        self.metadata.visit_links(&mut visit);
-        for (index, system) in self.systems.values().enumerate() {
-            location.set(("systems", index));
-            system.visit_links(&mut visit);
+        let mut failure = None;
+        self.appearance.visit_links(&mut |link| {
+            if failure.is_none() {
+                failure = self.relationship_failure(link);
+            }
+        });
+        if let Some(cause) = failure {
+            return Err(Error::at(Location::new().field("appearance"), cause));
         }
-        if let Some(((owner, index), link)) = missing {
-            return Err(Error::new(
-                format!("relationships.{owner}[{index}]"),
-                format!("invalid {link:?}: reference is absent, belongs to another graph, has the wrong payload type, or contains an invalid rest value"),
-            ));
+        let mut failure = None;
+        self.metadata.visit_links(&mut |link| {
+            if failure.is_none() {
+                failure = self.relationship_failure(link);
+            }
+        });
+        if let Some(cause) = failure {
+            return Err(Error::at(Location::new().field("metadata"), cause));
         }
-
-        for ids in self
+        for (id, system) in self.systems.iter() {
+            self.check_relationships(id.into(), "system", system)?;
+        }
+        for (owner, ids) in self
             .clips
-            .values()
-            .map(|clip| &clip.animations)
-            .chain(once(&self.global_animations))
+            .iter()
+            .map(|(id, clip)| (Some(id), &clip.animations))
+            .chain([(None, &self.global_animations)])
         {
             let mut seen = HashSet::new();
-            if ids.iter().any(|id| !seen.insert(id)) {
-                return Err(Error::new(
-                    "animation.selection",
-                    "animation selected more than once",
-                ));
+            for (index, &id) in ids.iter().enumerate() {
+                if !seen.insert(id) {
+                    let location = if let Some(owner) = owner {
+                        Location::for_owner(owner).field("animations")
+                    } else {
+                        Location::new().field("global_animations")
+                    };
+                    return Err(Error::at(
+                        location.index(index),
+                        ReferenceError::Duplicate { target: id.into() },
+                    ));
+                }
             }
         }
         let mut event_ids = HashSet::new();
-        for animation in self.animations.values() {
-            if animation
-                .events
-                .keys()
-                .any(|id| !self.scope.contains(*id) || !event_ids.insert(*id))
-            {
-                return Err(Error::new(
-                    "animation.events",
-                    "event identity belongs to another graph or multiple animations",
-                ));
+        for (owner, animation) in self.animations.iter() {
+            for &id in animation.events.keys() {
+                if !self.scope.contains(id) {
+                    return Err(Error::at(
+                        Location::for_owner(owner).field("events"),
+                        ReferenceError::Foreign { target: id.into() },
+                    ));
+                }
+                if !event_ids.insert(id) {
+                    return Err(Error::at(
+                        Location::for_owner(owner).field("events"),
+                        ReferenceError::Duplicate { target: id.into() },
+                    ));
+                }
             }
         }
         let mut draw_ids = BTreeSet::new();
@@ -282,50 +398,81 @@ impl<P: Profile> Model<'_, P> {
             .iter()
             .flat_map(|(id, instance)| instance.draws.iter().map(move |draw| (id, draw.id())))
             .collect();
-        for instance in self.instances.values() {
+        for (id, instance) in self.instances.iter() {
             for draw in &instance.draws {
                 if !draw_ids.insert(draw.id()) {
-                    return Err(Error::new(
-                        "instance.draw",
-                        "draw identity is used more than once",
+                    return Err(Error::at(
+                        Location::for_owner(id).field("draws"),
+                        ReferenceError::Duplicate {
+                            target: draw.id().into(),
+                        },
                     ));
                 }
             }
         }
         if !expected.is_empty() && self.looks().len() == 0 {
-            return Err(Error::new("look", "draws require a complete material look"));
+            return Err(Error::at(
+                Location::new().field("appearance"),
+                ReferenceError::RequiredLook,
+            ));
         }
-        for (_, look) in self.looks() {
+        for (id, look) in self.looks() {
             let mut assignments = BTreeSet::new();
-            for binding in &look.bindings {
+            for (index, binding) in look.bindings.iter().enumerate() {
                 if !assignments.insert((binding.instance, binding.draw)) {
-                    return Err(Error::new("look.bindings", "draw has multiple assignments"));
+                    return Err(Error::at(
+                        Location::for_owner(id).field("bindings").index(index),
+                        ReferenceError::Duplicate {
+                            target: binding.draw.into(),
+                        },
+                    ));
                 }
-                if !self.materials.contains_key(binding.material)
-                    || self.instances.get(binding.instance).is_none_or(|instance| {
-                        !instance.draws.iter().any(|draw| draw.id() == binding.draw)
-                    })
-                {
-                    return Err(Error::new(
-                        "look.bindings",
-                        "material or instance draw is absent",
+                if !self.materials.contains_key(binding.material) {
+                    return Err(Error::at(
+                        Location::for_owner(id)
+                            .field("bindings")
+                            .index(index)
+                            .field("material"),
+                        ReferenceError::Unknown {
+                            target: binding.material.into(),
+                        },
+                    ));
+                }
+                if self.instances.get(binding.instance).is_none_or(|instance| {
+                    !instance.draws.iter().any(|draw| draw.id() == binding.draw)
+                }) {
+                    return Err(Error::at(
+                        Location::for_owner(id)
+                            .field("bindings")
+                            .index(index)
+                            .field("draw"),
+                        ReferenceError::UnknownDraw {
+                            instance: binding.instance,
+                            draw: binding.draw,
+                        },
                     ));
                 }
             }
             if assignments != expected {
-                return Err(Error::new(
-                    "look.bindings",
-                    "look must assign every instance draw",
+                return Err(Error::at(
+                    Location::for_owner(id).field("bindings"),
+                    ReferenceError::UnassignedDraws {
+                        draws: expected.difference(&assignments).copied().collect(),
+                    },
                 ));
             }
         }
-        for instance in self.instances.values() {
+        for (id, instance) in self.instances.iter() {
             let mesh = &self.meshes[&instance.mesh];
             for draw in &instance.draws {
                 if mesh.subset(draw.subset).is_none() {
-                    return Err(Error::new(
-                        "instance.draw.subset",
-                        "draw subset belongs to another mesh or is absent",
+                    return Err(Error::at(
+                        Location::for_owner(draw.id())
+                            .field("subset")
+                            .prefixed_by(Location::for_owner(id).field("draws")),
+                        ReferenceError::Unknown {
+                            target: draw.subset.into(),
+                        },
                     ));
                 }
             }
@@ -341,16 +488,27 @@ impl<P: Profile> Model<'_, P> {
                     .or_else(|| mesh.skin())
                     .and_then(|id| self.skins.get(id))
                     .ok_or_else(|| {
-                        Error::new("instance.skin", "skinned geometry requires a skin")
+                        Error::at(
+                            Location::for_owner(id).field("skin"),
+                            ReferenceError::RequiredSkin,
+                        )
                     })?;
-                if mesh
-                    .influences()
-                    .iter()
-                    .filter_map(VertexInfluences::into_joint_weights)
-                    .flatten()
-                    .any(|v| v.weight > 0. && v.joint as usize >= skin.joints.len())
-                {
-                    return Err(Error::new("instance.skin", "influence joint is absent"));
+                for (vertex, row) in mesh.influences().iter().enumerate() {
+                    if let Some(joints) = row.into_joint_weights() {
+                        for influence in joints {
+                            if influence.weight > 0.
+                                && influence.joint as usize >= skin.joints.len()
+                            {
+                                return Err(Error::at(
+                                    Location::for_owner(id).field("influences").index(vertex),
+                                    ReferenceError::JointOutOfBounds {
+                                        joint: influence.joint as usize,
+                                        joints: skin.joints.len(),
+                                    },
+                                ));
+                            }
+                        }
+                    }
                 }
             }
         }

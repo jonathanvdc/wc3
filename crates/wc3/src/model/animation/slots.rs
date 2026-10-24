@@ -1,4 +1,5 @@
 //! Typed, model-scoped storage shared by authored and evaluated animation values.
+use crate::model::error::{ConstantValue, Location, Owner, ReferenceError};
 use crate::model::ids::Scope;
 use crate::model::ValueSample;
 use crate::model::{CurveValue, Error, Id, Link, Quat, Table, Texture, ValidateLinks};
@@ -40,6 +41,11 @@ pub struct ValueObject<T>(PhantomData<fn() -> T>);
 /// Copying this reference shares the slot. Allocate another slot to create an
 /// independently animated value. Constants live in the model's [`PropertyValues`] table.
 pub struct Property<T: PropertyValue>(Id<ValueObject<T>>);
+impl<T: PropertyValue> From<Id<ValueObject<T>>> for Owner {
+    fn from(id: Id<ValueObject<T>>) -> Self {
+        Self::Value(Property(id).slot())
+    }
+}
 impl<T: PropertyValue> Copy for Property<T> {}
 impl<T: PropertyValue> Clone for Property<T> {
     fn clone(&self) -> Self {
@@ -116,18 +122,23 @@ macro_rules! tables {
             pub(crate) fn validate_constants(&self) -> Result<(), Error> {
                 $(for (id, value) in &self.$field {
                     if !value.is_valid() {
-                        return Err(Error::new(
-                            format!("values.{}[{id:?}]", stringify!($variant)),
-                            format!("invalid rest value {value:?}"),
-                        ));
+                        return Err(Error::at(Location::for_owner(ValueSlot::$variant(Property(id))),
+                            ReferenceError::InvalidConstant { value: ConstantValue::$variant(*value) }));
                     }
                 })*
                 Ok(())
             }
             /// Validates constants and visits any resources they reference.
             pub(crate) fn visit_values(&self, visitor: &mut dyn FnMut(Link)) {
-                for source in self.boolean_reads.values() { source.visit_links(visitor); }
-                $(for value in self.$field.values() { if !value.is_valid() { visitor(Link::InvalidValue); } value.visit_value_links(visitor); })*
+                self.visit_located_values(&mut |_, link| visitor(link));
+            }
+            pub(crate) fn visit_located_values(&self, visitor: &mut dyn FnMut(ValueSlot, Link)) {
+                for (target, source) in &self.boolean_reads { source.visit_links(&mut |link| visitor(target.slot(),link)); }
+                $(for (id, value) in self.$field.iter() {
+                    let slot=ValueSlot::$variant(Property(id));
+                    if !value.is_valid() { visitor(slot,Link::InvalidValue); }
+                    value.visit_value_links(&mut |link|visitor(slot,link));
+                })*
             }
             pub(crate) fn evaluate_into(&self, sample: &impl ValueSample, output: &mut Self) {
                 output.clone_from(self);
@@ -136,9 +147,9 @@ macro_rules! tables {
             /// Copies disjoint source slots while retaining their identities.
             pub(crate) fn extend(&mut self, source: &Self) -> Result<(), Error> {
                 $(for (id, value) in &source.$field {
-                    if self.$field.get(id).is_some_and(|existing| existing != value) { return Err(Error::new("values", "slot identity has conflicting constants")); }
+                    if self.$field.get(id).is_some_and(|existing| existing != value) { return Err(Error::at(Location::for_owner(ValueSlot::$variant(Property(id))), ReferenceError::ConflictingConstants {existing:ConstantValue::$variant(*self.$field.get(id).expect("checked conflicting value")),incoming:ConstantValue::$variant(*value)})); }
                 })*
-                for (target, input) in &source.boolean_reads { if self.boolean_reads.get(target).is_some_and(|existing| existing != input) { return Err(Error::new("values", "slot has conflicting converted sources")); } }
+                for (target, input) in &source.boolean_reads { if self.boolean_reads.get(target).is_some_and(|existing| existing != input) { return Err(Error::at(Location::for_owner(target.slot()), ReferenceError::ConflictingSources {existing:self.boolean_reads[target].slot(),incoming:input.slot()})); } }
                 $(for (id, value) in &source.$field { self.$field.insert(id, *value); })*
                 self.boolean_reads.extend(source.boolean_reads.iter().map(|(a,b)| (*a,*b)));
                 Ok(())
@@ -165,9 +176,14 @@ tables! {
 impl PropertyValues {
     /// Allocates a scalar output explicitly reading a boolean slot as zero or one.
     pub fn scalar_from_boolean(&mut self, source: Property<bool>) -> Result<Property<f32>, Error> {
-        let value = *self
-            .get(source)
-            .ok_or_else(|| Error::new("values", "boolean source is absent"))?;
+        let value = *self.get(source).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(source.slot()),
+                ReferenceError::Unknown {
+                    target: source.slot().into(),
+                },
+            )
+        })?;
         let slot = self.add(if value { 1. } else { 0. });
         self.boolean_reads.insert(slot, source);
         Ok(slot)
@@ -193,7 +209,7 @@ impl PropertyValues {
     }
     /// Changes an existing slot without changing its identity.
     pub fn set<T: PropertyValue>(&mut self, slot: Property<T>, value: T) -> Result<(), Error> {
-        T::table_mut(self).replace(slot.0, value, "values")?;
+        T::table_mut(self).replace(slot.0, value)?;
         if let ValueSlot::Boolean(source) = slot.slot() {
             let scalar = if self[source] { 1. } else { 0. };
             let targets: Vec<_> = self
@@ -202,7 +218,7 @@ impl PropertyValues {
                 .filter_map(|(target, input)| (*input == source).then_some(*target))
                 .collect();
             for target in targets {
-                self.scalars.replace(target.0, scalar, "values")?;
+                self.scalars.replace(target.0, scalar)?;
             }
         }
         Ok(())

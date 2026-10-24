@@ -188,11 +188,38 @@ assert_eq!(model.node(root).unwrap().name, "Renamed");
 # Ok::<(), Error>(())
 ```
 
+
 MDLX and WMO use one complete look, edited with `set_look`. M2 supports alternative
 looks, each assigning exactly one material to every draw. `material_for_draw`
 uses the explicitly selected look or the default; there is no fallback material
 on geometry. `add_instance_with_materials` adds a placement and extends the default
 look with its draw assignments.
+
+
+## Inspect failures
+
+Model constructors, publication, and evaluation return `model::Error`. Inspect
+`kind()` for the semantic domain and its typed cause, such as an unresolved
+reference, a geometry cardinality mismatch, or a profile rule. Causes retain
+relevant IDs, counts, and rejected values instead of requiring message parsing.
+`location().segments()` retains owners, actual property slots, local field names,
+indices, and attribute identities. Field names are individual identifiers;
+nesting and indices are separate components. Use formatted text for display and
+the individual segments for programmatic inspection.
+
+`edit` is convenient when the operation itself returns semantic errors. Use
+`try_edit` when an application operation has its own error type: its result
+separates `error::EditError::Operation(E)` from
+`error::EditError::Validation(model::Error)`. Either failure leaves the original
+model unchanged. A successful operation value is returned only after the draft
+passes publication checks.
+
+Custom profile validators can return `Error::extension(location, cause)` to
+retain their own typed errors through `std::error::Error::source` and downcasting.
+Cloned semantic errors share that original cause. Relationship traversal can
+still report `ReferenceError::InvalidValue` without a specific constraint or
+numeric payload; that variant records the information available from
+`ValidateLinks` rather than inventing a more precise reason.
 
 
 ## Continue with a task

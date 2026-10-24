@@ -1,4 +1,5 @@
 //! Transactional graph construction and editing.
+use crate::model::error::{Location, ReferenceError};
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::EventSourceId;
@@ -41,7 +42,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: EventSourceId,
         value: P::EventSource<'a>,
     ) -> Result<(), Error> {
-        self.model.event_sources.replace(id, value, "event.source")
+        self.model.event_sources.replace(id, value)
     }
     /// Removes a source; publication rejects any remaining occurrences referencing it.
     pub fn remove_event_source(&mut self, id: EventSourceId) -> Option<P::EventSource<'a>> {
@@ -77,10 +78,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: ImageResourceId,
         value: P::ImageResource<'a>,
     ) -> Result<(), Error> {
-        self.model
-            .dependencies
-            .images
-            .replace(id, value, "resources")
+        self.model.dependencies.images.replace(id, value)
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_image_resource(&mut self, id: ImageResourceId) -> Option<P::ImageResource<'a>> {
@@ -100,10 +98,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: ModelResourceId,
         value: P::ModelResource<'a>,
     ) -> Result<(), Error> {
-        self.model
-            .dependencies
-            .models
-            .replace(id, value, "resources")
+        self.model.dependencies.models.replace(id, value)
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_model_resource(&mut self, id: ModelResourceId) -> Option<P::ModelResource<'a>> {
@@ -126,10 +121,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: EffectResourceId,
         value: P::EffectResource<'a>,
     ) -> Result<(), Error> {
-        self.model
-            .dependencies
-            .effects
-            .replace(id, value, "resources")
+        self.model.dependencies.effects.replace(id, value)
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_effect_resource(
@@ -155,10 +147,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: PhysicsResourceId,
         value: P::PhysicsResource<'a>,
     ) -> Result<(), Error> {
-        self.model
-            .dependencies
-            .physics
-            .replace(id, value, "resources")
+        self.model.dependencies.physics.replace(id, value)
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_physics_resource(
@@ -190,10 +179,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: BoneOverrideResourceId,
         value: P::BoneOverrideResource<'a>,
     ) -> Result<(), Error> {
-        self.model
-            .dependencies
-            .bone_overrides
-            .replace(id, value, "resources")
+        self.model.dependencies.bone_overrides.replace(id, value)
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_bone_override_resource(
@@ -268,7 +254,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Replaces an animation while preserving all selections of its identity.
     pub fn set_animation(&mut self, id: AnimationId, value: Animation<'a>) -> Result<(), Error> {
-        self.model.animations.replace(id, value, "animation")
+        self.model.animations.replace(id, value)
     }
     /// Removes an animation; publication rejects remaining selections.
     pub fn remove_animation(&mut self, id: AnimationId) -> Option<Animation<'a>> {
@@ -277,7 +263,10 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     /// Selects a reusable animation independently of clip playback.
     pub fn add_global_animation(&mut self, id: AnimationId) -> Result<(), Error> {
         if !self.model.animations.contains_key(id) {
-            return Err(Error::new("animation", "unknown identity"));
+            return Err(Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            ));
         }
         self.model.global_animations.push(id);
         Ok(())
@@ -295,7 +284,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model
             .animations
             .get_mut(&id)
-            .ok_or_else(|| Error::new("animation", "unknown identity"))?
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(id),
+                    ReferenceError::Unknown { target: id.into() },
+                )
+            })?
             .tracks
             .push(track);
         Ok(())
@@ -306,11 +300,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: AnimationId,
         event: EventOccurrence,
     ) -> Result<EventId, Error> {
-        let animation = self
-            .model
-            .animations
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("animation", "unknown identity"))?;
+        let animation = self.model.animations.get_mut(&id).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            )
+        })?;
         let event_id = self.model.scope.allocate();
         animation.events.insert(event_id, event);
         Ok(event_id)
@@ -322,7 +317,10 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         value: impl Into<P::ClipProperties<'a>>,
     ) -> Result<(), Error> {
         if !self.model.clips.contains_key(id) {
-            return Err(Error::new("clip.properties", "unknown owner"));
+            return Err(Error::at(
+                Location::for_owner(id).field("properties"),
+                ReferenceError::Unknown { target: id.into() },
+            ));
         }
         self.model
             .clips
@@ -336,7 +334,14 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         if !self.model.scope.contains(id)
             || (!self.pending_nodes.remove(&id) && !self.model.nodes.contains_key(id))
         {
-            return Err(Error::new("node", "unknown identity"));
+            return Err(Error::at(
+                Location::for_owner(id),
+                if self.model.scope.contains(id) {
+                    ReferenceError::Unknown { target: id.into() }
+                } else {
+                    ReferenceError::Foreign { target: id.into() }
+                },
+            ));
         }
         self.model.nodes.insert(id, node);
         Ok(())
@@ -346,7 +351,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model
             .nodes
             .get_mut(&id)
-            .ok_or_else(|| Error::new("node", "unknown identity"))?
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(id),
+                    ReferenceError::Unknown { target: id.into() },
+                )
+            })?
             .parent = parent;
         Ok(())
     }
@@ -359,7 +369,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model
             .materials
             .get_mut(&id)
-            .ok_or_else(|| Error::new("material", "unknown identity"))?
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(id),
+                    ReferenceError::Unknown { target: id.into() },
+                )
+            })?
             .surface = surface;
         Ok(())
     }
@@ -414,7 +429,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model
             .features
             .get_mut(&id)
-            .ok_or_else(|| Error::new("feature", "unknown feature identity"))?
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(id),
+                    ReferenceError::Unknown { target: id.into() },
+                )
+            })?
             .payload = payload;
         Ok(())
     }
@@ -432,11 +452,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Replaces an independently authored scene system belonging to this graph.
     pub fn set_system(&mut self, id: SystemId, value: P::System<'a>) -> Result<(), Error> {
-        let target = self
-            .model
-            .systems
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("system", "unknown identity"))?;
+        let target = self.model.systems.get_mut(&id).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            )
+        })?;
         *target = value;
         Ok(())
     }
@@ -465,11 +486,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     where
         P::Appearance<'a>: DrawAppearanceSchema<'a>,
     {
-        *self
-            .model
-            .appearance
-            .look_mut(id)
-            .ok_or_else(|| Error::new("look", "unknown identity"))? = look;
+        *self.model.appearance.look_mut(id).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            )
+        })? = look;
         Ok(())
     }
     /// Inserts a placement and appends its materials to the default complete look.
@@ -484,9 +506,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         P::Appearance<'a>: DrawAppearanceSchema<'a>,
     {
         if instance.draws.len() != materials.len() {
-            return Err(Error::new(
-                "instance.materials",
-                "one material is required per draw",
+            return Err(Error::at(
+                Location::new().field("instance").field("materials"),
+                ReferenceError::DrawMaterialCount {
+                    draws: instance.draws.len(),
+                    materials: materials.len(),
+                },
             ));
         }
         let id = self.model.scope.allocate();
@@ -504,7 +529,14 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
                 self.model
                     .appearance
                     .look_mut(selected)
-                    .ok_or_else(|| Error::new("appearance.default", "default look is absent"))?
+                    .ok_or_else(|| {
+                        Error::at(
+                            Location::new().field("appearance").field("default"),
+                            ReferenceError::Unknown {
+                                target: selected.into(),
+                            },
+                        )
+                    })?
                     .bindings
                     .extend(bindings);
             } else {
@@ -533,12 +565,19 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             .model
             .meshes
             .get_mut(&mesh)
-            .ok_or_else(|| Error::new("mesh.subsets", "mesh is absent"))?
+            .ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(mesh).field("subsets"),
+                    ReferenceError::Unknown {
+                        target: mesh.into(),
+                    },
+                )
+            })?
             .add_primary_subset(first, count))
     }
     /// Replaces a draft mesh; publication validates its data and relationships.
     pub fn set_mesh(&mut self, id: MeshId, value: Mesh<'a, P>) -> Result<(), Error> {
-        self.model.meshes.replace(id, value, "mesh")
+        self.model.meshes.replace(id, value)
     }
     /// Replaces a draft material; publication validates its data and relationships.
     pub fn reserve_material(&mut self) -> MaterialId {
@@ -552,15 +591,15 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             self.model.materials.insert(id, value);
             return Ok(());
         }
-        self.model.materials.replace(id, value, "material")
+        self.model.materials.replace(id, value)
     }
     /// Replaces a draft clip; publication validates its data and relationships.
     pub fn set_clip(&mut self, id: ClipId, value: Clip<'a, P>) -> Result<(), Error> {
-        self.model.clips.replace(id, value, "clip")
+        self.model.clips.replace(id, value)
     }
     /// Replaces a draft skin; publication validates its data and relationships.
     pub fn set_skin(&mut self, id: SkinId, value: Skin<'a, P>) -> Result<(), Error> {
-        self.model.skins.replace(id, value, "skin")
+        self.model.skins.replace(id, value)
     }
     /// Replaces a draft instance; publication validates its data and relationships.
     pub fn set_instance(
@@ -568,11 +607,11 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: InstanceId,
         value: MeshInstance<'a, P>,
     ) -> Result<(), Error> {
-        self.model.instances.replace(id, value, "instance")
+        self.model.instances.replace(id, value)
     }
     /// Replaces a draft clock; publication validates its data and relationships.
     pub fn set_clock(&mut self, id: ClockId, value: SharedClock) -> Result<(), Error> {
-        self.model.clocks.replace(id, value, "clock")
+        self.model.clocks.replace(id, value)
     }
     /// Adds a hierarchy node to the draft; publication validates its values and relationships.
     pub fn add_node(&mut self, value: Node<'a, P>) -> Result<NodeId, Error> {
@@ -612,11 +651,12 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(self.model.clocks.add(&self.model.scope, value))
     }
     fn clip_animation(&mut self, id: ClipId) -> Result<AnimationId, Error> {
-        let clip = self
-            .model
-            .clips
-            .get(id)
-            .ok_or_else(|| Error::new("clip", "unknown identity"))?;
+        let clip = self.model.clips.get(id).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            )
+        })?;
         if let Some(&animation) = clip.animations.first() {
             return Ok(animation);
         }
@@ -642,20 +682,23 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Publishes an immutable graph after validating all values, identities, and relationships.
     pub fn finish(self) -> Result<Model<'a, P>, Error> {
-        if !self.pending_materials.is_empty() {
-            return Err(Error::new(
-                "materials",
-                "reserved materials have no definition",
+        if let Some(&id) = self.pending_materials.first() {
+            return Err(Error::at(
+                Location::for_owner(id),
+                ReferenceError::UnresolvedDefinition { target: id.into() },
             ));
         }
-        if !self.pending_features.is_empty() {
-            return Err(Error::new(
-                "features",
-                "reserved features have no definition",
+        if let Some((&id, _)) = self.pending_features.first_key_value() {
+            return Err(Error::at(
+                Location::for_owner(id),
+                ReferenceError::UnresolvedDefinition { target: id.into() },
             ));
         }
-        if !self.pending_nodes.is_empty() {
-            return Err(Error::new("nodes", "reserved nodes have no definition"));
+        if let Some(&id) = self.pending_nodes.first() {
+            return Err(Error::at(
+                Location::for_owner(id),
+                ReferenceError::UnresolvedDefinition { target: id.into() },
+            ));
         }
         self.model.validate()?;
         Ok(self.model)
