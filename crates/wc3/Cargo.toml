@@ -104,3 +104,7 @@ required-features = ["popcorn-jit"]
 [[example]]
 name = "particle_delta_bench"
 required-features = ["popcorn-jit"]
+
+[[bench]]
+name = "packed_interval"
+harness = false
