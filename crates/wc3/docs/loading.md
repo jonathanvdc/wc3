@@ -56,6 +56,24 @@ those identities rather than inventing names for numeric IDs. The request kind
 lets a provider distinguish skins, animations, skeletons, physics, child models,
 and WMO groups even when storage uses a common namespace.
 
+The root and companions use the same source-handle type. Passing `Vec<u8>` moves
+each allocation into the session. Passing `&[u8]` borrows existing storage for
+the session, and passing `Arc<Vec<u8>>` shares existing allocations with a cache.
+The reader borrows bytes from those handles without copying their payloads. It
+accepts handles that implement `Deref` with a target implementing `AsRef<[u8]>`,
+including slices, vectors, boxed slices, `Cow<[u8]>`, and shared slices or vectors.
+Each handle must expose unchanged bytes until the session releases it.
+Use `Cow<[u8]>` when one session needs both borrowed and owned sources.
+The default type for an explicitly named `Reader` is `Reader<Vec<u8>>`.
+
+Borrowed synchronous loading works when the root and companion storage remain
+stable throughout the call. For example, an already populated map can supply
+`companions[&request.key].as_slice()` while the root is passed as
+`root.as_slice()`. A resolver that populates a cache during loading can instead
+store `Arc<Vec<u8>>` and return cloned handles. This lets the cache grow without
+invalidating outstanding sources or cloning byte buffers. Both workflows return
+the same independently owned checked model.
+
 The reader requests files required to understand the native bundle. It does not
 fetch image pixels or compile a renderer. Imported resource declarations retain
 the image and external-resource identities needed by later processing.
@@ -65,7 +83,12 @@ format, identity, root bytes, and import policy. Call `poll` to obtain `Progress
 await your source read, then call `provide(&request, bytes)` and poll again.
 `Progress::Ready(imported)` completes the session. Polling while a request remains
 pending returns that same request, so a failed source read need not restart
-decoding. The reader itself performs no I/O and depends on no executor.
+decoding. Accepted source handles remain available across decode or import
+failures, preserving the original bytes and fixed policy on a retry. A successful
+poll releases the root and companion handles before returning `Ready`; caller
+handles to shared sources remain valid. Dropping an unfinished reader also
+releases its handles. The reader itself performs no I/O and depends on no
+executor.
 
 Direct M2 companion and WMO group discovery is prepared once for the session.
 Supplying those files advances the existing request plan; complete native bundle
