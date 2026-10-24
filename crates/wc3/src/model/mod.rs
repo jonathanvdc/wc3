@@ -32,6 +32,15 @@
 //! [`HermiteKeyframe`](crate::model::HermiteKeyframe), [`BezierKeyframe`](crate::model::BezierKeyframe), and [`TcbKeyframe`](crate::model::TcbKeyframe). See the evaluation
 //! APIs on [`Model`](crate::model::Model) for CPU pose, geometry, and surface sampling.
 //!
+//! # Inspect rejected changes
+//!
+//! [`Error`] exposes a typed [`cause`](error::ErrorKind) and a structured
+//! [`location`](error::Location), including actual object and property identities.
+//! Use [`Model::try_edit`] when an operation has an application-specific failure;
+//! [`error::EditError`] distinguishes that failure from final graph validation.
+//! Both phases leave the original model unchanged. Custom validators can retain
+//! their original typed cause with [`Error::extension`].
+//!
 //! # Work across the native boundary
 //!
 //! [`io`](crate::model::io) imports documents and plans exports with policies from [`conversion`](crate::model::conversion).
