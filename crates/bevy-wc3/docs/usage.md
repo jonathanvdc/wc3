@@ -260,8 +260,10 @@ Use `assembly::Assembly` for resource plans with geometry choices, image replace
 atlases, and mounted or skinned parts. `assembly::compile_assembly` resolves the
 plan into a reusable `CompiledModel`. Applications can implement
 `assembly::Resolver<Selection>` for their own selection vocabulary. The
-`assembly::Models` registry holds `Arc<Model>` values, so several plans can share
-an owned graph and its typed identities without copying its contents. The
+`assembly::Models` registry borrows model views, so several plans can use
+the same graph and its typed identities without copying its contents or cloning
+owner handles. Keep the graphs and any borrowed native data alive through
+compilation; the compiled result owns its render data. The
 [assembly guide](rendering/assembly.md) covers explicit skeleton bindings and
 clip mappings; `CompiledModel::compose` is available for already compiled parts.
 

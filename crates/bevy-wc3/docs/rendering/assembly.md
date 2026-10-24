@@ -14,11 +14,14 @@ translates those choices into supported semantic geometry, images and bindings;
 the renderer supplies no race, sex, customization-slot or inventory schema.
 
 Load or author the required models before resolving graph-scoped identities.
-`Models` maps resource identities to shared `Arc<Model<Universal>>` values.
-The native [asset reader](../../../wc3/docs/loading.md) returns an owned
-`Model<'static>` suitable for retaining in such a cache. Clone the `Arc` when
-building another registry; all references retain the same graph-scoped node,
-look, draw and feature identities. Compilation borrows these immutable graphs.
+`Models<'view, 'data>` maps resource identities to `&'view Model<'data>` views.
+Keep each source graph and any native data it borrows alive through compilation.
+The application can own graphs directly or retain them in an `Arc` cache; building
+a registry borrows those owners without copying graphs or cloning their handles.
+The native [asset reader](../../../wc3/docs/loading.md) returns an independent
+`Model<'static>` suitable for caching, while format-specific imports can borrow
+native records for immediate compilation. All views retain the same graph-scoped
+node, look, draw and feature identities.
 An `Assembly` has a root `Source` and an ordered list of `Part`s.
 Each source selects its model resource, material look, `DrawSelection` and image
 replacements by dependency or structural input address. Each part supplies a
