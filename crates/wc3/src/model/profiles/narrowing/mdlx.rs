@@ -1,7 +1,7 @@
 //! Exact projections of Mdlx owner payloads.
 use super::{incompatible, incompatible_feature, Narrows};
 use crate::model::error::{
-    Location, PayloadKind, PayloadVocabulary, ProfileError, ProfileKind, ProfileViolation,
+    Location, PayloadForm, PayloadKind, ProfileError, ProfileKind, ProfileViolation,
 };
 use crate::model::features::TryFromFeature;
 use crate::model::profiles::{Mdlx, NoProperties, Profile, Universal};
@@ -48,7 +48,7 @@ impl Narrows<Universal> for Mdlx {
         Err(incompatible(
             ProfileKind::Mdlx,
             PayloadKind::PhysicsResource,
-            PayloadVocabulary::M2,
+            PayloadForm::M2,
         ))
     }
     fn bone_override_resource<'a>(
@@ -57,7 +57,7 @@ impl Narrows<Universal> for Mdlx {
         Err(incompatible(
             ProfileKind::Mdlx,
             PayloadKind::BoneOverrideResource,
-            PayloadVocabulary::M2,
+            PayloadForm::M2,
         ))
     }
 

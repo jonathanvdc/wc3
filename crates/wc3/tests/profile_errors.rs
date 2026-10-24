@@ -1,6 +1,6 @@
 use wc3::model::common::IntoPackedArray;
 use wc3::model::error::{
-    ErrorKind, PayloadKind, PayloadVocabulary, ProfileError, ProfileKind, ProfileViolation,
+    ErrorKind, PayloadForm, PayloadKind, ProfileError, ProfileKind, ProfileViolation,
 };
 use wc3::model::profiles::{Mdlx, Narrows, Universal, Wmo};
 use wc3::model::{GeometryData, GeometryKind, IdentityBinding, M2Geometry, UniversalBinding, Vec3};
@@ -25,7 +25,7 @@ fn narrowing_retains_target_and_required_owner_payload() {
             target: ProfileKind::Wmo,
             violation: ProfileViolation::UnsupportedPayload {
                 owner: PayloadKind::Binding,
-                actual: PayloadVocabulary::IdentityBinding
+                actual: PayloadForm::IdentityBinding
             }
         })
     ));
@@ -107,4 +107,59 @@ fn world_group_bounds_retain_group_component_and_numeric_evidence() {
     assert!(
         matches!(error.location().segments(), [Segment::Field(groups), Segment::Index(0), Segment::Field(bounds), Segment::Index(0), Segment::Index(0)] if groups == "groups" && bounds == "bounds")
     );
+}
+
+#[test]
+fn nested_topology_retains_the_rejected_child_kind_and_index() {
+    use wc3::model::error::{Segment, TopologyKind};
+    use wc3::model::{ConnectivitySets, MdlxGeometry, Topology};
+    let geometry = GeometryData {
+        positions: vec![Vec3::ZERO, Vec3::X].into_packed_array(),
+        connectivity: ConnectivitySets::new(
+            Topology::Mixed(vec![Topology::Lines(vec![[0, 1]].into_packed_array())]),
+            vec![],
+        ),
+        ..GeometryData::default()
+    };
+    let error = MdlxGeometry::try_from(geometry).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Profile(ProfileError {
+            target: ProfileKind::Mdlx,
+            violation: ProfileViolation::GeometryTopology {
+                actual: TopologyKind::Lines
+            }
+        })
+    ));
+    assert!(
+        matches!(error.location().segments(), [Segment::Field(topology), Segment::Field(groups), Segment::Index(0)] if topology == "topology" && groups == "groups")
+    );
+}
+
+#[test]
+fn empty_explicit_lightmap_retains_its_projection_rule() {
+    use wc3::model::error::AttributeProjectionRule;
+    use wc3::model::{
+        Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometrySchema, WmoGeometry,
+    };
+    let mut geometry = GeometryData::default();
+    geometry
+        .attributes
+        .insert(Attribute {
+            semantic: AttributeSemantic::LightmapCoordinates,
+            domain: AttributeDomain::Vertex,
+            values: AttributeValues::Vector2(Vec::new().into_packed_array()),
+        })
+        .unwrap();
+    geometry.validate().unwrap();
+    assert!(matches!(
+        WmoGeometry::try_from(geometry).unwrap_err().kind(),
+        ErrorKind::Profile(ProfileError {
+            target: ProfileKind::Wmo,
+            violation: ProfileViolation::GeometryAttribute {
+                rule: AttributeProjectionRule::Nonempty,
+                ..
+            }
+        })
+    ));
 }

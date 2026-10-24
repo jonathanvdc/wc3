@@ -1,7 +1,11 @@
-//! Numeric, correspondence and operation failures in semantic geometry.
+//! Numeric and correspondence failures in semantic geometry.
+//!
+//! These errors retain the rejected counts, values and identities. The enclosing
+//! [`super::Error::location`] identifies the stream, attribute and failing element;
+//! diagnostics never retain a mesh or copy its buffers.
 use crate::model::{
-    AttributeValues, ConnectivityId, DrawSubsetId, GeometryInfluences, NodeId, PrimitiveRange,
-    TangentBinding, Topology,
+    AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId, DrawSubsetId,
+    GeometryInfluences, NodeId, PrimitiveRange, TangentBinding, Topology,
 };
 use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
@@ -9,17 +13,17 @@ use std::fmt::{self, Display, Formatter};
 /// The connectivity family, without retaining its index buffers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TopologyKind {
-    /// Mixed representation.
+    /// Ordered groups containing independently typed primitive families.
     Mixed,
-    /// Triangles representation.
+    /// Independent indexed triangles.
     Triangles,
-    /// Polygons representation.
+    /// Polygon corner indices and face-offset boundaries.
     Polygons,
-    /// Lines representation.
+    /// Independent indexed line pairs.
     Lines,
-    /// TriangleStrip representation.
+    /// An authored strip-index sequence.
     TriangleStrip,
-    /// Points representation.
+    /// Independent indexed points.
     Points,
 }
 impl From<&Topology<'_>> for TopologyKind {
@@ -37,31 +41,31 @@ impl From<&Topology<'_>> for TopologyKind {
 /// The encoded value type of one geometry attribute.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AttributeValueKind {
-    /// TriangleProperties representation.
+    /// Typed per-triangle surface and collision behavior.
     TriangleProperties,
-    /// Boolean representation.
+    /// Boolean values.
     Boolean,
-    /// Byte3 representation.
+    /// Three-component unsigned byte records.
     Byte3,
-    /// Byte4 representation.
+    /// Four-component unsigned byte records.
     Byte4,
-    /// U16 representation.
+    /// Unsigned 16-bit integers.
     U16,
-    /// Unsigned4 representation.
+    /// Four-component unsigned 32-bit integer records.
     Unsigned4,
-    /// Quaternion representation.
+    /// Quaternion values.
     Quaternion,
-    /// Scalar representation.
+    /// Scalar 32-bit floats.
     Scalar,
-    /// Vector2 representation.
+    /// Two-component float vectors.
     Vector2,
-    /// Vector3 representation.
+    /// Three-component float vectors.
     Vector3,
-    /// Vector4 representation.
+    /// Four-component float vectors.
     Vector4,
-    /// Unsigned representation.
+    /// Unsigned 32-bit integers.
     Unsigned,
-    /// Signed representation.
+    /// Signed 32-bit integers.
     Signed,
 }
 impl From<&AttributeValues<'_>> for AttributeValueKind {
@@ -86,15 +90,15 @@ impl From<&AttributeValues<'_>> for AttributeValueKind {
 /// Authored influence interpretation, independent of its backing storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InfluenceKind {
-    /// None representation.
+    /// No authored joint distribution.
     None,
-    /// Variable representation.
+    /// Variable-length rows of weighted joint indices.
     Variable,
-    /// Three representation.
+    /// Three authored weighted slots per vertex.
     Three,
-    /// Four representation.
+    /// Four authored weighted slots per vertex.
     Four,
-    /// MatrixGroups representation.
+    /// Equal blending among ordered matrix-group joints.
     MatrixGroups,
 }
 impl From<&GeometryInfluences<'_>> for InfluenceKind {
@@ -111,59 +115,51 @@ impl From<&GeometryInfluences<'_>> for InfluenceKind {
 /// An operation the selected geometry representation cannot retain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GeometryOperation {
-    /// Edit representation.
+    /// Apply a common geometry edit.
     Edit,
-    /// AddConnectivity representation.
+    /// Add another independently selectable topology set.
     AddConnectivity,
-    /// ReplacePositions representation.
+    /// Replace vertex positions.
     ReplacePositions,
-    /// ReplaceNormals representation.
+    /// Replace vertex normals.
     ReplaceNormals,
-    /// ReplaceTangents representation.
+    /// Replace vertex tangent frames.
     ReplaceTangents,
-    /// ReplaceColors representation.
+    /// Replace primary vertex colors.
     ReplaceColors,
-    /// VertexRemap representation.
+    /// Change vertex correspondence while retaining primitive order.
     VertexRemap,
-    /// RemapSelectionBindings representation.
+    /// Remap geometry with authored windows or independent pool bindings.
     RemapSelectionBindings,
-    /// AlternateSelection representation.
+    /// Select a topology other than the primary connectivity.
     AlternateSelection,
-    /// SupplementalStrips representation.
+    /// Retain a supplemental strip-index selection.
     SupplementalStrips,
-    /// VertexWindows representation.
+    /// Retain an authored inclusive vertex window.
     VertexWindows,
-    /// TangentBindings representation.
+    /// Bind a tangent pool to a consecutive vertex window.
     TangentBindings,
-    /// PrimitiveSelection representation.
+    /// Use logical primitive counts at a native adapter boundary.
     PrimitiveSelection,
-    /// PrimaryConnectivity representation.
+    /// Use primary connectivity at a native adapter boundary.
     PrimaryConnectivity,
-    /// The number of additional topology sets exceeds the target limit.
-    AdditionalConnectivity,
-    /// IndexedPools representation.
-    IndexedPools,
-    /// TriangleProperties representation.
-    TriangleProperties,
-    /// AdditionalAttributes representation.
-    AdditionalAttributes,
 }
 /// Why polygon boundaries are structurally invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PolygonBoundaryRule {
-    /// StartsAtZero representation.
+    /// The first boundary must be zero.
     StartsAtZero,
-    /// EndsAtCornerCount representation.
+    /// The final boundary must equal the corner-array length.
     EndsAtCornerCount,
-    /// OrderedWithThreeCorners representation.
+    /// Consecutive boundaries must increase by at least three corners.
     OrderedWithThreeCorners,
 }
 /// Why an otherwise selected polygon cannot be triangulated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TriangulationFailure {
-    /// ZeroArea representation.
+    /// The projected polygon has zero signed area.
     ZeroArea,
-    /// NoEar representation.
+    /// Ear clipping cannot find another valid triangle.
     NoEar,
 }
 /// A concrete geometry constraint with the evidence needed to inspect it.
@@ -171,9 +167,9 @@ pub enum TriangulationFailure {
 pub enum GeometryError {
     /// The number of values differs from the required correspondence.
     CountMismatch {
-        /// Required value or correspondence count.
+        /// Number of values required by the correspondence domain.
         expected: usize,
-        /// Observed value or representation.
+        /// Number of authored values.
         actual: usize,
     },
     /// An index does not address an existing element.
@@ -190,9 +186,9 @@ pub enum GeometryError {
     },
     /// A minimum coordinate exceeds the corresponding maximum.
     InvertedBounds {
-        /// Lower bound or minimum supported count.
+        /// Authored lower coordinate or radius.
         minimum: f32,
-        /// Upper bound or maximum supported count, when bounded.
+        /// Authored upper coordinate or radius.
         maximum: f32,
     },
     /// A bounding radius is negative.
@@ -212,22 +208,36 @@ pub enum GeometryError {
     },
     /// Nonzero weights do not sum to one within the accepted tolerance.
     UnnormalizedWeights {
-        /// Sum of the authored positive contributions.
+        /// Sum of all authored influence weights.
         sum: f32,
         /// Maximum accepted absolute difference from one.
         tolerance: f32,
     },
-    /// A vertex has no finite positive joint contribution.
+    /// Positive influence weights overflowed to a nonfinite sum.
+    NonFiniteWeightSum {
+        /// Sum before normalization.
+        sum: f32,
+    },
+    /// A vertex has no positive joint contribution.
     NoPositiveWeights {
         /// Sum of the authored positive contributions.
         sum: f32,
     },
     /// An attribute duplicates an existing semantic/domain identity.
     DuplicateAttribute,
-    /// The attribute value representation does not match its semantic/domain.
+    /// The attribute value representation does not match its semantic.
     AttributeType {
-        /// Observed value or representation.
+        /// Value type required by the attribute semantic.
+        expected: AttributeValueKind,
+        /// Authored value type.
         actual: AttributeValueKind,
+    },
+    /// An attribute requires another correspondence domain.
+    AttributeDomain {
+        /// Domain required by the attribute semantic.
+        expected: AttributeDomain,
+        /// Authored correspondence domain.
+        actual: AttributeDomain,
     },
     /// Connectivity cannot be resolved in the owning mesh.
     MissingConnectivity {
@@ -251,32 +261,44 @@ pub enum GeometryError {
     },
     /// The ordered UV stream count is outside the supported range.
     TextureCoordinateCount {
-        /// Lower bound or minimum supported count.
+        /// Minimum number of ordered UV streams.
         minimum: usize,
-        /// Upper bound or maximum supported count, when bounded.
+        /// Maximum number of UV streams, or no upper bound.
         maximum: Option<usize>,
-        /// Observed value or representation.
+        /// Number of authored UV streams.
         actual: usize,
     },
-    /// A vertex count cannot be represented by the index type.
-    VertexCountOverflow {
-        /// Observed value or representation.
+    /// A vertex or primitive count cannot be represented by the index type.
+    CountOverflow {
+        /// Authored vertex or primitive count.
         actual: usize,
-        /// Upper bound or maximum supported count, when bounded.
+        /// Largest count representable by the target index type.
         maximum: usize,
     },
-    /// A remap changes primitive grouping or uses an unsupported topology.
+    /// A remap changes the original primitive family.
     RemapTopology {
-        /// Required value or correspondence count.
+        /// Original primitive family whose grouping must be preserved.
         expected: TopologyKind,
-        /// Observed value or representation.
+        /// Replacement primitive family.
         actual: TopologyKind,
+    },
+    /// Vertex remapping is unavailable for this topology family.
+    UnsupportedRemapTopology {
+        /// Original connectivity family.
+        topology: TopologyKind,
+    },
+    /// A polygon remap changed an authored offset boundary.
+    RemapBoundary {
+        /// Original corner offset.
+        expected: u32,
+        /// Replacement corner offset.
+        actual: u32,
     },
     /// A remapped corner does not select the original vertex.
     RemapCorrespondence {
-        /// Required value or correspondence count.
+        /// Original vertex selected by this corner.
         expected: u32,
-        /// Observed value or representation.
+        /// Old vertex selected by the replacement corner, or an absent remap entry.
         actual: Option<u32>,
     },
     /// A polygon offset violates its boundary invariant.
@@ -285,7 +307,7 @@ pub enum GeometryError {
         rule: PolygonBoundaryRule,
         /// Preceding offset, when one exists.
         previous: Option<u32>,
-        /// Observed value or representation.
+        /// Rejected boundary offset, or a missing boundary.
         actual: Option<u32>,
         /// Number of authored polygon corners.
         corners: usize,
@@ -308,7 +330,7 @@ pub enum GeometryError {
     },
     /// An authored inclusive vertex window is inverted or outside geometry.
     VertexWindow {
-        /// First authored vertex or primitive.
+        /// First vertex in the authored inclusive window.
         first: u32,
         /// Inclusive last authored vertex.
         last: u32,
@@ -326,7 +348,7 @@ pub enum GeometryError {
     },
     /// The end of a primitive range overflows.
     RangeOverflow {
-        /// First authored vertex or primitive.
+        /// First logical primitive in the range.
         first: u32,
         /// Authored number of elements.
         count: u32,
@@ -351,9 +373,9 @@ pub enum GeometryError {
     TangentVertexWindow {
         /// Selected geometry vertex index.
         vertex: usize,
-        /// First authored vertex or primitive.
+        /// First vertex addressed by the tangent binding.
         first: u32,
-        /// Authored number of elements.
+        /// Number of vertices addressed by the tangent binding.
         count: u32,
     },
     /// A node influence is absent from the skin palette.
@@ -363,14 +385,16 @@ pub enum GeometryError {
     },
     /// Projected corners do not have a consistent attribute value type.
     InconsistentAttribute {
-        /// Required value or correspondence count.
+        /// Owned meaning of the requested attribute, including a custom name.
+        semantic: AttributeSemantic<'static>,
+        /// Value type present at the first projected source corner.
         expected: AttributeValueKind,
-        /// Observed value or representation.
+        /// Value type at the rejected corner, or an absent attribute.
         actual: Option<AttributeValueKind>,
     },
     /// Triangle properties were attached to another topology family.
     TrianglePropertiesTopology {
-        /// Observed value or representation.
+        /// Authored primary connectivity family.
         actual: TopologyKind,
     },
 }
@@ -385,16 +409,21 @@ impl Display for GeometryError {
             Self::RadiusOverflow { radius } => write!(f, "bounding radius {radius} exceeds f32"),
             Self::InvalidWeight { weight } => write!(f, "weight must be finite and nonnegative, found {weight}"),
             Self::UnnormalizedWeights { sum, tolerance } => write!(f, "weight sum {sum} differs from one by more than {tolerance}"),
-            Self::NoPositiveWeights { sum } => write!(f, "vertex has no finite positive joint contribution (sum {sum})"),
+            Self::NonFiniteWeightSum { sum } => write!(f, "positive influence weights have nonfinite sum {sum}"),
+            Self::NoPositiveWeights { sum } => write!(f, "vertex has no positive joint contribution (sum {sum})"),
             Self::DuplicateAttribute => f.write_str("attribute semantic and domain are already present"),
-            Self::AttributeType { actual } => write!(f, "{actual:?} values do not match the attribute semantic and domain"),
+            Self::AttributeType { expected, actual } => write!(f, "attribute requires {expected:?} values, found {actual:?}"),
+            Self::AttributeDomain { expected, actual } => write!(f, "attribute requires {expected:?} correspondence, found {actual:?}"),
             Self::MissingConnectivity { connectivity } => write!(f, "connectivity {connectivity:?} is absent or belongs to another mesh"),
             Self::MissingConnectivityIndex { index } => write!(f, "connectivity set {index} is absent"),
             Self::MissingSubset { subset } => write!(f, "subset {subset:?} is absent or belongs to another mesh"),
             Self::UnsupportedOperation { operation } => write!(f, "geometry representation does not support {operation:?}"),
-            Self::TextureCoordinateCount { minimum, maximum, actual } => write!(f, "expected {minimum}..={maximum:?} UV streams, found {actual}"),
-            Self::VertexCountOverflow { actual, maximum } => write!(f, "{actual} vertices exceed maximum {maximum}"),
+            Self::TextureCoordinateCount { minimum, maximum: Some(maximum), actual } => write!(f, "expected {minimum}..={maximum} UV streams, found {actual}"),
+            Self::TextureCoordinateCount { minimum, maximum: None, actual } => write!(f, "expected at least {minimum} UV streams, found {actual}"),
+            Self::CountOverflow { actual, maximum } => write!(f, "{actual} elements exceed maximum {maximum}"),
             Self::RemapTopology { expected, actual } => write!(f, "remap requires {expected:?} primitive grouping, found {actual:?}"),
+            Self::UnsupportedRemapTopology { topology } => write!(f, "vertex remapping does not support {topology:?} connectivity"),
+            Self::RemapBoundary { expected, actual } => write!(f, "remap must retain polygon offset {expected}, found {actual}"),
             Self::RemapCorrespondence { expected, actual } => write!(f, "remapped corner must select old vertex {expected}, found {actual:?}"),
             Self::PolygonBoundary { rule, previous, actual, corners } => write!(f, "polygon boundary violates {rule:?}: previous {previous:?}, actual {actual:?}, {corners} corners"),
             Self::SelectionDomain { topology, range } => write!(f, "{range:?} counting domain does not match {topology:?} connectivity"),
@@ -408,7 +437,7 @@ impl Display for GeometryError {
             Self::MissingTangentPool => f.write_str("tangent binding requires a tangent pool"),
             Self::TangentVertexWindow { vertex, first, count } => write!(f, "vertex {vertex} is outside tangent window {first}+{count}"),
             Self::UnboundNode { node } => write!(f, "influence node {node:?} is absent from the skin palette"),
-            Self::InconsistentAttribute { expected, actual } => write!(f, "projected attribute requires {expected:?} values, found {actual:?}"),
+            Self::InconsistentAttribute { semantic, expected, actual } => write!(f, "projected {semantic:?} attribute requires {expected:?} values, found {actual:?}"),
             Self::TrianglePropertiesTopology { actual } => write!(f, "triangle properties require triangle connectivity, found {actual:?}"),
         }
     }

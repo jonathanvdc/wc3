@@ -1,6 +1,6 @@
 //! Exact projections of Wmo owner payloads.
 use super::{incompatible, incompatible_feature, Narrows};
-use crate::model::error::{PayloadKind, PayloadVocabulary, ProfileKind};
+use crate::model::error::{PayloadForm, PayloadKind, ProfileKind};
 use crate::model::profiles::{NoProperties, Profile, Universal, Wmo};
 use crate::model::PropertyValues;
 use crate::model::{
@@ -23,7 +23,7 @@ impl Narrows<Universal> for Wmo {
         Err(incompatible(
             ProfileKind::Wmo,
             PayloadKind::EffectResource,
-            PayloadVocabulary::Universal,
+            PayloadForm::Universal,
         ))
     }
     fn physics_resource<'a>(
@@ -32,7 +32,7 @@ impl Narrows<Universal> for Wmo {
         Err(incompatible(
             ProfileKind::Wmo,
             PayloadKind::PhysicsResource,
-            PayloadVocabulary::M2,
+            PayloadForm::M2,
         ))
     }
     fn bone_override_resource<'a>(
@@ -41,7 +41,7 @@ impl Narrows<Universal> for Wmo {
         Err(incompatible(
             ProfileKind::Wmo,
             PayloadKind::BoneOverrideResource,
-            PayloadVocabulary::M2,
+            PayloadForm::M2,
         ))
     }
 

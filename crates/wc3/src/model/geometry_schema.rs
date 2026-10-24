@@ -2,7 +2,9 @@
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::common::PackedValue;
-use crate::model::error::{AttributeValueKind, ProfileError, ProfileKind, ProfileViolation};
+use crate::model::error::{
+    AttributeProjectionRule, AttributeValueKind, ProfileError, ProfileKind, ProfileViolation,
+};
 use crate::model::error::{
     GeometryError, GeometryOperation, Location, PolygonBoundaryRule, TopologyKind,
 };
@@ -297,6 +299,11 @@ impl<'data> GeometryData<'data> {
                 ProfileError::new(
                     target,
                     ProfileViolation::GeometryAttribute {
+                        rule: if attribute.domain == AttributeDomain::Vertex {
+                            AttributeProjectionRule::Semantic
+                        } else {
+                            AttributeProjectionRule::Domain
+                        },
                         semantic: attribute.semantic.clone().into_owned(),
                         domain: attribute.domain,
                         values: AttributeValueKind::from(&attribute.values),
@@ -328,6 +335,11 @@ impl<'data> GeometryData<'data> {
                 ProfileError::new(
                     target,
                     ProfileViolation::GeometryAttribute {
+                        rule: if attribute.domain == AttributeDomain::Pool {
+                            AttributeProjectionRule::Domain
+                        } else {
+                            AttributeProjectionRule::Semantic
+                        },
                         semantic: attribute.semantic.clone().into_owned(),
                         domain: attribute.domain,
                         values: AttributeValueKind::from(&attribute.values),

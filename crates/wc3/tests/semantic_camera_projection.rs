@@ -1,3 +1,4 @@
+use wc3::model::error::{ErrorKind, Owner, ProfileError, ProfileKind, ProfileViolation, Segment};
 use wc3::model::profiles::{m2, mdlx, Mdlx, Universal, M2};
 use wc3::model::{
     Camera, Curve, DynamicTrack, FieldOfViewAxis, FromFeature, Light, LightShadows, Model,
@@ -16,7 +17,7 @@ fn animated_fov_shared_with_another_consumer_cannot_be_frozen_by_narrowing() {
     let mut light: mdlx::Light = draft.construct();
     light.diffuse.intensity = fov;
     let node = draft.add_named_node("camera and light").unwrap();
-    draft.add_feature(node, feature).unwrap();
+    let camera_feature = draft.add_feature(node, feature).unwrap();
     draft
         .add_feature(
             node,
@@ -32,7 +33,16 @@ fn animated_fov_shared_with_another_consumer_cannot_be_frozen_by_narrowing() {
         .unwrap();
     let source = draft.finish().unwrap();
     let error = source.try_narrow::<Mdlx>().unwrap_err();
-    assert_eq!(error.path(), "camera.projection.field_of_view");
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Profile(ProfileError {
+            target: ProfileKind::Mdlx,
+            violation: ProfileViolation::AnimatedField
+        })
+    ));
+    assert!(
+        matches!(error.location().segments(), [Segment::Owner(Owner::Feature(id)), Segment::Field(projection), Segment::Field(field_of_view)] if *id == camera_feature && projection == "projection" && field_of_view == "field_of_view")
+    );
 }
 
 #[test]

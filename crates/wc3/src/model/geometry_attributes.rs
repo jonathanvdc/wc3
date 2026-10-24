@@ -49,7 +49,16 @@ impl<'data> GeometryAttributes<'data> {
             (S::ClothVertex, V::Unsigned(_)) => true,
             (S::CollisionTriangleControl, V::Scalar(_)) => true,
             (S::TriangleProperties, V::TriangleProperties(_)) => {
-                attribute.domain == AttributeDomain::Face
+                if attribute.domain != AttributeDomain::Face {
+                    return Err(Error::at(
+                        Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                        GeometryError::AttributeDomain {
+                            expected: AttributeDomain::Face,
+                            actual: attribute.domain,
+                        },
+                    ));
+                }
+                true
             }
             (S::Named(_), _) => true,
             _ => false,
@@ -60,6 +69,15 @@ impl<'data> GeometryAttributes<'data> {
             Err(Error::at(
                 Location::new().attribute(attribute.semantic.clone(), attribute.domain),
                 GeometryError::AttributeType {
+                    expected: match attribute.semantic {
+                        S::Normal | S::TangentVector | S::Binormal => AttributeValueKind::Vector3,
+                        S::Tangent | S::Color(_) => AttributeValueKind::Vector4,
+                        S::TexCoord(_) | S::LightmapCoordinates => AttributeValueKind::Vector2,
+                        S::ClothVertex => AttributeValueKind::Unsigned,
+                        S::CollisionTriangleControl => AttributeValueKind::Scalar,
+                        S::TriangleProperties => AttributeValueKind::TriangleProperties,
+                        S::Named(_) => unreachable!("custom attributes admit all value types"),
+                    },
                     actual: AttributeValueKind::from(&attribute.values),
                 },
             ))

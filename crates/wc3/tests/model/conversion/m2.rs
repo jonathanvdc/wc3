@@ -1,6 +1,7 @@
 use glam::Vec3;
 use std::borrow::Cow;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
+use wc3::model::error::{ErrorKind, ProfileError, ProfileKind, ProfileViolation};
 use wc3::model::io;
 use wc3::model::IntoPackedArray;
 use wc3::model::ModelMetadata;
@@ -1785,10 +1786,13 @@ fn event_sources_reject_selections_that_native_m2_cannot_encode() {
         })?;
         Ok(())
     });
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("m2.events.selection"));
+    assert!(matches!(
+        result.unwrap_err().kind(),
+        ErrorKind::Profile(ProfileError {
+            target: ProfileKind::M2,
+            violation: ProfileViolation::EventSelection
+        })
+    ));
     let result = model.edit(|draft| {
         let clock = draft.add_clock(sm::SharedClock::Frozen)?;
         let event_source = draft.add_event_source(mp::EventSource {
@@ -1806,10 +1810,13 @@ fn event_sources_reject_selections_that_native_m2_cannot_encode() {
             },
         )
     });
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("m2.events.selection"));
+    assert!(matches!(
+        result.unwrap_err().kind(),
+        ErrorKind::Profile(ProfileError {
+            target: ProfileKind::M2,
+            violation: ProfileViolation::EventSelection
+        })
+    ));
     assert!(model.event_sources().is_empty());
 }
 

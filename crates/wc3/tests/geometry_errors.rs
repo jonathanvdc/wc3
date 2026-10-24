@@ -118,3 +118,37 @@ fn deformation_reports_nonfinite_vertex_without_mutating_streams() {
         matches!(Bounds::from_positions(&[Vec3::splat(f32::MAX), Vec3::splat(-f32::MAX)]).unwrap_err().kind(), ErrorKind::Geometry(GeometryError::RadiusOverflow { radius }) if radius.is_finite())
     );
 }
+
+#[test]
+fn attribute_type_and_correspondence_constraints_are_distinct() {
+    use wc3::model::error::AttributeValueKind;
+    let mut attributes = GeometryAttributes::default();
+    let error = attributes
+        .insert(Attribute {
+            semantic: AttributeSemantic::Normal,
+            domain: AttributeDomain::Vertex,
+            values: AttributeValues::Scalar(vec![1.].into_packed_array()),
+        })
+        .unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Geometry(GeometryError::AttributeType {
+            expected: AttributeValueKind::Vector3,
+            actual: AttributeValueKind::Scalar
+        })
+    ));
+    let error = attributes
+        .insert(Attribute {
+            semantic: AttributeSemantic::TriangleProperties,
+            domain: AttributeDomain::Mesh,
+            values: AttributeValues::TriangleProperties(Vec::new().into_packed_array()),
+        })
+        .unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Geometry(GeometryError::AttributeDomain {
+            expected: AttributeDomain::Face,
+            actual: AttributeDomain::Mesh
+        })
+    ));
+}

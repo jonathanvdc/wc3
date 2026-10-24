@@ -61,27 +61,36 @@ impl Profile for M2 {
                 _ => {}
             }
         }
-        if model.global_events().any(|event| {
-            model
+        for event in model.global_events() {
+            if model
                 .event_source(event.source)
                 .expect("validated source")
                 .clock
                 == TimeSource::Animation
-        }) || model.clips().iter().any(|(id, _)| {
-            model.clip_events(id).any(|event| {
-                matches!(
+            {
+                return Err(Error::at(
+                    Location::for_owner(event.source).field("clock"),
+                    ProfileError::new(ProfileKind::M2, ProfileViolation::EventSelection),
+                ));
+            }
+        }
+        for (id, _) in model.clips() {
+            for event in model.clip_events(id) {
+                if matches!(
                     model
                         .event_source(event.source)
                         .expect("validated source")
                         .clock,
                     TimeSource::Shared(_)
-                )
-            })
-        }) {
-            return Err(Error::at(
-                Location::new().field("events"),
-                ProfileError::new(ProfileKind::M2, ProfileViolation::EventSelection),
-            ));
+                ) {
+                    return Err(Error::at(
+                        Location::for_owner(id)
+                            .field("animations")
+                            .with_owner(event.source),
+                        ProfileError::new(ProfileKind::M2, ProfileViolation::EventSelection),
+                    ));
+                }
+            }
         }
 
         for (id, clip) in model.clips() {

@@ -2,6 +2,7 @@ use glam::Vec3;
 use wc3::model::common::IntoZeroVec;
 use wc3::model::common::PackedArray;
 use wc3::model::conversion::{Context, ExportOptions};
+use wc3::model::error::{ErrorKind, GeometryError, GeometryOperation, Owner, Segment};
 use wc3::model::io::geometry;
 use wc3::model::ModelMetadata;
 use wc3::model::{
@@ -240,13 +241,17 @@ fn constrained_profiles_reject_unsupported_subset_bindings() {
     mesh.subsets.set(subset, definition).unwrap();
     let mut builder = Model::<Mdlx>::builder("");
     builder.add_mesh(mesh).unwrap();
-    assert_eq!(
-        {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap_err()
-        .path(),
-        "mesh.subsets"
-    );
+    builder.import_values(&slot_values).unwrap();
+    let error = builder.finish().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Geometry(GeometryError::UnsupportedOperation {
+            operation: GeometryOperation::VertexWindows
+        })
+    ));
+    assert!(error
+        .location()
+        .segments()
+        .iter()
+        .any(|segment| matches!(segment, Segment::Owner(Owner::DrawSubset(id)) if *id == subset)));
 }

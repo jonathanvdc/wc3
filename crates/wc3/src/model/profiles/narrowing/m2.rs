@@ -1,6 +1,6 @@
 //! Exact projections of M2 owner payloads.
 use super::{incompatible, incompatible_feature, Narrows};
-use crate::model::error::{PayloadKind, PayloadVocabulary, ProfileKind};
+use crate::model::error::{PayloadForm, PayloadKind, ProfileKind};
 use crate::model::features::TryFromFeature;
 use crate::model::profiles::{NoProperties, Profile, Universal, M2};
 use crate::model::EventSource;
@@ -26,7 +26,7 @@ impl Narrows<Universal> for M2 {
         Err(incompatible(
             ProfileKind::M2,
             PayloadKind::EffectResource,
-            PayloadVocabulary::Universal,
+            PayloadForm::Universal,
         ))
     }
     fn physics_resource<'a>(

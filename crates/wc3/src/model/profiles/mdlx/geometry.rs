@@ -214,24 +214,28 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
                 ));
             }
         }
-        fn native_topology(topology: &Topology<'_>) -> bool {
+        fn native_topology(topology: &Topology<'_>) -> Result<(), Error> {
             match topology {
-                Topology::Triangles(_) => true,
-                Topology::Mixed(groups) => groups.iter().all(native_topology),
-                _ => false,
-            }
-        }
-        if !native_topology(&self.streams.topology) {
-            return Err(Error::at(
-                Location::new().field("topology"),
-                ProfileError::new(
+                Topology::Triangles(_) => Ok(()),
+                Topology::Mixed(groups) => {
+                    for (index, group) in groups.iter().enumerate() {
+                        native_topology(group).map_err(|error| {
+                            error.with_context(Location::new().field("groups").index(index))
+                        })?;
+                    }
+                    Ok(())
+                }
+                topology => Err(ProfileError::new(
                     ProfileKind::Mdlx,
                     ProfileViolation::GeometryTopology {
-                        actual: TopologyKind::from(&self.streams.topology),
+                        actual: TopologyKind::from(topology),
                     },
-                ),
-            ));
+                )
+                .into()),
+            }
         }
+        native_topology(&self.streams.topology)
+            .map_err(|error| error.with_context(Location::new().field("topology")))?;
         validate_geometry(self)
     }
 }

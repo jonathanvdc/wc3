@@ -84,7 +84,7 @@ impl VertexRemap<'_> {
         if self.new_to_old.len() > u32::MAX as usize {
             return Err(Error::at(
                 Location::new().field("new_to_old"),
-                GeometryError::VertexCountOverflow {
+                GeometryError::CountOverflow {
                     actual: self.new_to_old.len(),
                     maximum: u32::MAX as usize,
                 },
@@ -169,15 +169,18 @@ fn equivalent(old: &Topology<'_>, new: &Topology<'_>, map: &[u32]) -> Result<(),
                 if expected != actual {
                     return Err(Error::at(
                         Location::new().field("offsets").index(index),
-                        GeometryError::RemapCorrespondence {
-                            expected,
-                            actual: Some(actual),
-                        },
+                        GeometryError::RemapBoundary { expected, actual },
                     ));
                 }
             }
             count(a.len(), b.len())?;
             corners(a.iter(), b.iter(), map)
+        }
+        (Topology::TriangleStrip(_), Topology::TriangleStrip(_)) => {
+            Err(GeometryError::UnsupportedRemapTopology {
+                topology: TopologyKind::TriangleStrip,
+            }
+            .into())
         }
         _ => Err(GeometryError::RemapTopology {
             expected: TopologyKind::from(old),

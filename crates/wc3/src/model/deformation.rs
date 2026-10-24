@@ -91,7 +91,6 @@ where
     for (vertex, row) in influences.into_iter().enumerate() {
         let mut matrix = Mat4::ZERO;
         let mut positive = false;
-        let mut sum = 0.;
         for (influence, (index, weight)) in row.into_iter().enumerate() {
             if !weight.is_finite() || weight < 0. {
                 return Err(Error::at(
@@ -118,13 +117,12 @@ where
                     )
                 })? * weight;
                 positive = true;
-                sum += weight;
             }
         }
         if !positive {
             return Err(Error::at(
                 Location::new().field("influences").index(vertex),
-                GeometryError::NoPositiveWeights { sum },
+                GeometryError::NoPositiveWeights { sum: 0. },
             ));
         }
         output.push(matrix);

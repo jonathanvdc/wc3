@@ -6,8 +6,8 @@ use glam::{Vec2, Vec3, Vec4};
 use std::collections::BTreeMap;
 
 use crate::model::error::{
-    AttributeValueKind, GeometryError, InfluenceKind, Location, ProfileError, ProfileKind,
-    ProfileViolation, TopologyKind,
+    AttributeProjectionRule, AttributeValueKind, GeometryError, InfluenceKind, Location,
+    ProfileError, ProfileKind, ProfileViolation, TopologyKind,
 };
 use crate::model::geometry_edit::check_edit;
 use crate::model::geometry_schema::{check_finite, validate_geometry};
@@ -475,6 +475,7 @@ impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
                     ProfileError::new(
                         ProfileKind::Wmo,
                         ProfileViolation::GeometryAttribute {
+                            rule: AttributeProjectionRule::Domain,
                             semantic: attribute.semantic.clone().into_owned(),
                             domain: attribute.domain,
                             values: AttributeValueKind::from(&attribute.values),
@@ -482,21 +483,31 @@ impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
                     ),
                 ));
             }
-            let admissible = match (&attribute.semantic, &attribute.values) {
-                (AttributeSemantic::Color(slot), AttributeValues::Vector4(_)) => {
-                    !colors.contains_key(slot)
-                }
+            let violation = match (&attribute.semantic, &attribute.values) {
+                (AttributeSemantic::Color(slot), AttributeValues::Vector4(_)) => colors
+                    .contains_key(slot)
+                    .then_some(AttributeProjectionRule::Duplicate),
                 (AttributeSemantic::LightmapCoordinates, AttributeValues::Vector2(values)) => {
-                    lightmap.is_none() && !values.is_empty()
+                    if lightmap.is_some() {
+                        Some(AttributeProjectionRule::Duplicate)
+                    } else if values.is_empty() {
+                        Some(AttributeProjectionRule::Nonempty)
+                    } else {
+                        None
+                    }
                 }
-                _ => false,
+                (AttributeSemantic::Color(_) | AttributeSemantic::LightmapCoordinates, _) => {
+                    Some(AttributeProjectionRule::ValueType)
+                }
+                _ => Some(AttributeProjectionRule::Semantic),
             };
-            if !admissible {
+            if let Some(rule) = violation {
                 return Err(Error::at(
                     Location::new().attribute(attribute.semantic.clone(), attribute.domain),
                     ProfileError::new(
                         ProfileKind::Wmo,
                         ProfileViolation::GeometryAttribute {
+                            rule,
                             semantic: attribute.semantic.clone().into_owned(),
                             domain: attribute.domain,
                             values: AttributeValueKind::from(&attribute.values),

@@ -221,12 +221,19 @@ fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCo
     Ok(result)
 }
 
+#[derive(Clone, Copy)]
+struct ResolvedAttribute<'view, 'data> {
+    values: &'view AttributeValues<'data>,
+    index: usize,
+    domain: AttributeDomain,
+}
+
 fn attribute<'m, 'a>(
     mesh: &'m Mesh<'a>,
     subset: &DrawSubset,
     semantic: &AttributeSemantic<'_>,
     c: SourceCorner,
-) -> Result<Option<(&'m AttributeValues<'a>, usize)>, Error> {
+) -> Result<Option<ResolvedAttribute<'m, 'a>>, Error> {
     // Most specific authored correspondence wins over a vertex stream.
     for (domain, index) in [
         (
@@ -262,7 +269,11 @@ fn attribute<'m, 'a>(
                     },
                 ));
             }
-            return Ok(Some((&value.values, index)));
+            return Ok(Some(ResolvedAttribute {
+                values: &value.values,
+                index,
+                domain,
+            }));
         }
     }
     if mesh
@@ -346,7 +357,7 @@ fn whole_geometry(mesh: &Mesh<'_>) -> Result<DrawSubset, Error> {
     let count = u32::try_from(topology.primitive_count()).map_err(|_| {
         Error::at(
             Location::new().field("topology"),
-            GeometryError::VertexCountOverflow {
+            GeometryError::CountOverflow {
                 actual: topology.primitive_count(),
                 maximum: u32::MAX as usize,
             },
@@ -467,13 +478,19 @@ fn project_geometry_with_color(
             let mut second_colors = Vec::new();
             let mut tangents = Vec::new();
             for &c in &corners {
-                if let Some((AttributeValues::Vector3(values), index)) =
-                    attribute(mesh, subset, &AttributeSemantic::Normal, c)?
+                if let Some(ResolvedAttribute {
+                    values: AttributeValues::Vector3(values),
+                    index,
+                    ..
+                }) = attribute(mesh, subset, &AttributeSemantic::Normal, c)?
                 {
                     normals.push(values.get(index).unwrap());
                 }
-                if let Some((AttributeValues::Vector2(values), index)) =
-                    attribute(mesh, subset, &AttributeSemantic::TexCoord(coordinate), c)?
+                if let Some(ResolvedAttribute {
+                    values: AttributeValues::Vector2(values),
+                    index,
+                    ..
+                }) = attribute(mesh, subset, &AttributeSemantic::TexCoord(coordinate), c)?
                 {
                     uvs.push(values.get(index).unwrap());
                 }
@@ -483,7 +500,11 @@ fn project_geometry_with_color(
                     (fourth, &mut fourth_uvs),
                 ] {
                     if let Some(coordinate) = coordinate {
-                        if let Some((AttributeValues::Vector2(values), index)) =
+                        if let Some(ResolvedAttribute {
+                            values: AttributeValues::Vector2(values),
+                            index,
+                            ..
+                        }) =
                             attribute(mesh, subset, &AttributeSemantic::TexCoord(coordinate), c)?
                         {
                             target.push(values.get(index).unwrap());
@@ -498,13 +519,19 @@ fn project_geometry_with_color(
                         }
                     }
                 }
-                if let Some((AttributeValues::Vector4(values), index)) =
-                    attribute(mesh, subset, &AttributeSemantic::Color(0), c)?
+                if let Some(ResolvedAttribute {
+                    values: AttributeValues::Vector4(values),
+                    index,
+                    ..
+                }) = attribute(mesh, subset, &AttributeSemantic::Color(0), c)?
                 {
                     colors.push(color(c.vertex, values.get(index).unwrap()));
                 }
-                if let Some((AttributeValues::Vector4(values), index)) =
-                    attribute(mesh, subset, &AttributeSemantic::Color(1), c)?
+                if let Some(ResolvedAttribute {
+                    values: AttributeValues::Vector4(values),
+                    index,
+                    ..
+                }) = attribute(mesh, subset, &AttributeSemantic::Color(1), c)?
                 {
                     second_colors.push(values.get(index).unwrap());
                 }
@@ -542,8 +569,11 @@ fn project_geometry_with_color(
                                     )
                                 })?,
                         );
-                    } else if let Some((AttributeValues::Vector4(values), index)) =
-                        attribute(mesh, subset, &AttributeSemantic::Tangent, c)?
+                    } else if let Some(ResolvedAttribute {
+                        values: AttributeValues::Vector4(values),
+                        index,
+                        ..
+                    }) = attribute(mesh, subset, &AttributeSemantic::Tangent, c)?
                     {
                         tangents.push(values.get(index).unwrap());
                     }
@@ -652,7 +682,13 @@ pub fn skin_weights(
         }
         let active: Vec<_> = values.into_iter().filter(|(_, w)| *w > 0.).collect();
         let sum: f32 = active.iter().map(|(_, w)| w).sum();
-        if !sum.is_finite() || sum <= 0. {
+        if !sum.is_finite() {
+            return Err(Error::at(
+                Location::new().field("influences").index(vertex),
+                GeometryError::NonFiniteWeightSum { sum },
+            ));
+        }
+        if sum <= 0. {
             return Err(Error::at(
                 Location::new().field("influences").index(vertex),
                 GeometryError::NoPositiveWeights { sum },
@@ -735,17 +771,20 @@ impl ProjectedGeometry {
         let Some(first) = self.sources.first() else {
             return Ok(None);
         };
-        let Some((value, _)) = attribute(mesh, subset, semantic, *first)? else {
+        let Some(ResolvedAttribute { values: value, .. }) =
+            attribute(mesh, subset, semantic, *first)?
+        else {
             return Ok(None);
         };
         macro_rules! gather { ($($variant:ident),*) => { match value { $(AttributeValues::$variant(_) => {
             let mut output = Vec::with_capacity(self.sources.len());
-            for &corner in &self.sources {
+            for (source_index, &corner) in self.sources.iter().enumerate() {
                 let actual = attribute(mesh, subset, semantic, corner)?;
-                let Some((AttributeValues::$variant(values), index)) = actual else {
-                    return Err(Error::at(Location::new().attribute(semantic.clone(), AttributeDomain::Corner).index(corner.corner), GeometryError::InconsistentAttribute { expected: AttributeValueKind::from(value), actual: actual.map(|(values, _)| AttributeValueKind::from(values)) }));
+                let Some(ResolvedAttribute { values: AttributeValues::$variant(values), index, domain }) = actual else {
+                    let location = actual.map_or_else(|| Location::new().field("sources").index(source_index), |resolved| Location::new().attribute(semantic.clone(), resolved.domain).index(resolved.index));
+                    return Err(Error::at(location, GeometryError::InconsistentAttribute { semantic: semantic.clone().into_owned(), expected: AttributeValueKind::from(value), actual: actual.map(|resolved| AttributeValueKind::from(resolved.values)) }));
                 };
-                output.push(values.get(index).ok_or_else(|| Error::at(Location::new().attribute(semantic.clone(), AttributeDomain::Corner).index(corner.corner), GeometryError::IndexOutOfBounds { index, len: values.len() }))?);
+                output.push(values.get(index).ok_or_else(|| Error::at(Location::new().attribute(semantic.clone(), domain).index(index), GeometryError::IndexOutOfBounds { index, len: values.len() }))?);
             }
             Ok(Some(AttributeValues::$variant(output.into_iter().collect())))
         },)* } }; }

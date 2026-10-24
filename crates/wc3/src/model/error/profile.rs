@@ -1,4 +1,8 @@
 //! Exact projection constraints imposed by a built-in authoring vocabulary.
+//!
+//! [`ProfileError`] pairs the target vocabulary with a concrete constraint. Rejected
+//! payloads are described by their structural form, feature family or address kind,
+//! so errors remain owned without retaining the original model or borrowed feature.
 use super::geometry::{AttributeValueKind, InfluenceKind, TopologyKind};
 use crate::model::{
     AddressMode, AnimationId, AttributeDomain, AttributeSemantic, ColorSpace, GeometryKind,
@@ -10,56 +14,56 @@ use std::fmt::{self, Display, Formatter};
 /// The built-in vocabulary whose constraints are being checked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProfileKind {
-    /// Warcraft III representation.
+    /// The Warcraft III authoring vocabulary.
     Mdlx,
-    /// World of Warcraft model representation.
+    /// The World of Warcraft animated-model vocabulary.
     M2,
-    /// World of Warcraft world representation.
+    /// The World of Warcraft static-world vocabulary.
     Wmo,
 }
 /// The independently projected owner payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PayloadKind {
-    /// ImageResource representation.
+    /// An image dependency declaration.
     ImageResource,
-    /// ModelResource representation.
+    /// A model dependency declaration.
     ModelResource,
-    /// EffectResource representation.
+    /// An effect dependency declaration.
     EffectResource,
-    /// PhysicsResource representation.
+    /// A physics dependency declaration.
     PhysicsResource,
-    /// BoneOverrideResource representation.
+    /// An external bone-override declaration.
     BoneOverrideResource,
-    /// Appearance representation.
+    /// The model appearance and material alternatives.
     Appearance,
-    /// Binding representation.
+    /// An authored joint binding interpretation.
     Binding,
-    /// Geometry representation.
+    /// Mesh geometry and its authored correspondence.
     Geometry,
-    /// ModelMetadata representation.
+    /// Model-wide authoring declarations.
     ModelMetadata,
-    /// EventSource representation.
+    /// An event source and its clock.
     EventSource,
-    /// System representation.
+    /// An independently owned scene system.
     System,
-    /// Surface representation.
+    /// An ordered material program.
     Surface,
-    /// Feature representation.
+    /// An attached behavior definition.
     Feature,
-    /// NodeProperties representation.
+    /// Additional hierarchy-node behavior.
     NodeProperties,
-    /// MeshProperties representation.
+    /// Additional mesh behavior.
     MeshProperties,
-    /// InstanceProperties representation.
+    /// Additional placed-instance behavior.
     InstanceProperties,
-    /// DrawProperties representation.
+    /// Additional draw-pass behavior.
     DrawProperties,
-    /// ClipProperties representation.
+    /// Additional playback-clip behavior.
     ClipProperties,
 }
-/// Vocabulary of a rejected payload, without retaining the payload itself.
+/// The vocabulary or structural form of a rejected payload, without retaining its data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PayloadVocabulary {
+pub enum PayloadForm {
     /// A single material assignment.
     SingleAppearance,
     /// Draw-based material alternatives.
@@ -70,61 +74,61 @@ pub enum PayloadVocabulary {
     ExplicitBinding,
     /// Portable simulation bodies and constraints.
     PortablePhysics,
-    /// Warcraft III representation.
+    /// A Warcraft III declaration.
     Mdlx,
-    /// World of Warcraft model representation.
+    /// A World of Warcraft animated-model declaration.
     M2,
-    /// World of Warcraft world representation.
+    /// A World of Warcraft static-world declaration.
     Wmo,
-    /// Universal representation.
+    /// A general declaration not restricted to one built-in profile.
     Universal,
-    /// None representation.
+    /// No authored payload.
     None,
 }
 /// An authored resource-address form, independent of its display spelling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResourceAddressKind {
-    /// Root representation.
+    /// The resource currently being imported.
     Root,
-    /// Relative representation.
+    /// A file addressed relative to its importing resource.
     Relative,
-    /// Path representation.
+    /// An explicitly authored native path.
     Path,
-    /// File-data-ID representation.
+    /// A numeric file-data identity.
     FileDataId,
-    /// Replaceable representation.
+    /// A caller-supplied replaceable texture role.
     Replaceable,
-    /// EmbeddedImage representation.
+    /// An image stored inside the model resource.
     EmbeddedImage,
-    /// Named representation.
+    /// An application-defined named resource address.
     Named,
 }
 /// An attached behavior family, independent of its potentially borrowed definition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeatureFamily {
-    /// Light representation.
+    /// An attached light definition.
     Light,
-    /// Camera representation.
+    /// An attached camera definition.
     Camera,
-    /// Attachment representation.
+    /// A socket or child-model attachment.
     Attachment,
-    /// Particle representation.
+    /// A particle-emitter definition.
     Particle,
-    /// Ribbon representation.
+    /// A ribbon-emitter definition.
     Ribbon,
-    /// GeometryAnimation representation.
+    /// Geometry color and opacity animation.
     GeometryAnimation,
-    /// CollisionShape representation.
+    /// A model collision shape.
     CollisionShape,
-    /// ParticleProgram representation.
+    /// An authored particle program.
     ParticleProgram,
-    /// FaceActor representation.
+    /// An authored face actor.
     FaceActor,
-    /// LightProgram representation.
+    /// An authored light or flicker program.
     LightProgram,
-    /// Particle2 representation.
+    /// A second-generation Warcraft III particle emitter.
     Particle2,
-    /// PointLight representation.
+    /// A region-local point-light definition.
     PointLight,
 }
 /// A timeline or skeleton collection unavailable in a static world model.
@@ -143,6 +147,20 @@ pub enum StaticModelComponent {
     /// Authored event occurrences.
     Events,
 }
+/// The attribute constraint preventing exact profile projection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttributeProjectionRule {
+    /// The target has no corresponding attribute semantic.
+    Semantic,
+    /// The attribute is authored in an unavailable correspondence domain.
+    Domain,
+    /// The target requires a different encoded value type.
+    ValueType,
+    /// Another attribute already occupies this authored slot.
+    Duplicate,
+    /// An explicitly selected attribute may not be empty.
+    Nonempty,
+}
 /// A concrete authoring rule that cannot be projected exactly.
 #[derive(Clone, Debug)]
 pub enum ProfileViolation {
@@ -150,8 +168,8 @@ pub enum ProfileViolation {
     UnsupportedPayload {
         /// Independently projected owner payload category.
         owner: PayloadKind,
-        /// Observed value or representation.
-        actual: PayloadVocabulary,
+        /// Authored payload form that the target cannot retain.
+        actual: PayloadForm,
     },
     /// The target requires an authored payload that is absent.
     RequiredPayload {
@@ -162,7 +180,7 @@ pub enum ProfileViolation {
     UnsupportedResourceAddress {
         /// Independently projected owner payload category.
         owner: PayloadKind,
-        /// Observed value or representation.
+        /// Authored resource-address form.
         actual: ResourceAddressKind,
     },
     /// The feature family has no exact representation in the target.
@@ -170,33 +188,33 @@ pub enum ProfileViolation {
         /// Rejected attached behavior family.
         family: FeatureFamily,
     },
-    /// A scalar shader projection requires a fixed number of steps.
+    /// A single-step shader projection requires a fixed number of steps.
     MaterialStepCount {
-        /// Required value or correspondence count.
+        /// Number of shader steps required by the target projection.
         expected: usize,
-        /// Observed value or representation.
+        /// Number of authored shader steps.
         actual: usize,
     },
     /// A step belongs to another shader dialect.
     MaterialDialect {
-        /// Observed value or representation.
+        /// Vocabulary of the rejected shader step.
         actual: ProfileKind,
     },
     /// The target cannot retain an authored material declaration.
     MaterialDeclaration,
     /// The target requires display geometry.
     GeometryKind {
-        /// Observed value or representation.
+        /// Authored display or collision purpose.
         actual: GeometryKind,
     },
     /// The topology family is unavailable in the target.
     GeometryTopology {
-        /// Observed value or representation.
+        /// Rejected connectivity family.
         actual: TopologyKind,
     },
     /// The joint distribution interpretation is unavailable in the target.
     GeometryInfluences {
-        /// Observed value or representation.
+        /// Authored joint distribution interpretation.
         actual: InfluenceKind,
     },
     /// The target has no corresponding vertex stream.
@@ -206,6 +224,8 @@ pub enum ProfileViolation {
     },
     /// The target cannot retain the attribute representation.
     GeometryAttribute {
+        /// Specific correspondence or encoding rule that failed.
+        rule: AttributeProjectionRule,
         /// Owned meaning of the rejected attribute.
         semantic: AttributeSemantic<'static>,
         /// Correspondence domain of the rejected attribute.
@@ -215,16 +235,16 @@ pub enum ProfileViolation {
     },
     /// The number of additional topology sets exceeds the target limit.
     AdditionalConnectivity {
-        /// Upper bound or maximum supported count, when bounded.
+        /// Maximum number of additional topology sets retained by the target.
         maximum: usize,
-        /// Observed value or representation.
+        /// Number of authored additional topology sets.
         actual: usize,
     },
     /// Color slots are not contiguous from zero.
     ColorSlot {
-        /// Required value or correspondence count.
+        /// Next color slot required for a contiguous sequence from zero.
         expected: u32,
-        /// Observed value or representation.
+        /// Next authored color slot.
         actual: u32,
     },
     /// The camera projection has different field-of-view or application-role semantics.
@@ -266,7 +286,7 @@ pub enum ProfileViolation {
     },
     /// The target cannot retain this interpolation mode.
     Interpolation {
-        /// Observed value or representation.
+        /// Authored interpolation mode.
         actual: Interpolation,
     },
     /// The target image declaration has no transfer-function field.
@@ -307,16 +327,16 @@ pub enum ProfileViolation {
     },
     /// A world model does not contain exactly one world system.
     WorldSystemCount {
-        /// Required value or correspondence count.
+        /// Number of world-system collections required by one world model.
         expected: usize,
-        /// Observed value or representation.
+        /// Number of authored scene systems.
         actual: usize,
     },
     /// A world node has hierarchy or view-dependent constraints.
     AbsoluteNodeTransform,
     /// A region selection group has no native field.
     RegionSelectionGroup {
-        /// Observed value or representation.
+        /// Authored nonzero geometry selection-group value.
         actual: u32,
     },
     /// A globally active ambient volume is selected by a region.
@@ -333,13 +353,11 @@ pub enum ProfileViolation {
     RegionLightTransform,
     /// The radius differs from the axis-aligned box half diagonal.
     BoundsRadius {
-        /// Required value or correspondence count.
+        /// Radius derived from the authored box half diagonal.
         expected: f32,
-        /// Observed value or representation.
+        /// Authored sphere radius.
         actual: f32,
     },
-    /// A guild color component is nonfinite.
-    GuildPalette,
 }
 /// A target vocabulary and the exact rule that prevented lossless projection.
 #[derive(Clone, Debug)]
@@ -359,7 +377,7 @@ impl Display for ProfileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}: ", self.target)?;
         match &self.violation {
-            ProfileViolation::UnsupportedPayload { owner, actual } => write!(f, "{owner:?} payload in {actual:?} vocabulary cannot be retained"),
+            ProfileViolation::UnsupportedPayload { owner, actual } => write!(f, "{owner:?} payload in {actual:?} form cannot be retained"),
             ProfileViolation::RequiredPayload { owner } => write!(f, "{owner:?} payload is required"),
             ProfileViolation::UnsupportedResourceAddress { owner, actual } => write!(f, "{owner:?} cannot use {actual:?} addressing"),
             ProfileViolation::UnsupportedFeature { family } => write!(f, "{family:?} feature cannot be retained exactly"),
@@ -370,7 +388,7 @@ impl Display for ProfileError {
             ProfileViolation::GeometryTopology { actual } => write!(f, "cannot retain {actual:?} topology"),
             ProfileViolation::GeometryInfluences { actual } => write!(f, "cannot retain {actual:?} joint distributions"),
             ProfileViolation::GeometryStream { semantic } => write!(f, "cannot retain the {semantic:?} stream"),
-            ProfileViolation::GeometryAttribute { semantic, domain, values } => write!(f, "cannot retain {semantic:?} in {domain:?} with {values:?} values"),
+            ProfileViolation::GeometryAttribute { rule, semantic, domain, values } => write!(f, "cannot retain {semantic:?} in {domain:?} with {values:?} values: {rule:?}"),
             ProfileViolation::AdditionalConnectivity { maximum, actual } => write!(f, "at most {maximum} additional connectivity sets are supported, found {actual}"),
             ProfileViolation::ColorSlot { expected, actual } => write!(f, "expected contiguous color slot {expected}, found {actual}"),
             ProfileViolation::CameraProjection => f.write_str("camera projection has incompatible field-of-view or role semantics"),
@@ -402,7 +420,6 @@ impl Display for ProfileError {
             ProfileViolation::DoodadScale => f.write_str("world doodads require uniform scale"),
             ProfileViolation::RegionLightTransform => f.write_str("region lights require absolute translation without node rotation or scale"),
             ProfileViolation::BoundsRadius { expected, actual } => write!(f, "box half-diagonal radius is {expected}, found {actual}"),
-            ProfileViolation::GuildPalette => f.write_str("guild colours must be finite"),
         }
     }
 }

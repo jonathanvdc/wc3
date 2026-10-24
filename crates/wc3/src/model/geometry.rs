@@ -280,7 +280,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
     ) -> Result<ResolvedDraw<'view, P>, Error> {
         let subset = self.subset(draw.subset).ok_or_else(|| {
             Error::at(
-                Location::new().field("subset"),
+                Location::for_owner(draw.id()).field("subset"),
                 GeometryError::MissingSubset {
                     subset: draw.subset,
                 },
@@ -288,7 +288,9 @@ impl<'a, P: Profile> Mesh<'a, P> {
         })?;
         let PrimitiveRange::Primitives { first, count } = subset.selection.range else {
             return Err(Error::at(
-                Location::new().field("selection").field("range"),
+                Location::for_owner(draw.subset)
+                    .field("selection")
+                    .field("range"),
                 GeometryError::UnsupportedOperation {
                     operation: GeometryOperation::PrimitiveSelection,
                 },
@@ -296,10 +298,9 @@ impl<'a, P: Profile> Mesh<'a, P> {
         };
         if subset.selection.connectivity != self.subsets.primary() {
             return Err(Error::at(
-                Location::new()
+                Location::for_owner(draw.subset)
                     .field("selection")
-                    .field("connectivity")
-                    .with_owner(subset.selection.connectivity),
+                    .field("connectivity"),
                 GeometryError::UnsupportedOperation {
                     operation: GeometryOperation::PrimaryConnectivity,
                 },
@@ -320,19 +321,19 @@ impl<'a, P: Profile> Mesh<'a, P> {
     }
     /// Applies geometry edits atomically while checking mesh-owned selections.
     pub fn edited(&self, edit: GeometryEdit<'a>) -> Result<Self, Error> {
-        if edit.remap.is_some()
-            && self.subsets.iter().any(|(_, subset)| {
+        if edit.remap.is_some() {
+            if let Some((id, _)) = self.subsets.iter().find(|(_, subset)| {
                 subset.strip.is_some()
                     || subset.tangents.is_some()
                     || subset.vertex_window.is_some()
-            })
-        {
-            return Err(Error::at(
-                Location::new().field("subsets"),
-                GeometryError::UnsupportedOperation {
-                    operation: GeometryOperation::RemapSelectionBindings,
-                },
-            ));
+            }) {
+                return Err(Error::at(
+                    Location::for_owner(id),
+                    GeometryError::UnsupportedOperation {
+                        operation: GeometryOperation::RemapSelectionBindings,
+                    },
+                ));
+            }
         }
         let mut value = self.clone();
         value.geometry = value.geometry.edited(edit)?;

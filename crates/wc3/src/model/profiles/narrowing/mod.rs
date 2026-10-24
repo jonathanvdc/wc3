@@ -1,7 +1,7 @@
 //! Exact checked projections of complete owner payloads.
 use super::Profile;
 use crate::model::error::{
-    FeatureFamily, PayloadKind, PayloadVocabulary, ProfileError, ProfileKind, ProfileViolation,
+    FeatureFamily, PayloadForm, PayloadKind, ProfileError, ProfileKind, ProfileViolation,
 };
 use crate::model::PropertyValues;
 use crate::model::{
@@ -160,78 +160,78 @@ impl<P: Profile> Narrows<P> for P {
         Ok(value)
     }
 }
-fn incompatible(target: ProfileKind, owner: PayloadKind, actual: PayloadVocabulary) -> Error {
-    let violation = if actual == PayloadVocabulary::None {
+fn incompatible(target: ProfileKind, owner: PayloadKind, actual: PayloadForm) -> Error {
+    let violation = if actual == PayloadForm::None {
         ProfileViolation::RequiredPayload { owner }
     } else {
         ProfileViolation::UnsupportedPayload { owner, actual }
     };
     ProfileError::new(target, violation).into()
 }
-fn appearance(value: &UniversalAppearance<'_>) -> PayloadVocabulary {
+fn appearance(value: &UniversalAppearance<'_>) -> PayloadForm {
     match value {
-        UniversalAppearance::Single(_) => PayloadVocabulary::SingleAppearance,
-        UniversalAppearance::Draw(_) => PayloadVocabulary::DrawAppearance,
+        UniversalAppearance::Single(_) => PayloadForm::SingleAppearance,
+        UniversalAppearance::Draw(_) => PayloadForm::DrawAppearance,
     }
 }
-fn binding(value: &UniversalBinding<'_>) -> PayloadVocabulary {
+fn binding(value: &UniversalBinding<'_>) -> PayloadForm {
     match value {
-        UniversalBinding::Identity(_) => PayloadVocabulary::IdentityBinding,
-        UniversalBinding::Explicit(_) => PayloadVocabulary::ExplicitBinding,
+        UniversalBinding::Identity(_) => PayloadForm::IdentityBinding,
+        UniversalBinding::Explicit(_) => PayloadForm::ExplicitBinding,
     }
 }
-fn metadata(value: &ModelMetadata<'_>) -> PayloadVocabulary {
+fn metadata(value: &ModelMetadata<'_>) -> PayloadForm {
     match value {
-        ModelMetadata::Mdlx(_) => PayloadVocabulary::Mdlx,
-        ModelMetadata::M2(_) => PayloadVocabulary::M2,
-        ModelMetadata::Wmo(_) => PayloadVocabulary::Wmo,
+        ModelMetadata::Mdlx(_) => PayloadForm::Mdlx,
+        ModelMetadata::M2(_) => PayloadForm::M2,
+        ModelMetadata::Wmo(_) => PayloadForm::Wmo,
     }
 }
-fn event(value: &EventSource) -> PayloadVocabulary {
+fn event(value: &EventSource) -> PayloadForm {
     match value {
-        EventSource::Mdlx(_) => PayloadVocabulary::Mdlx,
-        EventSource::M2(_) => PayloadVocabulary::M2,
+        EventSource::Mdlx(_) => PayloadForm::Mdlx,
+        EventSource::M2(_) => PayloadForm::M2,
     }
 }
-fn system(value: &System<'_>) -> PayloadVocabulary {
+fn system(value: &System<'_>) -> PayloadForm {
     match value {
-        System::M2(_) => PayloadVocabulary::M2,
-        System::Wmo(_) => PayloadVocabulary::Wmo,
-        System::Physics(_) => PayloadVocabulary::PortablePhysics,
+        System::M2(_) => PayloadForm::M2,
+        System::Wmo(_) => PayloadForm::Wmo,
+        System::Physics(_) => PayloadForm::PortablePhysics,
     }
 }
-fn node(value: &Option<NodeProperties>) -> PayloadVocabulary {
+fn node(value: &Option<NodeProperties>) -> PayloadForm {
     match value {
-        None => PayloadVocabulary::None,
-        Some(NodeProperties::Mdlx(_)) => PayloadVocabulary::Mdlx,
-        Some(NodeProperties::M2(_)) => PayloadVocabulary::M2,
+        None => PayloadForm::None,
+        Some(NodeProperties::Mdlx(_)) => PayloadForm::Mdlx,
+        Some(NodeProperties::M2(_)) => PayloadForm::M2,
     }
 }
-fn mesh(value: &Option<MeshProperties>) -> PayloadVocabulary {
+fn mesh(value: &Option<MeshProperties>) -> PayloadForm {
     match value {
-        None => PayloadVocabulary::None,
-        Some(MeshProperties::Mdlx(_)) => PayloadVocabulary::Mdlx,
-        Some(MeshProperties::M2(_)) => PayloadVocabulary::M2,
+        None => PayloadForm::None,
+        Some(MeshProperties::Mdlx(_)) => PayloadForm::Mdlx,
+        Some(MeshProperties::M2(_)) => PayloadForm::M2,
     }
 }
-fn instance(value: &Option<InstanceProperties<'_>>) -> PayloadVocabulary {
+fn instance(value: &Option<InstanceProperties<'_>>) -> PayloadForm {
     match value {
-        None => PayloadVocabulary::None,
-        Some(InstanceProperties::Wmo(_)) => PayloadVocabulary::Wmo,
+        None => PayloadForm::None,
+        Some(InstanceProperties::Wmo(_)) => PayloadForm::Wmo,
     }
 }
-fn draw(value: &Option<DrawProperties>) -> PayloadVocabulary {
+fn draw(value: &Option<DrawProperties>) -> PayloadForm {
     match value {
-        None => PayloadVocabulary::None,
-        Some(DrawProperties::M2(_)) => PayloadVocabulary::M2,
-        Some(DrawProperties::Wmo(_)) => PayloadVocabulary::Wmo,
+        None => PayloadForm::None,
+        Some(DrawProperties::M2(_)) => PayloadForm::M2,
+        Some(DrawProperties::Wmo(_)) => PayloadForm::Wmo,
     }
 }
-fn clip(value: &Option<ClipProperties>) -> PayloadVocabulary {
+fn clip(value: &Option<ClipProperties>) -> PayloadForm {
     match value {
-        None => PayloadVocabulary::None,
-        Some(ClipProperties::Mdlx(_)) => PayloadVocabulary::Mdlx,
-        Some(ClipProperties::M2(_)) => PayloadVocabulary::M2,
+        None => PayloadForm::None,
+        Some(ClipProperties::Mdlx(_)) => PayloadForm::Mdlx,
+        Some(ClipProperties::M2(_)) => PayloadForm::M2,
     }
 }
 fn feature_family(value: &NodeFeature<'_>) -> FeatureFamily {
