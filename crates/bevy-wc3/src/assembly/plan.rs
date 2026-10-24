@@ -1,5 +1,7 @@
-use super::{Models, PendingAssembly, PendingPart, Source};
-use crate::{texture_requests, DrawSelection, ModelError};
+use super::{Models, PendingAssembly, PendingPart, SelectionError, Source};
+use crate::{
+    texture_requests, DrawSelection, ModelError, PreparationContext, PreparationOperation,
+};
 use std::collections::{HashMap, HashSet};
 use wc3::model::{MaterialSelection, Model};
 
@@ -10,52 +12,48 @@ fn source_model<'view, 'data>(
     models
         .get(&source.model)
         .copied()
-        .ok_or_else(|| ModelError::new(format!("missing assembly model {:?}", source.model)))
+        .ok_or_else(|| ModelError::from_source(SelectionError::MissingModel))
 }
 fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError> {
-    if matches!(source.material, MaterialSelection::Draw(look) if model.look(look).is_none()) {
-        return Err(ModelError::new(
-            "assembly selection references an absent or foreign material look",
-        ));
+    if let MaterialSelection::Draw(look) = source.material {
+        if model.look(look).is_none() {
+            return Err(ModelError::from_source(SelectionError::MaterialLook(look)));
+        }
     }
     let draws: HashSet<_> = model
         .instances()
         .iter()
         .flat_map(|(_, instance)| instance.draws.iter().map(|d| d.id()))
         .collect();
-    if source
+    if let Some(id) = source
         .draws
         .draws
         .as_ref()
-        .is_some_and(|selected| !selected.is_subset(&draws))
+        .and_then(|selected| selected.difference(&draws).next())
     {
-        return Err(ModelError::new(
-            "assembly selection references an absent draw",
-        ));
+        return Err(ModelError::from_source(SelectionError::Draw(*id)));
     }
     for &id in &source.draws.hidden_instances {
         if model.instance(id).is_none() {
-            return Err(ModelError::new(
-                "assembly selection references an absent instance",
-            ));
+            return Err(ModelError::from_source(SelectionError::Instance(id)));
         }
     }
     for (id, replacement) in &source.images {
         if model.image_resource(*id).is_none() {
-            return Err(ModelError::new(
-                "assembly replacement references an absent image resource",
-            ));
+            return Err(ModelError::from_source(SelectionError::ImageResource(*id)));
         }
-        replacement.validate()?;
+        replacement
+            .validate()
+            .map_err(|error| error.with_context(PreparationContext::ImageDependency(*id)))?;
     }
     let requests = texture_requests(model);
     for (input, replacement) in &source.inputs {
         if !requests.iter().any(|request| request.input == Some(*input)) {
-            return Err(ModelError::new(
-                "assembly replacement references an absent image input",
-            ));
+            return Err(ModelError::from_source(SelectionError::ImageInput(*input)));
         }
-        replacement.validate()?;
+        replacement
+            .validate()
+            .map_err(|error| error.with_context(PreparationContext::ImageInput(*input)))?;
     }
     Ok(())
 }
@@ -86,29 +84,41 @@ fn union(a: &DrawSelection, b: &DrawSelection, model: &Model<'_>) -> DrawSelecti
             .collect(),
     }
 }
+pub(super) struct PlannedPart<B> {
+    pub(super) index: usize,
+    pub(super) part: PendingPart<B>,
+}
+
 pub(super) fn plan<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
     models: &Models<'_, '_>,
     is_skinned: impl Fn(&B) -> bool,
-) -> Result<Vec<PendingPart<B>>, ModelError> {
-    validate_source(&assembly.root, source_model(&assembly.root, models)?)?;
+) -> Result<Vec<PlannedPart<B>>, ModelError> {
+    let validate_root = |error: ModelError| {
+        error
+            .with_context(PreparationContext::Operation(
+                PreparationOperation::Validate,
+            ))
+            .with_context(PreparationContext::Model(assembly.root.model.clone()))
+    };
+    let root = source_model(&assembly.root, models).map_err(validate_root)?;
+    validate_source(&assembly.root, root).map_err(validate_root)?;
     // Validate every original request before a union can subsume it.
-    for part in &assembly.parts {
-        let model = source_model(&part.source, models)?;
-        validate_source(&part.source, model)?;
-        for (host, child) in &part.clips {
-            if source_model(&assembly.root, models)?.clip(*host).is_none()
-                || model.clip(*child).is_none()
-            {
-                return Err(ModelError::new(
-                    "assembly clip mapping references an absent clip",
-                ));
+    for (index, part) in assembly.parts.iter().enumerate() {
+        let context = |error: ModelError| part_error(error, index, &part.source);
+        let model = source_model(&part.source, models).map_err(context)?;
+        validate_source(&part.source, model).map_err(context)?;
+        for (&host, &child) in &part.clips {
+            if root.clip(host).is_none() || model.clip(child).is_none() {
+                return Err(context(ModelError::from_source(
+                    SelectionError::ClipMapping { host, child },
+                )));
             }
         }
     }
-    let mut output: Vec<PendingPart<B>> = Vec::with_capacity(assembly.parts.len());
+    let mut output: Vec<PlannedPart<B>> = Vec::with_capacity(assembly.parts.len());
     let mut shared = HashMap::new();
-    for part in &assembly.parts {
+    for (original_index, part) in assembly.parts.iter().enumerate() {
         let mut part = part.clone();
         if part.source.material == MaterialSelection::Default {
             part.source.material = source_model(&part.source, models)?
@@ -116,11 +126,16 @@ pub(super) fn plan<B: Clone + PartialEq>(
                 .map_or(MaterialSelection::Default, MaterialSelection::Draw);
         }
         if !is_skinned(&part.binding) {
-            output.push(part);
+            output.push(PlannedPart {
+                index: original_index,
+                part,
+            });
             continue;
         }
         if let Some(&index) = shared.get(&part.source.model) {
-            let existing: &mut PendingPart<B> = &mut output[index];
+            let existing: &mut PlannedPart<B> = &mut output[index];
+            let previous_index = existing.index;
+            let existing = &mut existing.part;
             let conflict = if existing.binding != part.binding {
                 Some("skeleton bindings")
             } else if existing.clips != part.clips {
@@ -135,10 +150,9 @@ pub(super) fn plan<B: Clone + PartialEq>(
                 None
             };
             if let Some(conflict) = conflict {
-                return Err(ModelError::new(format!(
-                    "shared assembly resource {:?} has incompatible {conflict}",
-                    part.source.model
-                )));
+                return Err(part_error(ModelError::new(format!(
+                    "shared assembly resource has incompatible {conflict} with part {previous_index}",
+                )), original_index, &part.source));
             }
             existing.source.draws = union(
                 &existing.source.draws,
@@ -147,8 +161,22 @@ pub(super) fn plan<B: Clone + PartialEq>(
             );
         } else {
             shared.insert(part.source.model.clone(), output.len());
-            output.push(part);
+            output.push(PlannedPart {
+                index: original_index,
+                part,
+            });
         }
     }
     Ok(output)
+}
+
+fn part_error(error: ModelError, index: usize, source: &Source) -> ModelError {
+    error
+        .with_context(PreparationContext::Operation(
+            PreparationOperation::Validate,
+        ))
+        .with_context(PreparationContext::Part {
+            index,
+            model: source.model.clone(),
+        })
 }

@@ -6,7 +6,9 @@ use super::{
 };
 use crate::mesh_interner::MeshInterner;
 use crate::model_compilation::validate_dependencies;
-use crate::{CompiledModel, ModelError, ModelPart, PartBinding};
+use crate::{
+    CompiledModel, ModelError, ModelPart, PartBinding, PreparationContext, PreparationOperation,
+};
 use std::collections::{hash_map::Entry, HashMap};
 use std::iter::once;
 use wc3::model::{ImageResource, Model, ResourceLocator};
@@ -139,11 +141,30 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
 ) -> Result<CompiledModel, ModelError> {
     let parts = plan(assembly, models, is_skinned)?;
     let mut dependencies = HashMap::new();
-    for source in once(&assembly.root).chain(assembly.parts.iter().map(|part| &part.source)) {
+    for (index, source) in once((None, &assembly.root)).chain(
+        assembly
+            .parts
+            .iter()
+            .enumerate()
+            .map(|(index, part)| (Some(index), &part.source)),
+    ) {
         if let Entry::Vacant(entry) = dependencies.entry(source.model.clone()) {
             let model = models[&source.model];
-            let prepared = resolve_dependencies(&source.model, model)?;
-            validate_dependencies(model, &prepared.child_models, &prepared.particle_effects)?;
+            let context = |error: ModelError| {
+                let error = error.with_context(PreparationContext::Operation(
+                    PreparationOperation::Dependencies,
+                ));
+                match index {
+                    Some(index) => error.with_context(PreparationContext::Part {
+                        index,
+                        model: source.model.clone(),
+                    }),
+                    None => error.with_context(PreparationContext::Model(source.model.clone())),
+                }
+            };
+            let prepared = resolve_dependencies(&source.model, model).map_err(context)?;
+            validate_dependencies(model, &prepared.child_models, &prepared.particle_effects)
+                .map_err(context)?;
             entry.insert(prepared);
         }
     }
@@ -156,16 +177,27 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
         handles: Vec::new(),
     };
     let mut geometry = MeshInterner::default();
-    let compiled_root = compiler.compile(
-        root,
-        &assembly.root,
-        &dependencies[&assembly.root.model],
-        &mut geometry,
-    )?;
+    let compiled_root = compiler
+        .compile(
+            root,
+            &assembly.root,
+            &dependencies[&assembly.root.model],
+            &mut geometry,
+        )
+        .map_err(|error| {
+            error.with_context(PreparationContext::Model(assembly.root.model.clone()))
+        })?;
     let mut compiled_parts = Vec::with_capacity(parts.len());
     let mut bindings = Vec::with_capacity(parts.len());
     let mut sources = Vec::new();
-    for part in &parts {
+    for planned in &parts {
+        let part = &planned.part;
+        let context = |error: ModelError| {
+            error.with_context(PreparationContext::Part {
+                index: planned.index,
+                model: part.source.model.clone(),
+            })
+        };
         let model = models[&part.source.model];
         let compiled = if let Some(index) = sources
             .iter()
@@ -173,22 +205,41 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
         {
             CompiledModel::clone(&compiled_parts[index])
         } else {
-            compiler.compile(
-                model,
-                &part.source,
-                &dependencies[&part.source.model],
-                &mut geometry,
-            )?
+            compiler
+                .compile(
+                    model,
+                    &part.source,
+                    &dependencies[&part.source.model],
+                    &mut geometry,
+                )
+                .map_err(context)?
         };
         sources.push(&part.source);
-        bindings.push(resolve_binding(root, model, &compiled, &part.binding)?);
+        bindings.push(
+            resolve_binding(root, model, &compiled, &part.binding).map_err(|error| {
+                context(
+                    error
+                        .with_context(PreparationContext::Operation(PreparationOperation::Compose)),
+                )
+            })?,
+        );
         compiled_parts.push(compiled);
     }
-    compiled_root.compose(compiled_parts.iter().zip(bindings).zip(&parts).map(
-        |((model, binding), part)| ModelPart {
-            model,
-            binding,
-            clips: part.clips.iter().map(|(&a, &b)| (a, b)).collect(),
-        },
-    ))
+    compiled_root
+        .compose(
+            compiled_parts
+                .iter()
+                .zip(bindings)
+                .zip(&parts)
+                .map(|((model, binding), part)| ModelPart {
+                    model,
+                    binding,
+                    clips: part.part.clips.iter().map(|(&a, &b)| (a, b)).collect(),
+                }),
+        )
+        .map_err(|error| {
+            error
+                .with_context(PreparationContext::Operation(PreparationOperation::Compose))
+                .with_context(PreparationContext::Model(assembly.root.model.clone()))
+        })
 }

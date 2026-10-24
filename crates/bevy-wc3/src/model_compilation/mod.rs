@@ -25,7 +25,8 @@ use crate::physics::PhysicsDefinition;
 use crate::textures::TextureImages;
 use crate::world::WorldRuntime;
 use crate::{
-    CompiledModel, ModelError, ModelMaterial, RenderDiagnostic, TextureInput, TextureRequest,
+    CompiledModel, ModelError, ModelMaterial, PreparationContext, PreparationOperation,
+    RenderDiagnostic, TextureInput, TextureRequest,
 };
 use bevy::asset::uuid::Uuid;
 use bevy::prelude::*;
@@ -85,7 +86,9 @@ pub fn compile_model_with_options(
     options: CompileOptions,
     resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
 ) -> Result<CompiledModel, ModelError> {
-    compile_with_geometry(model, options, resolve_image, &mut MeshInterner::default())
+    compile_with_geometry(model, options, resolve_image, &mut MeshInterner::default()).map_err(
+        |error| error.with_context(PreparationContext::Operation(PreparationOperation::Compile)),
+    )
 }
 
 /// Share fully compiled geometry within one preparation operation.
@@ -95,7 +98,11 @@ pub(crate) fn compile_with_geometry(
     mut resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
     mesh_interner: &mut MeshInterner,
 ) -> Result<CompiledModel, ModelError> {
-    model.validate().map_err(ModelError::from_source)?;
+    model.validate().map_err(|error| {
+        ModelError::from_source(error).with_context(PreparationContext::Operation(
+            PreparationOperation::Validate,
+        ))
+    })?;
     validate_dependencies(model, &options.child_models, &options.particle_effects)?;
     let targets = AnimationTargets::new(model);
     let node_map: HashMap<_, _> = model
@@ -104,7 +111,11 @@ pub(crate) fn compile_with_geometry(
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
-    let layout = model.prepare_pose().map_err(ModelError::from_source)?;
+    let layout = model.prepare_pose().map_err(|error| {
+        ModelError::from_source(error).with_context(PreparationContext::Operation(
+            PreparationOperation::Validate,
+        ))
+    })?;
     let (nodes, order) = layout.into_parts();
     let mut diagnostics = Vec::new();
     for (id, clip) in model.clips() {
@@ -171,7 +182,12 @@ pub(crate) fn compile_with_geometry(
         &materials,
         mesh_interner,
         &mut diagnostics,
-    )?;
+    )
+    .map_err(|error| {
+        error.with_context(PreparationContext::Operation(
+            PreparationOperation::Geometry,
+        ))
+    })?;
     let particles = Arc::new(RuntimeParticles::compile(
         model,
         &node_map,

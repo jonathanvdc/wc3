@@ -6,7 +6,8 @@ use crate::mesh_interner::MeshInterner;
 use crate::model_compilation::compile_with_geometry;
 use crate::textures::ImageKey;
 use crate::{
-    texture_requests, CompileOptions, CompiledModel, ModelError, TextureColorSpace, TextureRequest,
+    texture_requests, CompileOptions, CompiledModel, ModelError, PreparationContext,
+    PreparationOperation, TextureColorSpace, TextureRequest,
 };
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::{Handle, Image};
@@ -22,8 +23,12 @@ pub(super) struct ImageCompiler<'a, F> {
 impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCompiler<'_, F> {
     fn decode(&mut self, resource: &ImageResource<'static>) -> Result<RgbaImage, ModelError> {
         if !self.decoded.contains_key(resource) {
-            self.decoded
-                .insert(resource.clone(), (self.resolve)(resource)?);
+            self.decoded.insert(
+                resource.clone(),
+                (self.resolve)(resource).map_err(|error| {
+                    error.with_context(PreparationContext::Image(resource.clone()))
+                })?,
+            );
         }
         Ok(self.decoded[resource].clone())
     }
@@ -51,7 +56,10 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                         blend: layer.blend,
                     })
                     .collect();
-                compose_atlas(*atlas, &layers).map_err(ModelError::from_source)
+                compose_atlas(*atlas, &layers).map_err(|error| {
+                    ModelError::from_source(error)
+                        .with_context(PreparationContext::Operation(PreparationOperation::Atlas))
+                })
             }
         }
     }
@@ -104,7 +112,15 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                     Ok(pixels) => pixels,
                     Err(error) => {
                         if failure.is_none() {
-                            failure = Some(error);
+                            let error = error.with_context(PreparationContext::ImageDependency(
+                                request.texture.resource,
+                            ));
+                            failure = Some(match request.input {
+                                Some(input) => {
+                                    error.with_context(PreparationContext::ImageInput(input))
+                                }
+                                None => error,
+                            });
                         }
                         return None;
                     }
@@ -119,7 +135,10 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                 Some(handle)
             },
             geometry,
-        )?;
+        )
+        .map_err(|error| {
+            error.with_context(PreparationContext::Operation(PreparationOperation::Compile))
+        })?;
         if let Some(error) = failure {
             return Err(error);
         }
