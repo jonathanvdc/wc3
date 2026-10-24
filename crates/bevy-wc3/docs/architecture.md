@@ -14,11 +14,21 @@ Loading, compilation, preparation, and spawning have separate ownership boundari
 | --- | --- | --- |
 | Load | Resolve native models, required companions, and image variants into a `ModelAsset`. | `assets/model.rs`, `textures.rs` |
 | Compile | Build owned geometry, animation, materials, effects, and scene definitions. | `model_compilation/`, `geometry.rs`, `material/compile.rs` |
-| Prepare | Insert shared meshes and inverse binds into Bevy asset stores. | `compiled.rs` |
+| Prepare | Insert shared meshes and inverse binds into Bevy asset stores. | `compiled.rs`, `compiled/prepared_geometry.rs` |
 | Spawn | Populate application roots and maintain independent live state. | `instances.rs`, `runtime/` |
 
 Source bytes and the semantic graph can be released after compilation. Complete
 equal meshes and bind palettes share storage; constant materials share handles.
+Asset-backed instances also share prepared mesh and inverse-bind assets across
+different `ModelAsset` identities in one World. The geometry lookup keeps only
+candidate asset IDs, checks exact content in the current asset stores, and
+acquires a strong handle from those stores on a hit. Its metadata owns no buffers
+or strong handles; prepared models retain their ordinary asset ownership.
+Per-model draws, identities, materials, animation and live state remain
+independent. Standalone `CompiledModel::prepare` retains its
+local preparation behavior; manual clients can reuse a `PreparedGeometryCache`
+with `CompiledModel::prepare_with_cache` across calls.
+
 Animated materials remain private to an instance and only change their Bevy assets
 when sampled values change. On capable devices, `ModelMaterial` uses Bevy's
 bindless material allocator for combined extension data and image bindings.

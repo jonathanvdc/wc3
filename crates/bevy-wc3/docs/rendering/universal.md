@@ -20,6 +20,32 @@ surfaces keep private material assets and only mark them modified when their
 sampled appearance changes. The [architecture guide](../architecture.md) describes
 the implementation and scheduling boundaries.
 
+Asset-backed instances populated by the plugin reuse complete equal mesh and
+inverse-bind assets across different `ModelAsset` values in the same World.
+Sharing checks exact attributes, indices and mesh metadata; it does not combine
+draws, materials, source IDs or animation state. This saves repeated asset storage
+and uploads after compilation; each source still performs its own geometry
+projection. Standalone `CompiledModel::prepare` creates fresh assets per call,
+sharing repeated geometry within that preparation.
+
+For the same reuse in a manual pipeline, keep a `PreparedGeometryCache` and pass
+it to each `CompiledModel::prepare_with_cache` call. The cache stores candidate
+IDs rather than strong handles or mesh buffers; the returned prepared models
+own their assets. Dropping the cache leaves those prepared models usable.
+The model plugin initializes this cache as a resource; manual systems can borrow
+the same resource with `ResMut<PreparedGeometryCache>`.
+
+```rust
+use bevy_wc3::PreparedGeometryCache;
+
+let mut geometry = PreparedGeometryCache::default();
+let prepared = compiled.prepare_with_cache(&mut meshes, &mut bindposes, &mut geometry);
+```
+
+Treat renderer-generated meshes as shared data. Editing a shared mesh through
+`Assets<Mesh>` affects every instance using its handle. Clone the mesh into an
+application-owned asset before changing its vertex data independently.
+
 ## Geometry and coordinates
 
 The compiler projects selected draw ranges and vertex, face, corner, and whole-mesh
@@ -69,12 +95,12 @@ only be selected by a curve.
 ## Native loading
 
 `ModelLoader` drives the shared
-[`wc3::model::io::asset::Reader`](../../../wc3/docs/loading.md), imports its native
-asset, and compiles the resulting Universal graph. Native format dispatch,
-companion traversal, and bundle validation belong to that renderer-independent
-reader. `ModelLoadError` preserves typed native causes and root context. Missing
-companions carry their request and candidate paths; failed companion reads carry
-the request, failing path, and original source error.
+[`wc3::model::io::asset::Reader`](../../../wc3/docs/loading.md) to load a checked,
+owned Universal graph and its conversion report, then compiles the graph. Native
+format dispatch, companion traversal, and bundle validation belong to that
+renderer-independent reader. `ModelLoadError` preserves typed native causes and
+root context. Missing companions carry their request and candidate paths; failed
+companion reads carry the request, failing path, and original source error.
 `ResourceResolver` maps paths, namespaced resources, and file-data IDs into
 registered Bevy asset sources. The default resolver tries the literal filename,
 then BLP, DDS, PNG, and TGA candidates beside the model and under its asset root.
