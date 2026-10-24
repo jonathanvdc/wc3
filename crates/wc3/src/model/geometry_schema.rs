@@ -751,7 +751,7 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
             };
         }
         match &attribute.values {
-            AttributeValues::Scalar(v) => check_finite(v.iter().map(|v| [v]), || {
+            AttributeValues::Scalar(v) => check_finite_values(v.iter(), || {
                 Location::new().attribute(attribute.semantic.clone(), attribute.domain)
             })?,
             AttributeValues::Vector2(v) => finite!(v),
@@ -795,16 +795,25 @@ pub(crate) fn check_finite<const N: usize>(
     location: impl Fn() -> Location,
 ) -> Result<(), Error> {
     for (index, value) in values.into_iter().enumerate() {
-        if let Some((component, value)) = value
-            .into_iter()
-            .enumerate()
-            .find(|(_, value)| !value.is_finite())
-        {
-            return Err(Error::at(
-                location().index(index).index(component),
-                GeometryError::NonFinite { value },
-            ));
-        }
+        check_finite_values(value, || location().index(index))?;
+    }
+    Ok(())
+}
+
+/// Checks a scalar sequence with one actual index level, such as vector components.
+pub(crate) fn check_finite_values(
+    values: impl IntoIterator<Item = f32>,
+    location: impl FnOnce() -> Location,
+) -> Result<(), Error> {
+    if let Some((index, value)) = values
+        .into_iter()
+        .enumerate()
+        .find(|(_, value)| !value.is_finite())
+    {
+        return Err(Error::at(
+            location().index(index),
+            GeometryError::NonFinite { value },
+        ));
     }
     Ok(())
 }

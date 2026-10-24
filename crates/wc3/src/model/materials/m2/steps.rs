@@ -2,7 +2,7 @@
 use super::{GuildPalette, ModelRasterization, ShaderInput, TextureUnit};
 use crate::model::common::IntoOwned;
 use crate::model::error::Location;
-use crate::model::geometry_schema::check_finite;
+use crate::model::geometry_schema::check_finite_values;
 use crate::model::materials::state::PassState;
 use crate::model::profiles::SurfacePayload;
 use crate::model::values::model::{BatchFlags, BlendMode};
@@ -911,7 +911,7 @@ impl<'a> MaterialStep<'a> {
                 ("emblem", palette.emblem),
                 ("border", palette.border),
             ] {
-                check_finite([value.to_array()], || {
+                check_finite_values(value.to_array(), || {
                     Location::new().field(field).field(name)
                 })?;
             }

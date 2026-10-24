@@ -163,3 +163,92 @@ fn empty_explicit_lightmap_retains_its_projection_rule() {
         })
     ));
 }
+
+#[test]
+fn world_single_vectors_have_only_their_actual_component_index() {
+    use wc3::model::error::{GeometryError, Location};
+    use wc3::model::profiles::wmo::{Fog, Portal, Volume, WorldSystem};
+    use wc3::model::{Vec2, Vec4};
+    let world = WorldSystem {
+        portals: vec![Portal {
+            plane: Vec4::new(0., 0., 1., f32::NAN),
+            ..Portal::default()
+        }],
+        ..WorldSystem::default()
+    };
+    let error = world.validate().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Geometry(GeometryError::NonFinite { value }) if value.is_nan())
+    );
+    assert_eq!(
+        error.location(),
+        &Location::new()
+            .field("portals")
+            .index(0)
+            .field("plane")
+            .index(3)
+    );
+    for (field, volume) in [
+        (
+            "center",
+            Volume::Sphere {
+                center: Vec3::new(0., f32::NAN, 0.),
+                radii: Vec2::ONE,
+            },
+        ),
+        (
+            "radii",
+            Volume::Sphere {
+                center: Vec3::ZERO,
+                radii: Vec2::new(0., f32::INFINITY),
+            },
+        ),
+    ] {
+        let world = WorldSystem {
+            fogs: vec![Fog {
+                volume,
+                above_water: Default::default(),
+                underwater: Default::default(),
+                doodad_set: None,
+                infinite: false,
+                controls: Default::default(),
+            }],
+            ..WorldSystem::default()
+        };
+        let error = world.validate().unwrap_err();
+        assert!(
+            matches!(error.kind(), ErrorKind::Geometry(GeometryError::NonFinite { value }) if !value.is_finite())
+        );
+        assert_eq!(
+            error.location(),
+            &Location::new()
+                .field("fogs")
+                .index(0)
+                .field("volume")
+                .field(field)
+                .index(1)
+        );
+    }
+}
+
+#[test]
+fn guild_palette_failures_identify_the_actual_rgb_component() {
+    use wc3::model::error::Location;
+    use wc3::model::profiles::m2::{GuildMaterialStep, MaterialStep, UnresolvedMaterialStep};
+    use wc3::model::{Construct, PropertyValues};
+    let mut values = PropertyValues::default();
+    let mut guild = GuildMaterialStep::construct(&mut values);
+    guild.palette.background.y = f32::NAN;
+    let mut unresolved = UnresolvedMaterialStep::construct(&mut values);
+    unresolved.guild_palette.background.y = f32::INFINITY;
+    for (field, step) in [
+        ("palette", MaterialStep::Guild(Box::new(guild))),
+        ("guild_palette", MaterialStep::Unresolved(unresolved)),
+    ] {
+        let error = step.validate().unwrap_err();
+        assert_eq!(
+            error.location(),
+            &Location::new().field(field).field("background").index(1)
+        );
+    }
+}

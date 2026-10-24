@@ -3,7 +3,7 @@ use super::{Volume, WorldSystem};
 use crate::model::error::{
     GeometryError, Location, ProfileError, ProfileKind, ProfileViolation, StaticModelComponent,
 };
-use crate::model::geometry_schema::check_finite;
+use crate::model::geometry_schema::{check_finite, check_finite_values};
 use crate::model::Model;
 use crate::model::TimeSource;
 use crate::model::{Bounds, Error};
@@ -42,7 +42,7 @@ impl WorldSystem<'_> {
                     .index(index)
                     .field("vertices")
             })?;
-            check_finite([portal.plane.to_array()], || {
+            check_finite_values(portal.plane.to_array(), || {
                 Location::new().field("portals").index(index).field("plane")
             })?;
         }
@@ -93,8 +93,8 @@ impl WorldSystem<'_> {
 fn volume(value: &Volume, location: impl Fn() -> Location) -> Result<(), Error> {
     match value {
         Volume::Sphere { center, radii } => {
-            check_finite([center.to_array()], || location().field("center"))?;
-            check_finite([radii.to_array()], || location().field("radii"))?;
+            check_finite_values(center.to_array(), || location().field("center"))?;
+            check_finite_values(radii.to_array(), || location().field("radii"))?;
             if radii[0] < 0. {
                 return Err(Error::at(
                     location().field("radii").index(0),

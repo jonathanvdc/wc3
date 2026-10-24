@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use wc3::model::common::IntoPackedArray;
-use wc3::model::error::{ErrorKind, GeometryError, PolygonBoundaryRule, Segment};
+use wc3::model::error::{ErrorKind, GeometryError, Location, PolygonBoundaryRule, Segment};
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, ConnectivitySets,
     DeformableGeometry, GeometryAttributes, GeometryData, GeometrySchema, Mat4, Topology, Vec3,
@@ -151,4 +151,29 @@ fn attribute_type_and_correspondence_constraints_are_distinct() {
             actual: AttributeDomain::Mesh
         })
     ));
+}
+
+#[test]
+fn scalar_attribute_failure_has_an_element_index_without_a_component_index() {
+    let mut geometry =
+        GeometryData::triangles(vec![Vec3::ZERO, Vec3::X, Vec3::Y], vec![[0, 1, 2]]).unwrap();
+    let semantic = AttributeSemantic::Named("temperature".into());
+    geometry
+        .attributes
+        .insert(Attribute {
+            semantic: semantic.clone(),
+            domain: AttributeDomain::Vertex,
+            values: AttributeValues::Scalar(vec![1., f32::NAN, 2.].into_packed_array()),
+        })
+        .unwrap();
+    let error = geometry.validate().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Geometry(GeometryError::NonFinite { value }) if value.is_nan())
+    );
+    assert_eq!(
+        error.location(),
+        &Location::new()
+            .attribute(semantic, AttributeDomain::Vertex)
+            .index(1)
+    );
 }
