@@ -233,7 +233,7 @@ fn milliseconds(seconds: f64, context: &mut Context, path: &Location) -> Result<
     let difference = (value - rounded).abs();
     if difference > f64::EPSILON * value.abs().max(1.) * 8. {
         context.approximate(
-            path.clone(),
+            || path.clone(),
             (difference / 1000.) as f32,
             "time rounded to Warcraft III milliseconds",
         )?;
@@ -271,7 +271,7 @@ pub(super) fn unsigned_frame(
     let difference = (value - rounded).abs();
     if difference > f64::EPSILON * value.abs().max(1.) * 8. {
         context.approximate(
-            path.clone(),
+            || path.clone(),
             (difference / 1000.) as f32,
             "time rounded to Warcraft III milliseconds",
         )?;

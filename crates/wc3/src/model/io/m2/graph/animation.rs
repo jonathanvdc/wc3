@@ -383,7 +383,7 @@ pub(super) fn time_ms(time: Time, context: &mut Context) -> Result<u32, Error> {
     }
     let rounded = value.round();
     context.approximate(
-        Location::new().field("m2").field("animation").field("time"),
+        || Location::new().field("m2").field("animation").field("time"),
         ((rounded - value) / 1000.).abs() as f32,
         "time quantized to milliseconds",
     )?;
@@ -506,7 +506,7 @@ pub(super) fn fixed_alpha(value: f32, context: &mut Context) -> Result<i16, Erro
     }
     let raw = (value * 32767.).round() as i16;
     context.approximate(
-        Location::new().field("m2").field("alpha"),
+        || Location::new().field("m2").field("alpha"),
         (f32::from(raw) / 32767. - value).abs(),
         "opacity quantized to fixed16",
     )?;

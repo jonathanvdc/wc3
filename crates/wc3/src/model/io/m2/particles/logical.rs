@@ -58,7 +58,7 @@ impl LogicalAge for native::records::ModernParticleLifetime<'_> {
                 }
                 let raw = (v * 32767.).round() as u16;
                 c.approximate(
-                    Location::new().field("m2").field("particle").field("alpha"),
+                    || Location::new().field("m2").field("particle").field("alpha"),
                     (f32::from(raw) / 32767. - v).abs(),
                     "age opacity quantized",
                 )?;
@@ -133,7 +133,7 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
                 }
                 let raw = (v * 255.).round() as u8;
                 context.approximate(
-                    Location::new().field("m2").field("particle").field("color"),
+                    || Location::new().field("m2").field("particle").field("color"),
                     (f32::from(raw) / 255. - v).abs(),
                     "appearance color quantized to a byte",
                 )?;
@@ -360,7 +360,7 @@ fn encode_age<T: semantic::CurveValue, U: Value>(
         }
         let raw = (time * 32767.).round() as u16;
         context.approximate(
-            Location::new().field("m2").field("particle").field("age"),
+            || Location::new().field("m2").field("particle").field("age"),
             (f64::from(raw) / 32767. - time).abs() as f32,
             "age quantized to native fixed15 timestamps",
         )?;
@@ -563,10 +563,12 @@ where
                 ));
             }
             context.approximate(
-                Location::new()
-                    .field("m2")
-                    .field("particle")
-                    .field("scroll"),
+                || {
+                    Location::new()
+                        .field("m2")
+                        .field("particle")
+                        .field("scroll")
+                },
                 (f32::from(scroll.unwrap()[i]) / 512. - v).abs(),
                 "UV scrolling quantized",
             )?

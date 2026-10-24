@@ -1,8 +1,11 @@
 //! Checked conversion boundaries retain causes; accepted loss remains a report.
+use std::cell::Cell;
 use std::error::Error as _;
 use std::str::Utf8Error;
 use wc3::model::common::ZeroVec;
-use wc3::model::conversion::{Context, Error, ImportOptions, IssueKind, LossPolicy};
+use wc3::model::conversion::{
+    ApproximationPolicy, Context, Error, ImportOptions, IssueKind, LossPolicy,
+};
 use wc3::model::error::{Location, Segment};
 use wc3::model::formats::m2::{self, companions::SkinProfile, Bundle, Document, Flat, V256};
 use wc3::model::io;
@@ -67,4 +70,26 @@ fn unsupported_operation_retains_rejected_cause_and_reports_only_accepted_loss()
     assert_eq!(issue.path, "layers[2].shader");
     assert_eq!(issue.kind, IssueKind::Dropped);
     assert_eq!(issue.description, native.to_string());
+}
+
+#[test]
+fn exact_conversion_omits_context_and_approximation_builds_it_once() {
+    let calls = Cell::new(0);
+    let location = || {
+        calls.set(calls.get() + 1);
+        Location::new().field("rotation")
+    };
+    let mut strict = Context::import(&ImportOptions::default());
+    strict.approximate(location, 0., "exact").unwrap();
+    assert_eq!(calls.get(), 0);
+    assert!(strict.approximate(location, 0.25, "quantized").is_err());
+    assert_eq!(calls.get(), 1);
+    let mut accepted = Context::import(&ImportOptions {
+        approximation: ApproximationPolicy::Allow { tolerance: 0.5 },
+        ..Default::default()
+    });
+    accepted.approximate(location, 0.25, "quantized").unwrap();
+    assert_eq!(calls.get(), 2);
+    assert_eq!(accepted.report.issues[0].path, "rotation");
+    assert_eq!(accepted.report.issues[0].kind, IssueKind::Approximated);
 }

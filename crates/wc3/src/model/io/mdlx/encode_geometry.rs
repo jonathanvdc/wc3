@@ -249,7 +249,7 @@ fn quantize(weight: f32, context: &mut Context) -> Result<u16, Error> {
     let error = (weight - rounded / 255.).abs();
     if error > f32::EPSILON * 4. {
         context.approximate(
-            Location::new().field("mesh").field("skin").field("weights"),
+            || Location::new().field("mesh").field("skin").field("weights"),
             error,
             "skin weight quantized to Warcraft III bytes",
         )?;

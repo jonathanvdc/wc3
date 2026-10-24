@@ -188,7 +188,7 @@ impl UvFields for native::records::ModernTextureScale {
             }
             values[i] = (value * 32.).round() as u8;
             context.approximate(
-                Location::new().field("particles").field("uv_scale"),
+                || Location::new().field("particles").field("uv_scale"),
                 (value - f32::from(values[i]) / 32.).abs(),
                 "UV scale quantization",
             )?;
@@ -365,7 +365,7 @@ pub(in super::super) fn gravity_word(
         .map(|(a, b)| (a - b).abs())
         .fold(0., f32::max);
     context.approximate(
-        path.clone(),
+        || path.clone(),
         error,
         "particle gravity direction and magnitude quantization",
     )?;

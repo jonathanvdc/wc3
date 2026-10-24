@@ -127,7 +127,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             mode
         } else {
             encoder.context.unsupported(
-                path.clone().field("layers").index(index).field("blend"),
+                path.clone().field("blend"),
                 "unweighted source-color addition has no exact Warcraft III layer selector",
             )?;
             native::LayerFilterMode::None

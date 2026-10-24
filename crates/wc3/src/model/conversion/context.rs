@@ -89,16 +89,18 @@ impl Context {
         }
     }
     /// Checks one explicit numeric approximation against the configured tolerance.
+    /// Builds diagnostic context only when the representation changes.
     pub fn approximate(
         &mut self,
-        path: Location,
+        path: impl FnOnce() -> Location,
         error: f32,
         description: impl Into<String>,
     ) -> Result<(), Error> {
-        let description = description.into();
         if error == 0.0 {
             return Ok(());
         }
+        let path = path();
+        let description = description.into();
         if let ApproximationPolicy::Allow { tolerance } = self.approximation {
             if tolerance.is_finite() && tolerance >= 0.0 && error.is_finite() && error <= tolerance
             {

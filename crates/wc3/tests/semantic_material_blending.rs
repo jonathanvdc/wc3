@@ -1,7 +1,10 @@
 use wc3::model::materials::mdlx;
 use wc3::model::materials::state::BlendOperations;
 
-use wc3::model::conversion::{ExportOptions, ImportOptions};
+use wc3::model::conversion::{
+    Error as ConversionError, ExportOptions, ImportOptions, IssueKind, LossPolicy,
+};
+use wc3::model::error::Location;
 use wc3::model::formats::mdlx::emitters::{Particle2FilterMode, ParticleEmitter2};
 use wc3::model::formats::mdlx::materials::LayerFilterMode;
 use wc3::model::formats::mdlx::scene::Node;
@@ -71,8 +74,32 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
         Ok(_) => panic!("unweighted additive exported without loss"),
     };
     assert!(
-        matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("unweighted"))
+        matches!(&error, ConversionError::Requirement { requirement, .. } if requirement.contains("unweighted"))
     );
+    assert_eq!(
+        error.location(),
+        &Location::new()
+            .field("material")
+            .field("layers")
+            .index(0)
+            .field("blend")
+    );
+    let plan = semantic_mdlx::plan::<V800>(
+        &model,
+        &ExportOptions {
+            loss_policy: LossPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let issue = plan
+        .report()
+        .issues
+        .iter()
+        .find(|issue| issue.description.contains("unweighted"))
+        .unwrap();
+    assert_eq!(issue.path, "material.layers[0].blend");
+    assert_eq!(issue.kind, IssueKind::Dropped);
 }
 #[test]
 fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {

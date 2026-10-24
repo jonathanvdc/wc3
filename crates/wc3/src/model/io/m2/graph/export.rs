@@ -366,11 +366,9 @@ where
             &mut globals,
             &mut context,
             |v, c| {
-                RotationComponents::encode(
-                    v.to_array(),
-                    c,
-                    &Location::new().field("m2").field("bone").field("rotation"),
-                )
+                RotationComponents::encode(v.to_array(), c, || {
+                    Location::new().field("m2").field("bone").field("rotation")
+                })
             },
         )?;
         if *model
@@ -420,7 +418,7 @@ where
                         .expect("validated slot")
                         .to_array(),
                     &mut context,
-                    &Location::new().field("m2").field("bone").field("rotation"),
+                    || Location::new().field("m2").field("bone").field("rotation"),
                 )?,
                 &mut globals,
             )

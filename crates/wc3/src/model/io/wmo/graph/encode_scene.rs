@@ -459,7 +459,7 @@ fn color(source: [f32; 4], context: &mut Context) -> Result<[u8; 4], Error> {
         let error = (value - f32::from(*target) / 255.).abs();
         if error != 0. {
             context.approximate(
-                Location::new().field("world").field("light").field("color"),
+                || Location::new().field("world").field("light").field("color"),
                 error,
                 "native light colors use eight-bit normalized components",
             )?;
@@ -490,7 +490,7 @@ fn half(value: f32, context: &mut Context) -> Result<u16, Error> {
     let restored = super::scene::half(encoded);
     if restored.to_bits() != value.to_bits() {
         context.approximate(
-            Location::new().field("world").field("light").field("half"),
+            || Location::new().field("world").field("light").field("half"),
             (restored - value).abs(),
             "native light control uses binary16 precision",
         )?;

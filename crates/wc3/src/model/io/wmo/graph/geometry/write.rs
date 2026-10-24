@@ -182,7 +182,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                     let error = (source - f32::from(rounded) / 255.).abs();
                     if error != 0. {
                         context.approximate(
-                            Location::new().field("world").field("colors"),
+                            || Location::new().field("world").field("colors"),
                             error,
                             "native vertex colors use eight-bit normalized components",
                         )?;
@@ -395,7 +395,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                         .map(|(source, value)| (source - f32::from(*value)).abs())
                         .fold(0f32, f32::max);
                     context.approximate(
-                        Location::new().field("world").field("draw").field("bounds"),
+                        || Location::new().field("world").field("draw").field("bounds"),
                         error,
                         "draw culling bounds quantized to signed sixteen-bit coordinates",
                     )?;

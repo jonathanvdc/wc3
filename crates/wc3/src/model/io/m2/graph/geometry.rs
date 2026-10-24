@@ -683,7 +683,7 @@ where
                     continue;
                 }
                 context.approximate(
-                    Location::new().field("m2").field("mesh").field("skin"),
+                    || Location::new().field("m2").field("mesh").field("skin"),
                     (influence.weight - f32::from(v.bone_weights[slot]) / 255.).abs(),
                     "weights quantized to bytes summing to 255",
                 )?

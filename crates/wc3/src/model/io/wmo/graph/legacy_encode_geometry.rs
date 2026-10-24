@@ -170,7 +170,7 @@ pub(super) fn write<'a, B: Batch>(
                 for (byte, value) in encoded.iter_mut().zip(rgba.to_array()) {
                     let rounded = (value.clamp(0., 1.) * 255.).round() as u8;
                     context.approximate(
-                        Location::new().field("world").field("colors"),
+                        || Location::new().field("world").field("colors"),
                         (value - f32::from(rounded) / 255.).abs(),
                         "vertex colors quantized to eight-bit components",
                     )?;
@@ -311,7 +311,7 @@ pub(super) fn write<'a, B: Batch>(
             .map(|(a, b)| (a - b).abs())
             .fold(0., f32::max);
         context.approximate(
-            Location::new().field("world").field("draw").field("bounds"),
+            || Location::new().field("world").field("draw").field("bounds"),
             quantization,
             "historical draw bounds quantized to integer coordinates",
         )?;
