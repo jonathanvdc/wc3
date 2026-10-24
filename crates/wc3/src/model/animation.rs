@@ -1,6 +1,7 @@
 //! Typed curves and property destinations, independent of file clocks and track numbers.
 
 use crate::model::common::packed_identity;
+use crate::model::error::{AnimationError, Location};
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{AnimationId, ClockId, Error, EventId, EventSourceId, Quat, Texture};
 use glam::{Vec2, Vec3, Vec4};
@@ -21,7 +22,10 @@ impl Time {
         if value.is_finite() {
             Ok(Self(value))
         } else {
-            Err(Error::new("time", "seconds must be finite"))
+            Err(Error::at(
+                Location::new().field("value"),
+                AnimationError::NonFiniteTime { value },
+            ))
         }
     }
     /// Time in seconds.

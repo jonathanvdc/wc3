@@ -1,5 +1,6 @@
 //! Explicit playback selection and typed evaluation of semantic animation.
 use super::curves::{CurveValue, SampleValue};
+use crate::model::error::{AnimationError, Location};
 use crate::model::profiles::Profile;
 use crate::model::{
     AnimationId, ClipId, ClockId, DynamicTrack, Error, Model, Property, PropertyValue,
@@ -107,9 +108,12 @@ impl<'data, P: Profile> Model<'data, P> {
     ) -> Result<SampledAnimation<'view, 'data>, Error> {
         let mut tracks: Vec<_> = self.global_tracks().collect();
         let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
-            let clip = self
-                .clip(id)
-                .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+            let clip = self.clip(id).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("clip"),
+                    AnimationError::UnknownClip { clip: id },
+                )
+            })?;
             tracks.extend(self.clip_tracks(id));
             resolve_times(
                 sample,
@@ -508,23 +512,40 @@ impl AnimationProgram {
         let mut result = self.clone();
         result.values.extend(&source.values)?;
         let mut destinations = HashSet::new();
-        for &(destination, source_clip) in clips {
+        for (mapping, &(destination, source_clip)) in clips.iter().enumerate() {
             if !destinations.insert(destination) {
-                return Err(Error::new(
-                    "animation.compose.clips",
-                    "destination clip is mapped more than once",
+                return Err(Error::at(
+                    Location::new().field("clips").index(mapping),
+                    AnimationError::DuplicateDestinationClip { clip: destination },
                 ));
             }
-            if !self.clips.contains_key(&destination) || !source.clips.contains_key(&source_clip) {
-                return Err(Error::new(
-                    "animation.compose.clips",
-                    "unknown destination or source clip",
+            if !self.clips.contains_key(&destination) {
+                return Err(Error::at(
+                    Location::new()
+                        .field("clips")
+                        .index(mapping)
+                        .field("destination"),
+                    AnimationError::UnknownClip { clip: destination },
+                ));
+            }
+            if !source.clips.contains_key(&source_clip) {
+                return Err(Error::at(
+                    Location::new()
+                        .field("clips")
+                        .index(mapping)
+                        .field("source"),
+                    AnimationError::UnknownClip { clip: source_clip },
                 ));
             }
             if self.clips[&destination].source_start != source.clips[&source_clip].source_start {
-                return Err(Error::new(
-                    "animation.compose.clips",
-                    "mapped clips must have matching source starts",
+                return Err(Error::at(
+                    Location::new().field("clips").index(mapping),
+                    AnimationError::ClipStartMismatch {
+                        destination,
+                        source: source_clip,
+                        destination_start: self.clips[&destination].source_start,
+                        source_start: source.clips[&source_clip].source_start,
+                    },
                 ));
             }
         }
@@ -534,9 +555,13 @@ impl AnimationProgram {
                 .get(&id)
                 .is_some_and(|existing| *existing != period)
             {
-                return Err(Error::new(
-                    "animation.compose.clocks",
-                    "shared clock identity has conflicting periods",
+                return Err(Error::at(
+                    Location::for_owner(id).field("period"),
+                    AnimationError::ClockPeriodConflict {
+                        clock: id,
+                        existing: result.clocks[&id],
+                        incoming: period,
+                    },
                 ));
             }
             result.clocks.insert(id, period);
@@ -548,9 +573,9 @@ impl AnimationProgram {
             .collect();
         for (&id, animation) in &source.animations {
             if result.animations.contains_key(&id) {
-                return Err(Error::new(
-                    "animation.compose.animations",
-                    "animation identities overlap",
+                return Err(Error::at(
+                    Location::for_owner(id),
+                    AnimationError::AnimationIdentityConflict { animation: id },
                 ));
             }
             let mut tracks = Vec::new();
@@ -559,9 +584,11 @@ impl AnimationProgram {
                     continue;
                 }
                 if owned.contains(&dynamic_track.target()) {
-                    return Err(Error::new(
-                        "animation.compose.properties",
-                        "property owners overlap",
+                    return Err(Error::at(
+                        Location::for_owner(dynamic_track.target()),
+                        AnimationError::PropertyOwnershipConflict {
+                            slot: dynamic_track.target(),
+                        },
                     ));
                 }
                 tracks.push(dynamic_track.clone());
@@ -583,10 +610,12 @@ impl AnimationProgram {
     pub fn sample(&self, sample: AnimationSample) -> Result<SampledAnimation<'_, 'static>, Error> {
         let mut selected_clip: &[AnimationId] = &[];
         let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
-            let clip = self
-                .clips
-                .get(&id)
-                .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+            let clip = self.clips.get(&id).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("clip"),
+                    AnimationError::UnknownClip { clip: id },
+                )
+            })?;
             selected_clip = &clip.animations;
             resolve_times(sample, clip.duration, clip.looping, clip.source_start)?
         } else {
@@ -617,10 +646,12 @@ fn resolve_times(
 ) -> Result<ResolvedTimes, Error> {
     let policy = Some((duration, looping));
     let clip = normalize_clip(sample.clip_time, policy);
-    let animation = Time::seconds(origin.as_seconds() + clip.as_seconds())?;
+    let animation = Time::seconds(origin.as_seconds() + clip.as_seconds())
+        .map_err(|error| error.with_context(Location::new().field("clip_time")))?;
     let interval = Some((
         origin,
-        Time::seconds(origin.as_seconds() + duration.as_seconds())?,
+        Time::seconds(origin.as_seconds() + duration.as_seconds())
+            .map_err(|error| error.with_context(Location::new().field("duration")))?,
     ));
     Ok((policy, animation, interval))
 }
