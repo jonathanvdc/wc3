@@ -3,7 +3,6 @@ use super::*;
 use bevy::math::Vec3;
 use bevy::prelude::{Assets, Image};
 use std::collections::HashSet;
-use std::sync::Arc;
 use wc3::model::common::PackedArray;
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::profiles::Universal;
@@ -58,7 +57,7 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
 #[test]
 fn compatible_union_preserves_hidden_geometry_and_all_selection() {
     let (model, ids) = model();
-    let models = [(ResourceLocator::FileDataId(1), Arc::new(model))]
+    let models = [(ResourceLocator::FileDataId(1), &model)]
         .into_iter()
         .collect();
     let source = Source::new(ResourceLocator::FileDataId(1));
@@ -82,7 +81,7 @@ fn incompatible_shared_textures_fail_before_image_provider() {
     let texture = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
         .add_file_texture("foreign")
         .unwrap();
-    let models = [(ResourceLocator::FileDataId(1), Arc::new(model))]
+    let models = [(ResourceLocator::FileDataId(1), &model)]
         .into_iter()
         .collect();
     let mut source = Source::new(ResourceLocator::FileDataId(1));
@@ -104,8 +103,8 @@ fn only_repeated_skinned_sources_coalesce() {
     let (a, _) = model();
     let (b, _) = model();
     let models = [
-        (ResourceLocator::FileDataId(1), Arc::new(a)),
-        (ResourceLocator::FileDataId(2), Arc::new(b)),
+        (ResourceLocator::FileDataId(1), &a),
+        (ResourceLocator::FileDataId(2), &b),
     ]
     .into_iter()
     .collect();
@@ -150,7 +149,7 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
         })
         .unwrap();
     let resource = ResourceLocator::FileDataId(1);
-    let models = [(resource.clone(), Arc::new(model))].into_iter().collect();
+    let models = [(resource.clone(), &model)].into_iter().collect();
     let mut source = Source::new(resource.clone());
     source.images.insert(
         first.resource,
@@ -258,9 +257,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
         },
         TextureReplacement::Image(ImageResource::file_data_id(200)),
     );
-    let models = [(resource, Arc::new(model))]
-        .into_iter()
-        .collect::<Models<'_>>();
+    let models = [(resource, &model)].into_iter().collect::<Models<'_, '_>>();
     let mut images = Assets::<Image>::default();
     let compiled = compile_assembly(&Assembly::new(source), &models, &mut images, |resource| {
         let value = match resource {
@@ -296,7 +293,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     }
 }
 
-fn sink_fixture() -> (Assembly, Models<'static>) {
+fn sink_fixture() -> (Assembly, Model<'static>) {
     use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
     use wc3::model::{AddressMode, ColorSpace};
 
@@ -353,10 +350,7 @@ fn sink_fixture() -> (Assembly, Models<'static>) {
             }],
         },
     );
-    (
-        Assembly::new(source),
-        Models::from([(resource, Arc::new(model))]),
-    )
+    (Assembly::new(source), model)
 }
 
 #[test]
@@ -365,7 +359,8 @@ fn deferred_image_sink_preserves_interpretation_sharing_and_live_store_ids() {
     use std::sync::Barrier;
     use std::thread;
 
-    let (assembly, models) = sink_fixture();
+    let (assembly, model) = sink_fixture();
+    let models = Models::from([(assembly.root.model.clone(), &model)]);
     let pixels =
         |_: &ImageResource<'static>| Ok(RgbaImage::new(1, 1, vec![20, 40, 60, 128]).unwrap());
     let mut immediate = Assets::<Image>::default();
@@ -424,8 +419,8 @@ fn deferred_image_sink_preserves_interpretation_sharing_and_live_store_ids() {
 
 #[test]
 fn failed_assembly_can_discard_emitted_images_without_publishing() {
-    let (mut assembly, models) = sink_fixture();
-    let model = models.values().next().unwrap();
+    let (mut assembly, model) = sink_fixture();
+    let models = Models::from([(assembly.root.model.clone(), &model)]);
     let material = model.materials().iter().next().unwrap().0;
     assembly.root.inputs.insert(
         TextureInput::Material {
@@ -461,7 +456,7 @@ fn absent_input_is_rejected_before_resolving_images() {
     let (model, _) = model();
     let material = model.materials().iter().next().unwrap().0;
     let resource = ResourceLocator::FileDataId(1);
-    let models = [(resource.clone(), Arc::new(model))].into_iter().collect();
+    let models = [(resource.clone(), &model)].into_iter().collect();
     let mut source = Source::new(resource);
     source.inputs.insert(
         TextureInput::Material {

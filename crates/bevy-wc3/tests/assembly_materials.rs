@@ -6,7 +6,6 @@ use bevy_wc3::assembly::{
     compile_assembly, Assembly, Atlas, Models, Part, RgbaImage, Source, TextureReplacement,
 };
 use bevy_wc3::{compile_model_with_options, CompileOptions, JointMap, ModelError, PartBinding};
-use std::sync::Arc;
 use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::profiles::Universal;
@@ -130,8 +129,8 @@ fn pixels(_: &ImageResource<'static>) -> Result<RgbaImage, ModelError> {
 #[test]
 fn explicit_assembly_source_look_matches_direct_compilation_and_ambiguous_default() {
     let f = fixture(false);
-    let models: Models<'_> = [(resource(1), Arc::new(f.model))].into();
-    let model = &models[&resource(1)];
+    let models: Models<'_, '_> = [(resource(1), &f.model)].into();
+    let model = models[&resource(1)];
     assert!(compile_model_with_options(model, CompileOptions::default(), |_| None).is_err());
     assert!(compile_assembly(
         &Assembly::new(Source::new(resource(1))),
@@ -195,11 +194,7 @@ fn repeated_rigid_sources_keep_distinct_looks_and_share_identical_geometry() {
     let host_look = host.looks[0];
     let looks = child.looks;
     let materials = child.materials;
-    let models: Models<'_> = [
-        (resource(1), Arc::new(host.model)),
-        (resource(2), Arc::new(child.model)),
-    ]
-    .into();
+    let models: Models<'_, '_> = [(resource(1), &host.model), (resource(2), &child.model)].into();
     let mut assembly = Assembly::new(source(1, host_look));
     for look in [looks[0], looks[1], looks[0]] {
         assembly.parts.push(Part::new(
@@ -238,11 +233,7 @@ fn shared_skeleton_repeats_coalesce_only_for_identical_material_choices() {
     let child_node = child.node;
     let host_look = host.looks[0];
     let child_looks = child.looks;
-    let models: Models<'_> = [
-        (resource(1), Arc::new(host.model)),
-        (resource(2), Arc::new(child.model)),
-    ]
-    .into();
+    let models: Models<'_, '_> = [(resource(1), &host.model), (resource(2), &child.model)].into();
     let binding = PartBinding::Skinned {
         joints: JointMap::new([(child_node, host_node)]).unwrap(),
         transform: Mat4::IDENTITY,
@@ -278,11 +269,7 @@ fn foreign_look_is_rejected_even_when_its_source_geometry_is_hidden() {
     let node = host.node;
     let host_look = host.looks[1];
     let child_instance = child.instance;
-    let models: Models<'_> = [
-        (resource(1), Arc::new(host.model)),
-        (resource(2), Arc::new(child.model)),
-    ]
-    .into();
+    let models: Models<'_, '_> = [(resource(1), &host.model), (resource(2), &child.model)].into();
     let mut hidden = source(2, foreign);
     hidden.draws.hidden_instances.insert(child_instance);
     let mut assembly = Assembly::new(source(1, host_look));
@@ -331,11 +318,7 @@ fn default_and_explicit_default_look_coalesce_and_share_images() {
             PartBinding::Mounted(ModelMount::new(MountTarget::Node(node))),
         ),
     ];
-    let models: Models<'_> = [
-        (resource(1), Arc::new(host.model)),
-        (resource(2), Arc::new(child.model)),
-    ]
-    .into();
+    let models: Models<'_, '_> = [(resource(1), &host.model), (resource(2), &child.model)].into();
     let mut images = Assets::default();
     let mut decodes = 0;
     let compiled = compile_assembly(&assembly, &models, &mut images, |image| {
@@ -382,7 +365,7 @@ fn assembly_image_sharing_preserves_sampling_color_and_replacement_identity() {
     let host = fixture(false);
     let node = host.node;
     let mut assembly = Assembly::new(source(1, host.looks[0]));
-    let mut models: Models<'_> = [(resource(1), Arc::new(host.model))].into();
+    let mut owners = vec![(resource(1), host.model)];
     let repeat = ModelSampler::default();
     let clamp = ModelSampler {
         u: AddressMode::Clamp,
@@ -419,12 +402,16 @@ fn assembly_image_sharing_preserves_sampling_color_and_replacement_identity() {
                 .images
                 .insert(child.texture.unwrap().resource, replacement);
         }
-        models.insert(resource(id), Arc::new(child.model));
+        owners.push((resource(id), child.model));
         assembly.parts.push(Part::new(
             selection,
             PartBinding::Mounted(ModelMount::new(MountTarget::Node(node))),
         ));
     }
+    let models: Models<'_, '_> = owners
+        .iter()
+        .map(|(id, model)| (id.clone(), model))
+        .collect();
     let mut images = Assets::default();
     let mut decoded = Vec::new();
     let compiled = compile_assembly(&assembly, &models, &mut images, |image| {

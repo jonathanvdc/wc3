@@ -18,7 +18,7 @@ use wc3::model::{ImageResource, Model, ResourceLocator};
 /// defer their publication until the complete assembly succeeds.
 pub fn compile_assembly(
     assembly: &Assembly,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
@@ -46,7 +46,7 @@ pub fn compile_assembly(
 /// effects remain application-owned.
 pub fn compile_assembly_with_dependencies(
     assembly: &Assembly,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     mut resolve_dependencies: impl FnMut(
         &ResourceLocator<'static>,
@@ -67,7 +67,7 @@ pub fn compile_assembly_with_dependencies(
 #[inline(never)]
 fn compile_assembly_impl(
     assembly: &Assembly,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     resolve_dependencies: &mut dyn FnMut(
         &ResourceLocator<'static>,
@@ -98,7 +98,7 @@ fn compile_assembly_impl(
 
 pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
     is_skinned: impl Fn(&B) -> bool,
@@ -122,7 +122,7 @@ pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
 
 fn compile_with_dependencies<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     mut resolve_dependencies: impl FnMut(
         &ResourceLocator<'static>,
@@ -141,13 +141,13 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
     let mut dependencies = HashMap::new();
     for source in once(&assembly.root).chain(assembly.parts.iter().map(|part| &part.source)) {
         if let Entry::Vacant(entry) = dependencies.entry(source.model.clone()) {
-            let model = &models[&source.model];
+            let model = models[&source.model];
             let prepared = resolve_dependencies(&source.model, model)?;
             validate_dependencies(model, &prepared.child_models, &prepared.particle_effects)?;
             entry.insert(prepared);
         }
     }
-    let root = &models[&assembly.root.model];
+    let root = models[&assembly.root.model];
     let mut decoded = HashMap::new();
     let mut compiler = ImageCompiler {
         images,
@@ -166,7 +166,7 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
     let mut bindings = Vec::with_capacity(parts.len());
     let mut sources = Vec::new();
     for part in &parts {
-        let model = &models[&part.source.model];
+        let model = models[&part.source.model];
         let compiled = if let Some(index) = sources
             .iter()
             .position(|source: &&Source| *source == &part.source)

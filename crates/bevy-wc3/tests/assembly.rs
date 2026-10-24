@@ -7,6 +7,7 @@ use bevy_wc3::assembly::{
     TextureLayer, TextureReplacement,
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
+use std::ptr::eq as ptr_eq;
 use std::sync::Arc;
 use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
@@ -72,15 +73,15 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
 }
 
 #[test]
-fn shared_owned_models_retain_graph_ids_across_registries_and_release_after_compilation() {
+fn borrowed_registries_preserve_graph_ids_without_retaining_shared_owner() {
     let (model, mounting_frame, _) = model(false);
     let model = Arc::new(model);
     let weak = Arc::downgrade(&model);
-    let first: Models<'static> = [(resource("shared"), model.clone())].into();
-    let second: Models<'static> = [(resource("shared"), model.clone())].into();
-    assert!(Arc::ptr_eq(
-        &first[&resource("shared")],
-        &second[&resource("shared")]
+    let first: Models<'_, 'static> = [(resource("shared"), model.as_ref())].into();
+    let second: Models<'_, 'static> = [(resource("shared"), model.as_ref())].into();
+    assert!(ptr_eq(
+        first[&resource("shared")],
+        second[&resource("shared")]
     ));
     let mut plan = Assembly::new(Source::new(resource("shared")));
     plan.parts.push(Part::new(
@@ -94,8 +95,9 @@ fn shared_owned_models_retain_graph_ids_across_registries_and_release_after_comp
         })
         .unwrap()
     });
-    assert_eq!(Arc::strong_count(&model), 3);
-    drop((first, second, model));
+    assert_eq!(Arc::strong_count(&model), 1);
+    drop((first, second));
+    drop(model);
     assert!(weak.upgrade().is_none());
 
     let mut meshes = Assets::default();
@@ -107,6 +109,98 @@ fn shared_owned_models_retain_graph_ids_across_registries_and_release_after_comp
             .bake(&prepared, &meshes, &binds, PoseOptions::default())
             .unwrap();
         assert_eq!(baked.parts.len(), 2);
+    }
+}
+
+#[test]
+fn borrowed_native_model_compiles_without_detachment_and_outlives_all_sources() {
+    use bevy_wc3::{BakeSpace, Playback};
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
+    use wc3::model::formats::mdlx::scene::{Bone, Node};
+    use wc3::model::formats::mdlx::{
+        mdl::Read as _, mdx::Read as _, mdx::Write as _, Document, V800,
+    };
+    use wc3::model::io;
+
+    let (compiled, prepared, mut meshes, mut binds) = {
+        let mut native =
+            Document::<V800>::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
+        let mut node = Node::new("root", 0).unwrap();
+        node.translation = Some(
+            Track::linear(
+                [
+                    ValueKeyframe {
+                        frame: 0,
+                        value: [0.; 3],
+                    },
+                    ValueKeyframe {
+                        frame: 1000,
+                        value: [10., 0., 0.],
+                    },
+                ],
+                None,
+            )
+            .unwrap(),
+        );
+        native.set_bones([Bone::new(node, 0, u32::MAX)]);
+        let bytes = native.encode_mdx().unwrap();
+        let document = Document::<V800>::decode_mdx(&bytes).unwrap();
+        let model = io::mdlx::import(&document, &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen();
+        let positions = model.meshes().iter().next().unwrap().1.positions();
+        assert!(!positions.is_owned());
+        assert!(bytes
+            .as_ptr_range()
+            .contains(&positions.as_bytes().as_ptr()));
+        let models: Models<'_, '_> = [(resource("borrowed"), &model)].into();
+        let plan = Assembly::new(Source::new(resource("borrowed")));
+        let mut images = Assets::default();
+        let compiled = compile_assembly(&plan, &models, &mut images, |_| {
+            Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
+        })
+        .unwrap();
+        let mut meshes = Assets::default();
+        let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
+        let prepared = compiled.prepare(&mut meshes, &mut binds);
+        (compiled, prepared, meshes, binds)
+    };
+    let prepared_again = compiled.prepare(&mut meshes, &mut binds);
+    for prepared in [prepared, prepared_again] {
+        let mut playback = Playback::default();
+        playback.play(prepared.clips()[0].0);
+        playback.clip_time = 0.5;
+        let baked = PoseBaker::default()
+            .bake(
+                &prepared,
+                &meshes,
+                &binds,
+                PoseOptions {
+                    playback: Some(&playback),
+                    space: BakeSpace::Authored,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(baked.parts.len(), 1);
+        let positions = baked.parts[0]
+            .mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+        let minimum = positions
+            .iter()
+            .map(|position| position[0])
+            .fold(f32::INFINITY, f32::min);
+        let maximum = positions
+            .iter()
+            .map(|position| position[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!((minimum - -11.).abs() < 1e-5);
+        assert!((maximum - 21.).abs() < 1e-5);
     }
 }
 
@@ -129,7 +223,11 @@ struct Workshop {
 }
 impl Resolver<Configuration> for Workshop {
     type Error = ModelError;
-    fn resolve(&self, selection: &Configuration, _: &Models<'_>) -> Result<Assembly, ModelError> {
+    fn resolve(
+        &self,
+        selection: &Configuration,
+        _: &Models<'_, '_>,
+    ) -> Result<Assembly, ModelError> {
         let root = match selection.chassis {
             Chassis::Tripod => Source::new(resource("chassis")),
         };
@@ -189,9 +287,9 @@ fn application_defined_machine_configuration_compiles_without_native_character_m
         .nodes()
         .iter()
         .all(|(_, node)| node.properties.is_none()));
-    let models: Models<'_> = [
-        (resource("chassis"), Arc::new(chassis)),
-        (resource("module"), Arc::new(module)),
+    let models: Models<'_, '_> = [
+        (resource("chassis"), &chassis),
+        (resource("module"), &module),
     ]
     .into();
     let selection = Configuration {

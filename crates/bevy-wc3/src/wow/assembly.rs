@@ -31,7 +31,7 @@ struct NativeBinding {
 /// publication until the entire character has compiled successfully.
 pub fn compile_character(
     definition: &CharacterDefinition,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
@@ -42,7 +42,7 @@ pub fn compile_character(
 #[inline(never)]
 fn compile_character_impl(
     definition: &CharacterDefinition,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
     images: &mut dyn ImageSink,
     resolve_image: &mut dyn FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
@@ -81,7 +81,7 @@ fn compile_character_impl(
             })
             .collect::<Result<Vec<_>, ModelError>>()?,
     };
-    let body_catalog = CharacterCatalog::inspect(&models[&definition.model]);
+    let body_catalog = CharacterCatalog::inspect(models[&definition.model]);
     let mut compiled = compile_with_bindings(
         &assembly,
         models,
@@ -167,7 +167,7 @@ fn source(
     resource: &ResourceLocator<'static>,
     geosets: Option<&GeosetSelection>,
     replacements: &BTreeMap<u32, TextureReplacement>,
-    models: &Models<'_>,
+    models: &Models<'_, '_>,
 ) -> Result<Source, ModelError> {
     let model = models
         .get(resource)
