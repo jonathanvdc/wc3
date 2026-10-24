@@ -5,6 +5,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Full debug information makes the Bevy test binaries exceed runner disk space.
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -26,3 +30,8 @@ jobs:
           path: target/criterion/quick
           if-no-files-found: ignore
           retention-days: 14
+      - name: Report build disk usage
+        if: always()
+        run: |
+          df -h .
+          if [ -d target ]; then du -sh target; fi
