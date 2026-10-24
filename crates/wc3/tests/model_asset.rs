@@ -3,6 +3,9 @@ use glam::Vec3;
 use std::borrow::Cow;
 use std::error::Error as _;
 use std::io;
+use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use wc3::model::common::FileKey;
 use wc3::model::conversion::{Conversion, ExportOptions, ImportOptions, IssueKind, UnknownPolicy};
 use wc3::model::formats::m2::{
@@ -52,6 +55,192 @@ fn reader_error(reader: &mut Reader) -> Error {
         Err(error) => error,
         Ok(_) => panic!("invalid native bytes were accepted"),
     }
+}
+
+#[derive(Default)]
+struct SourceAccess {
+    pointer: usize,
+    reads: AtomicUsize,
+    drops: AtomicUsize,
+}
+
+struct TrackedSource {
+    bytes: Vec<u8>,
+    access: Arc<SourceAccess>,
+}
+
+impl TrackedSource {
+    fn new(bytes: Vec<u8>) -> (Self, Arc<SourceAccess>) {
+        let access = Arc::new(SourceAccess {
+            pointer: bytes.as_ptr() as usize,
+            ..Default::default()
+        });
+        (
+            Self {
+                bytes,
+                access: access.clone(),
+            },
+            access,
+        )
+    }
+}
+
+impl Deref for TrackedSource {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        assert_eq!(self.bytes.as_ptr() as usize, self.access.pointer);
+        self.access.reads.fetch_add(1, Ordering::Relaxed);
+        &self.bytes
+    }
+}
+
+impl Drop for TrackedSource {
+    fn drop(&mut self) {
+        self.access.drops.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn borrowed_sources_load_every_family_and_the_checked_graph_outlives_them() {
+    let mdlx = {
+        let root = include_bytes!("fixtures/mdl/quad_model.mdx").to_vec();
+        load(
+            Format::Mdlx,
+            FileKey::Root,
+            root.as_slice(),
+            ImportOptions::default(),
+            |_| -> Result<&[u8], io::Error> { panic!("MDLX has no native companions") },
+        )
+        .unwrap()
+    };
+    let m2 = {
+        let root = skeleton_root();
+        let companion = skeleton(vec![SkeletonChunk::Bones {
+            bones: vec![Bone::new()],
+            lookup: ZeroVec::new(),
+        }]);
+        load(
+            Format::M2,
+            FileKey::Root,
+            root.as_slice(),
+            ImportOptions::default(),
+            |_| Ok::<_, io::Error>(companion.as_slice()),
+        )
+        .unwrap()
+    };
+    let wmo = {
+        let (root, group) = wmo_fixture::<Classic>();
+        load(
+            Format::Wmo(wmo::Profile::Classic),
+            FileKey::Root,
+            root.as_slice(),
+            ImportOptions::default(),
+            |_| Ok::<_, io::Error>(group.as_slice()),
+        )
+        .unwrap()
+    };
+    for model in [&mdlx.value, &m2.value, &wmo.value] {
+        model.validate().unwrap();
+    }
+    assert_eq!(mdlx.value.meshes().len(), 1);
+    assert_eq!(m2.value.nodes().len(), 1);
+    assert_eq!(wmo.value.meshes().len(), 1);
+}
+
+#[test]
+fn moved_sources_keep_their_allocations_and_are_released_before_ready_returns() {
+    let (root, root_access) = TrackedSource::new(skeleton_root());
+    let (companion, companion_access) = TrackedSource::new(skeleton(vec![SkeletonChunk::Bones {
+        bones: vec![Bone::new()],
+        lookup: ZeroVec::new(),
+    }]));
+    let mut reader = Reader::new(Format::M2, FileKey::Root, root, ImportOptions::default());
+    let Progress::Pending(request) = reader.poll().unwrap() else {
+        panic!("a skeleton is required");
+    };
+    assert_eq!(root_access.drops.load(Ordering::Relaxed), 0);
+    reader.provide(&request, companion).unwrap();
+    let Progress::Ready(converted) = reader.poll().unwrap() else {
+        panic!("all sources have been supplied");
+    };
+    for access in [&root_access, &companion_access] {
+        assert!(access.reads.load(Ordering::Relaxed) > 0);
+        assert_eq!(access.drops.load(Ordering::Relaxed), 1);
+    }
+    assert!(matches!(reader.poll(), Err(Error::Finished)));
+    drop(reader);
+    converted.value.validate().unwrap();
+}
+
+#[test]
+fn shared_vector_sources_release_only_the_readers_handles_on_completion() {
+    let (root, group) = wmo_fixture::<Classic>();
+    let root = Arc::new(root);
+    let group = Arc::new(group);
+    let root_pointer = root.as_ptr();
+    let group_pointer = group.as_ptr();
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        FileKey::Root,
+        root.clone(),
+        ImportOptions::default(),
+    );
+    assert_eq!(Arc::strong_count(&root), 2);
+    let Progress::Pending(request) = reader.poll().unwrap() else {
+        panic!("a group is required");
+    };
+    reader.provide(&request, group.clone()).unwrap();
+    assert_eq!(Arc::strong_count(&group), 2);
+    let Progress::Ready(converted) = reader.poll().unwrap() else {
+        panic!("all sources have been supplied");
+    };
+    assert_eq!(Arc::strong_count(&root), 1);
+    assert_eq!(Arc::strong_count(&group), 1);
+    assert_eq!(root.as_ptr(), root_pointer);
+    assert_eq!(group.as_ptr(), group_pointer);
+    drop((root, group, reader));
+    converted.value.validate().unwrap();
+    assert_eq!(converted.value.meshes().len(), 1);
+}
+
+#[test]
+fn shared_sources_survive_source_retries_wrong_responses_and_decode_failures() {
+    let (root, _) = wmo_fixture::<Classic>();
+    let root = Arc::new(root);
+    let malformed = Arc::new(b"invalid group".to_vec());
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        FileKey::Root,
+        root.clone(),
+        ImportOptions::default(),
+    );
+    let Progress::Pending(request) = reader.poll().unwrap() else {
+        panic!("a group is required");
+    };
+    for _ in 0..2 {
+        assert!(matches!(reader.poll().unwrap(), Progress::Pending(actual) if actual == request));
+    }
+    let mut wrong = request.clone();
+    wrong.owner = FileKey::FileId(99);
+    assert!(matches!(
+        reader.provide(&wrong, malformed.clone()),
+        Err(Error::UnexpectedCompanion { .. })
+    ));
+    assert_eq!(Arc::strong_count(&malformed), 1);
+    reader.provide(&request, malformed.clone()).unwrap();
+    for _ in 0..2 {
+        assert!(matches!(reader.poll(), Err(Error::Decode { .. })));
+        assert_eq!(Arc::strong_count(&root), 2);
+        assert_eq!(Arc::strong_count(&malformed), 2);
+    }
+    assert!(matches!(
+        reader.provide(&request, malformed.clone()),
+        Err(Error::UnexpectedCompanion { expected: None, .. })
+    ));
+    drop(reader);
+    assert_eq!(Arc::strong_count(&root), 1);
+    assert_eq!(Arc::strong_count(&malformed), 1);
 }
 
 #[test]

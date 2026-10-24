@@ -1,5 +1,5 @@
 //! Explicit modern WMO layout dispatch and required group loading.
-use super::{CompanionKind, CompanionPlan, DecodeError, Error, Request};
+use super::{source_bytes, CompanionKind, CompanionPlan, DecodeError, Error, Request};
 use crate::model::common::FileKey;
 use crate::model::conversion::{Conversion, ImportOptions};
 use crate::model::formats::wmo::{self as native, Profile};
@@ -8,6 +8,7 @@ use crate::model::Model;
 #[cfg(test)]
 use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::ops::Deref;
 
 fn failure(key: &FileKey, source: native::ReadError) -> Error {
     Error::Decode {
@@ -44,11 +45,15 @@ fn prepare_typed<D: native::Dialect>(bytes: &[u8], key: &FileKey) -> Result<Comp
     Ok(CompanionPlan::new(requests))
 }
 
-fn decode_typed<'a, D: native::Dialect>(
+fn decode_typed<'a, D: native::Dialect, B>(
     bytes: &'a [u8],
     key: &FileKey,
-    buffers: &'a BTreeMap<FileKey, Vec<u8>>,
-) -> Result<native::Bundle<'a, D>, Error> {
+    buffers: &'a BTreeMap<FileKey, B>,
+) -> Result<native::Bundle<'a, D>, Error>
+where
+    B: Deref,
+    B::Target: AsRef<[u8]>,
+{
     let root = decode_root::<D>(bytes, key)?;
     let mut bundle = native::Bundle::from_root(root).with_key(key.clone());
     for dependency in bundle
@@ -58,7 +63,7 @@ fn decode_typed<'a, D: native::Dialect>(
         let native::DependencyKind::Group { index, lod } = dependency.kind else {
             continue;
         };
-        let bytes = &buffers[&dependency.key];
+        let bytes = source_bytes(&buffers[&dependency.key]);
         let group =
             native::Group::<D>::decode(bytes).map_err(|source| failure(&dependency.key, source))?;
         bundle.insert_group(native::GroupKey { index, lod }, dependency.key, group);
@@ -81,22 +86,24 @@ macro_rules! bundles {
                 Profile::Alpha14 | Profile::Legacy16 => Err(Error::UnsupportedProfile { profile }),
             }
         }
-        pub(super) fn decode(
+        pub(super) fn decode<B>(
             prepared: &mut CompanionPlan,
             bytes: &[u8],
             key: &FileKey,
             profile: Profile,
-            buffers: &BTreeMap<FileKey, Vec<u8>>,
+            buffers: &BTreeMap<FileKey, B>,
             missing: &mut Option<Request>,
             options: &ImportOptions,
-        ) -> Result<Option<Conversion<Model<'static>>>, Error> {
+        ) -> Result<Option<Conversion<Model<'static>>>, Error>
+        where B: Deref, B::Target: AsRef<[u8]>,
+        {
             if let Some(request) = prepared.next_missing(buffers) {
                 *missing = Some(request);
                 return Ok(None);
             }
             match profile {
                 $(Profile::$dialect => {
-                    let bundle = decode_typed::<native::$dialect>(bytes, key, buffers)?;
+                    let bundle = decode_typed::<native::$dialect, B>(bytes, key, buffers)?;
                     semantic::import(&bundle, options).map(|converted| Some(Conversion {
                         value: converted.value.widen().into_owned(),
                         report: converted.report,
@@ -138,6 +145,7 @@ mod tests {
         )
         .unwrap();
         let bytes = root.encode().unwrap();
+        let root_pointer = bytes.as_ptr();
         let group = Group::<Classic>::new().encode().unwrap();
         ROOT_DECODES.with(|count| count.set(0));
         let mut reader = Reader::new(
@@ -146,6 +154,7 @@ mod tests {
             bytes,
             ImportOptions::default(),
         );
+        assert_eq!(reader.bytes.as_ref().unwrap().as_ptr(), root_pointer);
         for index in 0..COUNT {
             let Progress::Pending(request) = reader.poll().unwrap() else {
                 panic!("group {index} must be supplied before completion");
@@ -159,7 +168,10 @@ mod tests {
             };
             assert_eq!(request, repeated);
             assert_eq!(reader.world.as_ref().unwrap().examined, index * 2 + 1);
-            reader.provide(&request, group.clone()).unwrap();
+            let supplied = group.clone();
+            let companion_pointer = supplied.as_ptr();
+            reader.provide(&request, supplied).unwrap();
+            assert_eq!(reader.buffers[&request.key].as_ptr(), companion_pointer);
         }
         let Progress::Ready(converted) = reader.poll().unwrap() else {
             panic!("all group files have been supplied");
@@ -167,7 +179,7 @@ mod tests {
         ROOT_DECODES.with(|count| assert_eq!(count.get(), 2));
         assert!(reader.world.is_none());
         assert!(reader.buffers.is_empty());
-        assert_eq!(reader.bytes.capacity(), 0);
+        assert!(reader.bytes.is_none());
         drop(reader);
         converted.value.validate().unwrap();
         assert_eq!(converted.value.meshes().len(), COUNT);

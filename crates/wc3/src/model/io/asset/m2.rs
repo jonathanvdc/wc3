@@ -1,11 +1,12 @@
 //! Runtime M2 dialect dispatch; native bundles remain responsible for the closure.
-use super::{CompanionKind, CompanionPlan, DecodeError, Error, Request};
+use super::{source_bytes, CompanionKind, CompanionPlan, DecodeError, Error, Request};
 use crate::model::common::FileKey;
 use crate::model::conversion::{Conversion, ImportOptions};
 use crate::model::formats::m2::{self as native, DependencyKind};
 use crate::model::io::m2 as semantic;
 use crate::model::Model;
 use std::collections::BTreeMap;
+use std::ops::Deref;
 
 fn request(dependency: &native::Dependency) -> Request {
     Request {
@@ -29,15 +30,19 @@ fn request(dependency: &native::Dependency) -> Request {
     }
 }
 
-fn decode_typed<'a, D: native::Dialect>(
+fn decode_typed<'a, D: native::Dialect, B>(
     bytes: &'a [u8],
     key: &FileKey,
-    buffers: &'a BTreeMap<FileKey, Vec<u8>>,
+    buffers: &'a BTreeMap<FileKey, B>,
     missing: &mut Option<Request>,
-) -> Result<Option<native::Bundle<'a, D>>, native::ReadError> {
+) -> Result<Option<native::Bundle<'a, D>>, native::ReadError>
+where
+    B: Deref,
+    B::Target: AsRef<[u8]>,
+{
     match native::Bundle::decode(bytes, key.clone(), |dependency| {
         if let Some(bytes) = buffers.get(&dependency.key) {
-            Ok(Some(bytes.as_slice()))
+            Ok(Some(source_bytes(bytes)))
         } else {
             *missing = Some(request(dependency));
             Ok(None)
@@ -67,14 +72,16 @@ macro_rules! bundles {
             let layout = match document { $(native::DynamicDocument::$variant(_) => Layout::$variant,)* };
             Ok(Preparation { layout, companions: CompanionPlan::new(dependencies) })
         }
-        pub(super) fn decode(
+        pub(super) fn decode<B>(
             prepared: &mut Preparation,
             bytes: &[u8],
             key: &FileKey,
-            buffers: &BTreeMap<FileKey, Vec<u8>>,
+            buffers: &BTreeMap<FileKey, B>,
             missing: &mut Option<Request>,
             options: &ImportOptions,
-        ) -> Result<Option<Conversion<Model<'static>>>, Error> {
+        ) -> Result<Option<Conversion<Model<'static>>>, Error>
+        where B: Deref, B::Target: AsRef<[u8]>,
+        {
             // Prefetch directly declared companions before decoding the full bundle.
             // Recursive companion requirements remain native bundle decisions.
             if let Some(request) = prepared.companions.next_missing(buffers) {
@@ -82,7 +89,7 @@ macro_rules! bundles {
                 return Ok(None);
             }
             match prepared.layout {
-                $(Layout::$variant => decode_typed::<native::$envelope<native::$layout>>(bytes, key, buffers, missing)
+                $(Layout::$variant => decode_typed::<native::$envelope<native::$layout>, B>(bytes, key, buffers, missing)
                     .map_err(|source| Error::Decode { key: key.clone(), source: DecodeError::M2(source) })?
                     .map(|bundle| semantic::import(&bundle, options).map(|converted| Conversion {
                         value: converted.value.widen().into_owned(),
