@@ -10,7 +10,8 @@ cargo add wc3
 ```
 
 Model codecs and encoded texture/archive operations are always available.
-[Optional features](#optional-features) add pixel decoding and archive compression.
+[Optional features](#optional-features) add pixel decoding, archive compression,
+and native execution for baked Popcorn effects.
 
 ## Read and edit a model
 
@@ -36,7 +37,8 @@ The returned model owns its values, so you can release the input. Import also
 returns a report. Strict import rejects unsupported data; explicitly permitted
 losses are recorded there. The [model guide](docs/semantic.md) introduces checked
 editing, and the [import and export guide](docs/conversion.md) shows how to plan
-native output and inspect conversion decisions.
+native output, inspect conversion decisions, and distinguish native decoding
+failures from checked import failures.
 
 For M2 models with companions, WMO roots with groups, or a common ingestion path
 across formats, use `io::asset::Reader`. It requests supporting files by typed
@@ -100,8 +102,7 @@ copying unchanged encoded entries without recompression. The
 
 ## Optional features
 
-There are no default features. Enable only the pixel and compression operations
-your application needs:
+There are no default features. Enable the operations your application needs:
 
 | Feature | Adds |
 | --- | --- |
@@ -109,6 +110,7 @@ your application needs:
 | `blp-encode` | Image encoding and an `image::ImageEncoder` adapter. |
 | `mpq-decode` | Compressed archive entry extraction. |
 | `mpq-encode` | Zlib and bzip2 compression when writing archives. |
+| `popcorn-jit` | Optional native execution for baked Popcorn effects on supported hosts; see [native execution](docs/popcorn.md#prepare-native-execution). |
 
 For example, to read texture pixels and extract compressed archive entries:
 

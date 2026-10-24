@@ -64,6 +64,16 @@ provides the same ownership choice for an already decoded MDLX document. The
 borrowing `import` entry point remains useful when the application retains its
 native source and wants to reuse compatible encoded arrays.
 
+The direct decoders return `io::mdlx::ReadError`, which distinguishes native
+`Mdx` and `Mdl` decoding failures from checked `Import` failures. The codec
+variants retain their original error kinds and input locations: a byte offset
+and optional chunk tag for MDX, or a source span for MDL. An MDL error's
+`diagnostic(source)` formats that location against the original text. Every
+variant exposes its original cause through `std::error::Error::source`.
+Imports of already decoded documents and export planning instead return
+`conversion::Error`, which identifies the semantic field that could not be
+represented.
+
 ## Selecting a vocabulary and layout
 
 MDLX import returns `Model<'data, Mdlx>`; M2 and WMO imports return their matching

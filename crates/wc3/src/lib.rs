@@ -41,6 +41,8 @@
 //! `image` decoder adapter, or `blp-encode` to encode images. `mpq-decode` enables
 //! compressed entry extraction; `mpq-encode` adds zlib/bzip2 writing. Model codecs,
 //! stored MPQ entries, and encoded container editing need none of these features.
+//! Enable `popcorn-jit` for optional native execution of baked Popcorn effects on
+//! supported hosts; the Rust evaluator remains available without it.
 //!
 //! # Ownership and writing
 //!
