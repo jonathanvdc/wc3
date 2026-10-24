@@ -151,7 +151,7 @@ pub(super) fn write<'a, B: Batch>(
         result
             .chunks
             .push(LegacyGroupChunk::Common(GroupChunk::TextureCoordinates(
-                array(&coordinates.storage().to_vec())?,
+                array(&coordinates.storage().iter().collect::<Vec<_>>())?,
             )));
     }
     for colors in mesh.geometry.color_sets() {
@@ -368,7 +368,12 @@ pub(super) fn write<'a, B: Batch>(
         result
             .chunks
             .push(LegacyGroupChunk::LightMapCoordinates(array(
-                &mesh.geometry.lightmap_coordinates().storage().to_vec(),
+                &mesh
+                    .geometry
+                    .lightmap_coordinates()
+                    .storage()
+                    .iter()
+                    .collect::<Vec<_>>(),
             )?));
     }
     for liquid in &region.liquids {

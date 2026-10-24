@@ -92,8 +92,10 @@ keeps the encoded representation separate from the aligned mathematical value:
 encoded storage without allocating an aligned vector collection. Keep that source
 alive while using the graph. `from_storage` and `into_storage` bridge native
 `ZeroVec` buffers; extracting a shared owned buffer copies its bytes, while a
-unique buffer moves without rebuilding it. Parsing checks the packed
-representation, while model publication checks semantic validity.
+unique buffer moves without rebuilding it. `storage()` borrows the encoded
+elements as a `ZeroSlice`, independent of whether the array owns its bytes.
+Parsing checks the packed representation, while model publication checks semantic
+validity.
 
 `IntoPackedArray` accepts existing packed arrays, arrays, vectors, and slices of
 semantic values. Cloning retains borrowed buffers and shares owned packed buffers.
