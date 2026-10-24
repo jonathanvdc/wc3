@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::error::Error as _;
 use std::io;
 use wc3::model::common::FileKey;
-use wc3::model::conversion::{Conversion, ImportOptions, IssueKind, UnknownPolicy};
+use wc3::model::conversion::{Conversion, ExportOptions, ImportOptions, IssueKind, UnknownPolicy};
 use wc3::model::formats::m2::{
     chunks::{AnimationFileId, Chunk},
     codec::{Array as M2Array, ArrayRef},
@@ -29,6 +29,8 @@ use wc3::model::formats::wmo::{
 use wc3::model::io::asset::{
     load, CompanionKind, DecodeError, Error, Format, LoadError, Progress, Reader, Request,
 };
+use wc3::model::io::wmo as semantic_wmo;
+use wc3::model::profiles::Wmo;
 use wc3::model::{AnimationProgram, AnimationSample, Model, Time};
 
 fn ready(reader: &mut Reader) -> Conversion<Model<'static>> {
@@ -619,6 +621,287 @@ fn wmo_fixture<D: Dialect>() -> (Vec<u8>, Vec<u8>) {
         ),
     ]);
     (root.encode().unwrap(), group.encode().unwrap())
+}
+
+fn many_wmo_groups(count: usize) -> (Vec<u8>, Vec<(FileKey, Vec<u8>)>) {
+    let (root_bytes, group_bytes) = wmo_fixture::<Classic>();
+    let mut root = Root::<Classic>::decode(&root_bytes).unwrap().into_owned();
+    let maximum = (count.saturating_sub(1) * 3 + 1) as f32;
+    root.header_mut().bounds = [[0.; 3], [maximum, 1., 1.]];
+    for chunk in root.chunks_mut() {
+        if let RootChunk::Groups(values) = chunk {
+            *values = WmoArray::from_records(
+                &(0..count)
+                    .map(|index| records::GroupInfo {
+                        bounds: [
+                            [index as f32 * 3., 0., 0.],
+                            [index as f32 * 3. + 1., 1., 1.],
+                        ],
+                        ..Default::default()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        }
+    }
+    // Physical identities intentionally sort opposite to their declaration order.
+    let ids: Vec<_> = (0..count)
+        .map(|index| 10_000 + (count - index) as u32)
+        .collect();
+    let chunk_count = root.chunks().count();
+    root.insert_chunk(
+        chunk_count,
+        RootChunk::GroupFileIds(WmoArray::from_records(&ids).unwrap()),
+    )
+    .unwrap();
+    root.synchronize_counts().unwrap();
+    let groups = ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let x = index as f32 * 3.;
+            let mut group = Group::<Classic>::decode(&group_bytes).unwrap().into_owned();
+            group.header_mut().bounds_minimum = [x, 0., 0.];
+            group.header_mut().bounds_maximum = [x + 1., 1., 1.];
+            for chunk in group.chunks_mut() {
+                if let GroupChunk::Positions(values) = chunk {
+                    *values = WmoArray::from_records(&[[x, 0., 0.], [x + 1., 0., 0.], [x, 1., 0.]])
+                        .unwrap();
+                }
+            }
+            (FileKey::FileId(id), group.encode().unwrap())
+        })
+        .collect();
+    (root.encode().unwrap(), groups)
+}
+
+#[test]
+fn many_wmo_groups_keep_declaration_order_and_native_semantics_during_incremental_loading() {
+    let (root, groups) = many_wmo_groups(48);
+    let root_key = FileKey::RawPath(b"World\\\xff-multigroup.wmo".to_vec());
+    let native = wmo::Bundle::<Classic>::decode(&root, root_key.clone(), |dependency| {
+        Ok(groups
+            .iter()
+            .find(|(key, _)| key == &dependency.key)
+            .map(|(_, bytes)| bytes.as_slice()))
+    })
+    .unwrap();
+    let (expected_report, expected) = {
+        let imported = semantic_wmo::import(&native, &ImportOptions::default()).unwrap();
+        let expected = semantic_wmo::plan::<Classic>(&imported.value, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .value
+            .encode()
+            .unwrap();
+        (imported.report, expected)
+    };
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        root_key.clone(),
+        root.clone(),
+        ImportOptions::default(),
+    );
+    let mut previous = None;
+    for (index, (key, bytes)) in groups.iter().enumerate() {
+        let request = pending(&mut reader);
+        assert_eq!(request.owner, root_key);
+        assert_eq!(&request.key, key);
+        assert_eq!(request.kind, CompanionKind::WmoGroup { index, lod: 0 });
+        for _ in 0..4 {
+            assert_eq!(pending(&mut reader), request);
+        }
+        let mut wrong = request.clone();
+        if let Some((key, _)) = groups.get(index + 1) {
+            wrong.key = key.clone();
+            wrong.kind = CompanionKind::WmoGroup {
+                index: index + 1,
+                lod: 0,
+            };
+        } else {
+            wrong.owner = FileKey::Root;
+        }
+        assert!(matches!(
+            reader.provide(&wrong, Vec::new()),
+            Err(Error::UnexpectedCompanion { expected: Some(expected), supplied })
+                if *expected == request && *supplied == wrong
+        ));
+        if let Some(stale) = &previous {
+            assert!(matches!(
+                reader.provide(stale, Vec::new()),
+                Err(Error::UnexpectedCompanion { expected: Some(expected), .. })
+                    if *expected == request
+            ));
+        }
+        assert_eq!(pending(&mut reader), request);
+        reader.provide(&request, bytes.clone()).unwrap();
+        previous = Some(request);
+    }
+    let converted = ready(&mut reader);
+    assert_eq!(converted.report, expected_report);
+    assert!(matches!(reader.poll(), Err(Error::Finished)));
+    drop(reader);
+    drop(native);
+    drop((groups, root));
+    assert_eq!(converted.value.meshes().len(), 48);
+    assert_eq!(converted.value.instances().len(), 48);
+    let positions: Vec<_> = converted
+        .value
+        .meshes()
+        .values()
+        .map(|mesh| mesh.positions().first().unwrap().x)
+        .collect();
+    assert_eq!(
+        positions,
+        (0..48).map(|index| index as f32 * 3.).collect::<Vec<_>>()
+    );
+    let typed = converted.value.try_narrow::<Wmo>().unwrap();
+    let actual = semantic_wmo::plan::<Classic>(&typed, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value
+        .encode()
+        .unwrap();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn malformed_wmo_group_is_checked_after_the_complete_companion_plan() {
+    let (root, groups) = many_wmo_groups(12);
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        FileKey::FileId(700),
+        root,
+        ImportOptions::default(),
+    );
+    let bad_key = groups[5].0.clone();
+    for (index, (key, bytes)) in groups.into_iter().enumerate() {
+        let request = pending(&mut reader);
+        assert_eq!(request.key, key);
+        assert_eq!(request.kind, CompanionKind::WmoGroup { index, lod: 0 });
+        reader
+            .provide(
+                &request,
+                if index == 5 {
+                    b"invalid group".to_vec()
+                } else {
+                    bytes
+                },
+            )
+            .unwrap();
+    }
+    for _ in 0..2 {
+        assert!(matches!(
+            reader_error(&mut reader),
+            Error::Decode { key, source: DecodeError::Wmo(_) } if key == bad_key
+        ));
+    }
+    let unrelated = Request {
+        owner: FileKey::FileId(700),
+        key: bad_key,
+        kind: CompanionKind::WmoGroup { index: 5, lod: 0 },
+    };
+    assert!(matches!(
+        reader.provide(&unrelated, Vec::new()),
+        Err(Error::UnexpectedCompanion { expected: None, .. })
+    ));
+}
+
+#[test]
+fn wmo_lod_rows_skip_missing_and_aliased_files_without_losing_group_roles() {
+    let (root, groups) = many_wmo_groups(6);
+    let mut root = Root::<Classic>::decode(&root).unwrap().into_owned();
+    let base_ids: Vec<_> = groups
+        .iter()
+        .map(|(key, _)| match key {
+            FileKey::FileId(id) => *id,
+            _ => unreachable!(),
+        })
+        .collect();
+    let extra_ids = [0, base_ids[0], 9000, base_ids[2], 0, 9001];
+    let ids: Vec<_> = base_ids.iter().copied().chain(extra_ids).collect();
+    for chunk in root.chunks_mut() {
+        if let RootChunk::GroupFileIds(values) = chunk {
+            *values = WmoArray::from_records(&ids).unwrap();
+        }
+    }
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        FileKey::Root,
+        root.encode().unwrap(),
+        ImportOptions::default(),
+    );
+    for (index, (key, bytes)) in groups.iter().enumerate() {
+        let request = pending(&mut reader);
+        assert_eq!(&request.key, key);
+        assert_eq!(request.kind, CompanionKind::WmoGroup { index, lod: 0 });
+        reader.provide(&request, bytes.clone()).unwrap();
+    }
+    for (id, index) in [(9000, 2), (9001, 5)] {
+        let request = pending(&mut reader);
+        assert_eq!(request.key, FileKey::FileId(id));
+        assert_eq!(request.kind, CompanionKind::WmoGroup { index, lod: 1 });
+        assert_eq!(pending(&mut reader), request);
+        reader.provide(&request, groups[index].1.clone()).unwrap();
+    }
+    let model = ready(&mut reader).value.try_narrow::<Wmo>().unwrap();
+    drop((reader, root, groups));
+    assert_eq!(model.meshes().len(), 10);
+    let mut actual: Vec<_> = model
+        .instances()
+        .values()
+        .map(|instance| (instance.lod.unwrap(), instance.properties.file_id.unwrap()))
+        .collect();
+    let mut expected: Vec<_> = base_ids
+        .into_iter()
+        .map(|id| (0, id))
+        .chain(
+            extra_ids
+                .into_iter()
+                .filter(|id| *id != 0)
+                .map(|id| (1, id)),
+        )
+        .collect();
+    actual.sort();
+    expected.sort();
+    assert_eq!(actual, expected);
+    model.validate().unwrap();
+}
+
+#[test]
+#[ignore = "explicit incremental WMO dependency-discovery measurement"]
+fn wmo_dependency_discovery_scaling() {
+    use std::hint::black_box;
+    use std::time::Instant;
+    for count in [128, 512, 2048] {
+        let (root, groups) = many_wmo_groups(count);
+        let mut elapsed = Vec::new();
+        for _ in 0..5 {
+            let mut reader = Reader::new(
+                Format::Wmo(wmo::Profile::Classic),
+                FileKey::FileId(700),
+                root.clone(),
+                ImportOptions::default(),
+            );
+            let start = Instant::now();
+            for (index, (key, bytes)) in groups.iter().enumerate() {
+                let request = pending(&mut reader);
+                assert_eq!(&request.key, key);
+                assert_eq!(request.kind, CompanionKind::WmoGroup { index, lod: 0 });
+                reader.provide(&request, bytes.clone()).unwrap();
+            }
+            elapsed.push(start.elapsed());
+            // Final group decoding and semantic import are outside discovery.
+            black_box(reader);
+        }
+        elapsed.sort();
+        eprintln!(
+            "WMO dependency discovery: groups={count}, root_bytes={}, median_ns={}, ns_per_group={:.1}",
+            root.len(),
+            elapsed[2].as_nanos(),
+            elapsed[2].as_nanos() as f64 / count as f64,
+        );
+    }
 }
 
 #[test]
