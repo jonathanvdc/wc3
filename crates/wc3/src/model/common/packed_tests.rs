@@ -12,11 +12,11 @@ fn constructors_distinguish_static_borrows_from_owned_native_storage() {
     let native = ZeroVec::<u16>::alloc_from_slice(&[3, 5]);
     let pointer = native.as_bytes().as_ptr();
     let owned = PackedArray::<u16>::from_storage(native);
-    assert!(matches!(&owned.storage, Storage::Owned(_)));
+    assert!(matches!(&owned.storage, Storage::Shared(_)));
     assert_eq!(owned.as_bytes().as_ptr(), pointer);
 
     let detached = borrowed.into_owned();
-    assert!(matches!(&detached.storage, Storage::Owned(_)));
+    assert!(matches!(&detached.storage, Storage::Shared(_)));
     assert_ne!(detached.as_bytes().as_ptr(), BYTES.as_ptr());
 }
 

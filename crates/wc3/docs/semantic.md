@@ -91,20 +91,21 @@ keeps the encoded representation separate from the aligned mathematical value:
 `Vec3` at a time through `get` or `iter`. Compatible native arrays borrow their
 encoded storage without allocating an aligned vector collection. Keep that source
 alive while using the graph. `from_storage` and `into_storage` bridge native
-`ZeroVec` buffers; extracting a shared owned buffer copies its bytes, while a
-unique buffer moves without rebuilding it. `storage()` borrows the encoded
-elements as a `ZeroSlice`, independent of whether the array owns its bytes.
+`ZeroVec` buffers; extracting an owned buffer copies its bytes if other owners
+remain, while a unique buffer moves without rebuilding it. `storage()` borrows the
+encoded elements as a `ZeroSlice`, independent of whether the array owns its bytes.
 Parsing checks the packed representation, while model publication checks semantic
 validity.
 
 `IntoPackedArray` accepts existing packed arrays, arrays, vectors, and slices of
-semantic values. Storage is either a borrowed little-endian element slice or an
-`Arc`-backed owned vector, which can have one or several owners. Cloning retains
-borrowed buffers and shares owned packed buffers.
-`into_owned` copies borrowed buffers and retains already owned storage without
-copying. `set` and `for_each_mut` copy borrowed or shared storage before its first
-edit, then reuse the unique owned buffer. Other clones keep their original values.
-Variable-length rows use `ValueGroups`, a packed element array
+semantic values. Storage either borrows a little-endian element slice or holds
+an owned vector through an `Arc`, which can have one or several owners. `is_owned`
+means the backing bytes are owned; it does not imply exclusive ownership. Cloning
+retains borrowed buffers and shares the owned allocation. `into_owned` copies
+borrowed buffers and retains an existing `Arc` without copying its bytes.
+`set` and `for_each_mut` copy borrowed storage or a buffer with other owners before
+its first edit, then reuse the unique owned buffer. Other clones keep their
+original values. Variable-length rows use `ValueGroups`, a packed element array
 with encoded row offsets. These storage rules apply independently of graph
 identity and transactional validation.
 

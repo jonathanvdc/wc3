@@ -82,9 +82,11 @@ impl PackedValue for Mat4 {
     }
 }
 
-/// Borrowed or owned little-endian elements exposed as mathematical values.
+/// Little-endian elements exposed as mathematical values.
+/// Storage borrows encoded elements or owns them through an `Arc`.
 /// Reads decode one element by value, without requiring aligned source bytes.
-/// Clones share owned buffers; editing a shared or borrowed buffer first copies it.
+/// Clones share the owned allocation; editing borrowed storage or an allocation
+/// with multiple owners first copies it.
 #[derive(Clone)]
 pub struct PackedArray<'a, T: PackedValue> {
     storage: Storage<'a, T::Storage>,
@@ -93,7 +95,8 @@ pub struct PackedArray<'a, T: PackedValue> {
 #[derive(Clone)]
 enum Storage<'a, T: AsULE> {
     Borrowed(&'a [T::ULE]),
-    Owned(Arc<Vec<T::ULE>>),
+    // The Arc may have one or several owners.
+    Shared(Arc<Vec<T::ULE>>),
 }
 impl<T: PackedValue> Default for PackedArray<'_, T> {
     fn default() -> Self {
@@ -128,7 +131,7 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
                     storage: Storage::Borrowed(values),
                 },
                 Cow::Owned(values) => Self {
-                    storage: Storage::Owned(Arc::new(values)),
+                    storage: Storage::Shared(Arc::new(values)),
                 },
             }
         }
@@ -138,16 +141,16 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     pub fn storage(&self) -> &ZeroSlice<T::Storage> {
         match &self.storage {
             Storage::Borrowed(storage) => ZeroSlice::from_ule_slice(storage),
-            Storage::Owned(storage) => ZeroSlice::from_ule_slice(storage),
+            Storage::Shared(storage) => ZeroSlice::from_ule_slice(storage),
         }
     }
     /// Moves the encoded representation out at a native format boundary.
-    /// A uniquely owned buffer moves unchanged; a shared buffer is copied.
+    /// An owned buffer moves unchanged when unique; other owners require a copy.
     #[inline]
     pub fn into_storage(self) -> ZeroVec<'a, T::Storage> {
         match self.storage {
             Storage::Borrowed(storage) => ZeroVec::new_borrowed(storage),
-            Storage::Owned(storage) => ZeroVec::new_owned(Arc::unwrap_or_clone(storage)),
+            Storage::Shared(storage) => ZeroVec::new_owned(Arc::unwrap_or_clone(storage)),
         }
     }
     /// Borrows a validated little-endian byte buffer.
@@ -163,9 +166,9 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     pub fn len(&self) -> usize {
         self.storage().len()
     }
-    /// Whether the encoded buffer is owned.
+    /// Whether the encoded bytes are owned, possibly through a shared allocation.
     pub fn is_owned(&self) -> bool {
-        matches!(self.storage, Storage::Owned(_))
+        matches!(self.storage, Storage::Shared(_))
     }
     /// Whether no elements exist.
     #[inline]
@@ -207,14 +210,14 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
             .get_subslice(range)
             .map(|v| PackedArray::from_storage(v.as_zerovec()))
     }
-    /// Replaces one element, first copying a borrowed or shared buffer.
+    /// Replaces one element, copying borrowed storage or a buffer with other owners.
     /// Returns the previous value, or `None` without allocating for an absent index.
     pub fn set(&mut self, index: usize, value: T) -> Option<T> {
         let previous = self.get(index)?;
         self.mutable_storage()[index] = value.pack().to_unaligned();
         Some(previous)
     }
-    /// Edits values in place after making the packed buffer uniquely owned.
+    /// Edits values in place after ensuring exclusive access to an owned buffer.
     pub fn for_each_mut(&mut self, mut edit: impl FnMut(&mut T)) {
         if self.is_empty() {
             return;
@@ -225,25 +228,25 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
             *stored = value.pack().to_unaligned();
         });
     }
-    /// Copies borrowed storage and retains already owned buffers without copying.
+    /// Copies borrowed buffers and retains an existing `Arc` without copying its bytes.
     pub fn into_owned(self) -> PackedArray<'static, T> {
         match self.storage {
             Storage::Borrowed([]) => PackedArray::new(),
             Storage::Borrowed(storage) => PackedArray {
-                storage: Storage::Owned(Arc::new(storage.to_vec())),
+                storage: Storage::Shared(Arc::new(storage.to_vec())),
             },
-            Storage::Owned(storage) => PackedArray {
-                storage: Storage::Owned(storage),
+            Storage::Shared(storage) => PackedArray {
+                storage: Storage::Shared(storage),
             },
         }
     }
 
     fn mutable_storage(&mut self) -> &mut Vec<<T::Storage as AsULE>::ULE> {
         if let Storage::Borrowed(storage) = &self.storage {
-            self.storage = Storage::Owned(Arc::new(storage.to_vec()));
+            self.storage = Storage::Shared(Arc::new(storage.to_vec()));
         }
         match &mut self.storage {
-            Storage::Owned(storage) => Arc::make_mut(storage),
+            Storage::Shared(storage) => Arc::make_mut(storage),
             Storage::Borrowed(_) => unreachable!("borrowed storage was made owned"),
         }
     }
