@@ -1,7 +1,7 @@
 //! Asset-backed instance requests and shared GPU preparation.
 use super::bounds::transform_bounds;
 use super::child_coordinates::ChildCoordinates;
-use super::compiled::PreparedGeometry;
+use super::compiled::PreparedGeometryCache;
 use super::effects::model_budget::{
     ActorFrame, ModelActorLease, ModelActorTree, ModelParticleTreeStats,
 };
@@ -208,10 +208,7 @@ fn rebind_state(
 }
 
 #[derive(Resource, Default)]
-pub(crate) struct PreparedModelCache(
-    HashMap<AssetId<ModelAsset>, PreparedModel>,
-    PreparedGeometry,
-);
+pub(crate) struct PreparedModelCache(HashMap<AssetId<ModelAsset>, PreparedModel>);
 
 pub(crate) fn invalidate_models(
     mut events: MessageReader<AssetEvent<ModelAsset>>,
@@ -360,6 +357,7 @@ pub(crate) struct LoaderResources<'w> {
     binds: ResMut<'w, Assets<SkinnedMeshInverseBindposes>>,
     materials: ResMut<'w, Assets<ModelMaterial>>,
     cache: ResMut<'w, PreparedModelCache>,
+    geometry: ResMut<'w, PreparedGeometryCache>,
     image_cache: ResMut<'w, ReplacementImages>,
     images: ResMut<'w, Assets<Image>>,
 }
@@ -445,6 +443,7 @@ impl OwnedModelFactory<'_, '_> {
             binds,
             materials,
             cache,
+            geometry,
             image_cache,
             images,
         } = resources;
@@ -492,12 +491,10 @@ impl OwnedModelFactory<'_, '_> {
         } else {
             None
         };
-        let PreparedModelCache(model_cache, geometry_cache) = &mut **cache;
-        let prepared = model_cache.entry(request.0.id()).or_insert_with(|| {
-            source
-                .compiled
-                .prepare_cached(meshes, binds, geometry_cache)
-        });
+        let prepared = cache
+            .0
+            .entry(request.0.id())
+            .or_insert_with(|| source.compiled.prepare_with_cache(meshes, binds, geometry));
         let replacements = effective_replacements(root, owners);
         let Some((prepared, bound)) =
             image_cache.prepare(request.0.id(), prepared, replacements, images)

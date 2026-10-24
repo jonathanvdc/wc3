@@ -359,6 +359,7 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<PreparedGeometryCache>()
         .init_resource::<ReplacementImages>()
         .init_resource::<Assets<Image>>();
     app.add_systems(Update, spawn_loaded_models);
@@ -416,6 +417,7 @@ fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<PreparedGeometryCache>()
         .init_resource::<ReplacementImages>()
         .init_resource::<Assets<Image>>();
     app.add_systems(Update, spawn_loaded_models);

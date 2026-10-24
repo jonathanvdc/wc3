@@ -1,17 +1,27 @@
 //! Non-owning content lookup for renderer-owned geometry in live asset stores.
 use crate::mesh_interner::{mesh_equal, mesh_hash};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use bevy::prelude::{AssetId, Assets, Handle, Mat4, Mesh};
+use bevy::prelude::{AssetId, Assets, Handle, Mat4, Mesh, Resource};
 use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 
-#[derive(Default)]
-pub(crate) struct PreparedGeometry {
+/// Non-owning lookup for equal prepared meshes and inverse-bind palettes.
+///
+/// Reuse with [`CompiledModel::prepare_with_cache`](super::CompiledModel::prepare_with_cache)
+/// to share assets across independently compiled models. The cache holds only
+/// candidate asset IDs; prepared models own their strong handles. Every hit
+/// compares current contents and acquires ownership from the supplied stores,
+/// so reusing the cache with different stores never transfers foreign handles.
+/// Missing assets are pruned during preparation.
+/// [`Wc3BevyPlugin`](crate::Wc3BevyPlugin) initializes this resource for asset-backed
+/// instances; manual systems can borrow it to share the same prepared assets.
+#[derive(Default, Resource)]
+pub struct PreparedGeometryCache {
     meshes: HashMap<u64, Vec<AssetId<Mesh>>>,
     palettes: HashMap<u64, Vec<AssetId<SkinnedMeshInverseBindposes>>>,
 }
 
-impl PreparedGeometry {
+impl PreparedGeometryCache {
     /// Remove stale lookup metadata once per newly prepared model, rather than per draw.
     pub(crate) fn prune(
         &mut self,

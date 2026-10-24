@@ -4,7 +4,7 @@ use crate::effects::model_children::ModelParticleMotion;
 use crate::effects::model_ownership::ModelParticleOwner;
 use crate::image_replacements::ReplacementImages;
 use crate::instances::PreparedModelCache;
-use crate::{ModelAsset, ModelMaterial};
+use crate::{ModelAsset, ModelMaterial, PreparedGeometryCache};
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use std::collections::HashMap;
@@ -43,6 +43,7 @@ fn scene() -> (App, Entity, Handle<ModelAsset>) {
         .insert_resource(assets)
         .init_resource::<Assets<Image>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<PreparedGeometryCache>()
         .init_resource::<ReplacementImages>()
         .init_resource::<ModelParticleBirths>()
         .add_systems(Update, simulate_model_particles);

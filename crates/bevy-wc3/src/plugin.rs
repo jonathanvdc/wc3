@@ -17,7 +17,8 @@ use crate::{
     advance_animation, animate_cameras, animate_instances, apply_lod_visibility,
     apply_world_selection, dispatch_events, invalidate_models, restart_attachments,
     simulate_particles, spawn_loaded_models, update_lod, update_skin_bounds, AssetSettings,
-    LodSettings, ModelAsset, ModelEvent, ModelLoader, ModelMaterial, PreparedModelCache,
+    LodSettings, ModelAsset, ModelEvent, ModelLoader, ModelMaterial, PreparedGeometryCache,
+    PreparedModelCache,
 };
 use bevy::asset::embedded_asset;
 use bevy::camera::visibility::VisibilitySystems;
@@ -56,6 +57,7 @@ impl Plugin for Wc3BevyPlugin {
         app.register_asset_loader(ModelLoader::new(resolver));
         app.init_asset_loader::<BlpImageLoader>();
         app.init_resource::<PreparedModelCache>();
+        app.init_resource::<PreparedGeometryCache>();
         app.init_resource::<ModelParticleBirths>();
         app.init_resource::<ReplacementImages>();
         app.init_resource::<LodSettings>();

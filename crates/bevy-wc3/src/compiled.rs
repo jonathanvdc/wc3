@@ -29,7 +29,7 @@ use wc3::model::{
     NodeId,
 };
 mod prepared_geometry;
-pub(crate) use prepared_geometry::PreparedGeometry;
+pub use prepared_geometry::PreparedGeometryCache;
 pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState, [u32; 4]);
 pub(crate) type MaterialCache = HashMap<MaterialCacheKey, Handle<ModelMaterial>>;
 
@@ -229,6 +229,8 @@ impl CompiledModel {
     }
 
     /// Insert each shared geometry variant and inverse bind palette once.
+    /// Each call creates fresh assets; use [`Self::prepare_with_cache`] to share
+    /// equal geometry across calls or independently compiled models.
     pub fn prepare(
         &self,
         meshes: &mut Assets<Mesh>,
@@ -242,11 +244,18 @@ impl CompiledModel {
             None,
         )
     }
-    pub(crate) fn prepare_cached(
+    /// Prepare assets with content sharing across models and preparation calls.
+    ///
+    /// Complete equal meshes and inverse-bind palettes in the supplied stores
+    /// share handles. Materials, graph identities and animation stay independent.
+    /// The returned model owns its handles; the cache retains no assets.
+    /// Editing a shared mesh affects every user of its handle. Clone the mesh
+    /// into an application-owned asset before changing it independently.
+    pub fn prepare_with_cache(
         &self,
         meshes: &mut Assets<Mesh>,
         binds: &mut Assets<SkinnedMeshInverseBindposes>,
-        geometry: &mut PreparedGeometry,
+        geometry: &mut PreparedGeometryCache,
     ) -> PreparedModel {
         geometry.prune(meshes, binds);
         self.prepare_shared(
@@ -263,7 +272,7 @@ impl CompiledModel {
         binds: &mut Assets<SkinnedMeshInverseBindposes>,
         variants: &mut HashMap<*const Mesh, Handle<Mesh>>,
         palettes: &mut HashMap<(*const Mat4, usize), Handle<SkinnedMeshInverseBindposes>>,
-        mut geometry: Option<&mut PreparedGeometry>,
+        mut geometry: Option<&mut PreparedGeometryCache>,
     ) -> PreparedModel {
         PreparedModel {
             image_template: self.image_template.as_ref().map(|template| {

@@ -47,7 +47,7 @@ fn collect_dropped<A: Asset>(assets: Assets<A>) -> Assets<A> {
 
 #[test]
 fn equal_meshes_share_even_when_owned_by_independent_compilations() {
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut meshes = Assets::default();
     let a = cache.mesh(&mut meshes, &triangle());
     let b = cache.mesh(&mut meshes, &triangle());
@@ -114,7 +114,7 @@ fn collision_buckets_compare_all_current_mesh_data_and_descriptors() {
     changed.set_skinned_mesh_bounds(Some(SkinnedMeshBounds::default()));
     variants.push(("skin bounds", changed));
     for (name, changed) in variants {
-        let mut cache = PreparedGeometry::default();
+        let mut cache = PreparedGeometryCache::default();
         let mut meshes = Assets::default();
         let first = cache.mesh_bucket(19, &mut meshes, &triangle());
         let second = cache.mesh_bucket(19, &mut meshes, &changed);
@@ -140,7 +140,7 @@ fn collision_buckets_compare_all_current_mesh_data_and_descriptors() {
         MeshVertexAttribute::new("custom", 987_654, VertexFormat::Uint32),
         vec![0_u32; 3],
     );
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut meshes = Assets::default();
     let first = cache.mesh_bucket(23, &mut meshes, &float);
     assert_ne!(
@@ -198,7 +198,7 @@ fn numerically_equal_metadata_with_distinct_float_bits_does_not_alias() {
             positive, negative,
             "the fixture isolates a bit difference hidden by Bevy equality"
         );
-        let mut cache = PreparedGeometry::default();
+        let mut cache = PreparedGeometryCache::default();
         let mut meshes = Assets::default();
         let first = cache.mesh_bucket(31, &mut meshes, &positive);
         let second = cache.mesh_bucket(31, &mut meshes, &negative);
@@ -221,7 +221,7 @@ fn numerically_equal_metadata_with_distinct_float_bits_does_not_alias() {
 #[test]
 fn palette_sharing_preserves_order_length_and_exact_matrix_bits() {
     let original = [Mat4::IDENTITY, Mat4::from_translation(Vec3::X)];
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut assets = Assets::default();
     let first = cache.palette_bucket(5, &mut assets, &original);
     assert_eq!(
@@ -249,7 +249,7 @@ fn palette_sharing_preserves_order_length_and_exact_matrix_bits() {
 
 #[test]
 fn mutated_or_removed_assets_are_not_reused_for_later_models() {
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
     let old = cache.mesh(&mut meshes, &triangle());
@@ -286,7 +286,7 @@ fn mutated_or_removed_assets_are_not_reused_for_later_models() {
 
 #[test]
 fn cache_ids_do_not_keep_meshes_or_palettes_alive_after_last_owner_drops() {
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
     let mesh = cache.mesh(&mut meshes, &triangle());
@@ -310,7 +310,7 @@ fn cache_ids_do_not_keep_meshes_or_palettes_alive_after_last_owner_drops() {
 
 #[test]
 fn colliding_asset_ids_in_replacement_stores_upgrade_only_local_ownership() {
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut first = Assets::default();
     let old = cache.mesh(&mut first, &triangle());
     let mut replacement = Assets::default();
@@ -443,11 +443,11 @@ fn compiled(name: &str, opacity: f32, travel: f32) -> (CompiledModel, NodeId) {
 fn shared_preparation_reuses_buffers_without_merging_model_identity_or_animation() {
     let (a, a_node) = compiled("first", 0.25, 2.);
     let (b, b_node) = compiled("second", 0.75, 6.);
-    let mut cache = PreparedGeometry::default();
+    let mut cache = PreparedGeometryCache::default();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
-    let a = a.prepare_cached(&mut meshes, &mut binds, &mut cache);
-    let b = b.prepare_cached(&mut meshes, &mut binds, &mut cache);
+    let a = a.prepare_with_cache(&mut meshes, &mut binds, &mut cache);
+    let b = b.prepare_with_cache(&mut meshes, &mut binds, &mut cache);
     assert_eq!(meshes.len(), 1);
     assert_eq!(binds.len(), 1);
     assert_eq!(a.draws[0].mesh.id(), b.draws[0].mesh.id());
@@ -513,6 +513,7 @@ fn app() -> App {
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<PreparedGeometryCache>()
         .init_resource::<ReplacementImages>()
         .init_resource::<Assets<Image>>()
         .add_message::<AssetEvent<ModelAsset>>()

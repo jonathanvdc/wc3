@@ -33,6 +33,7 @@ fn app() -> App {
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<PreparedGeometryCache>()
         .init_resource::<ReplacementImages>()
         .init_resource::<Assets<Image>>()
         .add_message::<AssetEvent<ModelAsset>>()

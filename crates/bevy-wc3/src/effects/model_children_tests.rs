@@ -104,6 +104,7 @@ fn detached_particle_requests_cannot_reload_an_ancestor_model() {
     };
     use super::super::super::{
         compile_model, ModelInstanceError, ModelMaterial, ModelRig, ModelSource,
+        PreparedGeometryCache,
     };
     use crate::image_replacements::ReplacementImages;
     use bevy::ecs::system::SystemState;
@@ -115,6 +116,7 @@ fn detached_particle_requests_cannot_reload_an_ancestor_model() {
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<PreparedGeometryCache>()
         .init_resource::<ReplacementImages>()
         .init_resource::<Assets<Image>>()
         .add_systems(Update, spawn_loaded_models);
