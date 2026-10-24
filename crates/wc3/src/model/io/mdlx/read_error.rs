@@ -10,7 +10,7 @@ use std::fmt::{self, Display, Formatter};
 /// A successfully decoded document can still fail checked import, whose error
 /// retains its semantic field path. Each variant exposes its original cause
 /// through [`StdError::source`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum ReadError {
     /// Binary MDX decoding failed before semantic import.
     Mdx(mdx::ReadError),

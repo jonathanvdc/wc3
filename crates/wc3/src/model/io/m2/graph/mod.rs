@@ -1,6 +1,7 @@
 //! Direct native M2 adapters for the independent authoring graph.
 use super::*;
 use crate::model::common::PackedArray;
+use crate::model::error::Location;
 use crate::model::io::materialize;
 use crate::model::{self as semantic, profiles::m2 as profile};
 use glam::Vec3;
@@ -51,12 +52,15 @@ where
         Send + Sync,
 {
     let mut cores = source.model.cores();
-    let core = cores
-        .next()
-        .ok_or_else(|| Error::new("m2.core", "model does not contain a core payload"))?;
+    let core = cores.next().ok_or_else(|| {
+        Error::requirement(
+            Location::new().field("m2").field("core"),
+            "model does not contain a core payload",
+        )
+    })?;
     if cores.next().is_some() {
-        return Err(Error::new(
-            "m2.core",
+        return Err(Error::requirement(
+            Location::new().field("m2").field("core"),
             "conversion requires one model core; multiple core payloads are ambiguous",
         ));
     }
@@ -68,15 +72,27 @@ where
         .count()
         > 1
     {
-        return Err(Error::new(
-            "m2.texture_programs",
+        return Err(Error::requirement(
+            Location::new().field("m2").field("texture_programs"),
             "multiple TXAC tables are ambiguous during semantic import",
         ));
     }
 
     for (geometry, field) in [
-        (true, "m2.particle.geometry_ids"),
-        (false, "m2.particle.child_ids"),
+        (
+            true,
+            Location::new()
+                .field("m2")
+                .field("particle")
+                .field("geometry_ids"),
+        ),
+        (
+            false,
+            Location::new()
+                .field("m2")
+                .field("particle")
+                .field("child_ids"),
+        ),
     ] {
         let mut tables = source.model.extensions().filter_map(|chunk| match chunk {
             Chunk::GeometryParticleIds(ids) if geometry => Some(ids),
@@ -85,13 +101,13 @@ where
         });
         if let Some(ids) = tables.next() {
             if tables.next().is_some() {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     field,
                     "multiple particle model ID tables are ambiguous",
                 ));
             }
             if ids.len() != core.particles.len() {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     field,
                     "particle model ID table must align with core emitters",
                 ));
@@ -101,7 +117,7 @@ where
     let mut context = Context::import(options);
     let name = core.name.as_bytes();
     let name = std::str::from_utf8(name.strip_suffix(&[0]).unwrap_or(name))
-        .map_err(|_| Error::new("m2.name", "invalid UTF-8 name"))?;
+        .map_err(|error| Error::from_source(Location::new().field("m2").field("name"), error))?;
     let mut builder = GraphBuilder::with_profile(profile::ModelMetadata::default());
     let mut family = profile::ModelMetadata {
         name: Cow::Borrowed(name),
@@ -159,11 +175,12 @@ where
     for (index, bone) in bones.iter().enumerate() {
         let mut node = builder.new_node(format!("bone-{index}"));
         if bone.parent_bone_id >= 0 {
-            node.parent = Some(
-                *nodes
-                    .get(bone.parent_bone_id as usize)
-                    .ok_or_else(|| Error::new("m2.bone.parent", "missing parent bone"))?,
-            )
+            node.parent = Some(*nodes.get(bone.parent_bone_id as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("m2").field("bone").field("parent"),
+                    "missing parent bone",
+                )
+            })?)
         }
         node.transform.pivot = Vec3::from_array(bone.pivot);
         node.inheritance = semantic::Inheritance {
@@ -224,11 +241,12 @@ where
             if i == u16::MAX {
                 Ok(None)
             } else {
-                clips
-                    .get(i as usize)
-                    .copied()
-                    .map(Some)
-                    .ok_or_else(|| Error::new("m2.animation_lookup", "missing clip"))
+                clips.get(i as usize).copied().map(Some).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("m2").field("animation_lookup"),
+                        "missing clip",
+                    )
+                })
             }
         })
         .collect::<Result<_, _>>()?;
@@ -261,11 +279,12 @@ where
                 if i == u16::MAX {
                     Ok(None)
                 } else {
-                    nodes
-                        .get(i as usize)
-                        .copied()
-                        .map(Some)
-                        .ok_or_else(|| Error::new("m2.key_bone_lookup", "missing bone"))
+                    nodes.get(i as usize).copied().map(Some).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("key_bone_lookup"),
+                            "missing bone",
+                        )
+                    })
                 }
             })
             .collect::<Result<_, _>>()?;
@@ -279,11 +298,12 @@ where
             id,
             profile::SequenceProperties {
                 alias: if sequence.flags.alias() {
-                    Some(
-                        *clips
-                            .get(sequence.alias_next as usize)
-                            .ok_or_else(|| Error::new("m2.sequence.alias", "missing clip"))?,
-                    )
+                    Some(*clips.get(sequence.alias_next as usize).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("sequence").field("alias"),
+                            "missing clip",
+                        )
+                    })?)
                 } else {
                     None
                 },
@@ -296,11 +316,12 @@ where
                 blend_time: sequence.blend_time.parts(),
                 bounds: optional_bounds(sequence.bounding),
                 next_variation: if sequence.variation_next >= 0 {
-                    Some(
-                        *clips
-                            .get(sequence.variation_next as usize)
-                            .ok_or_else(|| Error::new("m2.sequence.next", "missing variation"))?,
-                    )
+                    Some(*clips.get(sequence.variation_next as usize).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("sequence").field("next"),
+                            "missing variation",
+                        )
+                    })?)
                 } else {
                     None
                 },
@@ -473,7 +494,10 @@ where
         let mut seen = HashSet::new();
         while let Some(next) = builder.model().clip(target).unwrap().properties.alias {
             if !seen.insert(target) {
-                return Err(Error::new("m2.sequence.alias", "alias cycle"));
+                return Err(Error::requirement(
+                    Location::new().field("m2").field("sequence").field("alias"),
+                    "alias cycle",
+                ));
             }
             target = next;
         }
@@ -490,7 +514,7 @@ where
         match chunk {
             Chunk::TextureCombinerHints(programs) => {
                 if programs.len() != core.materials.len() + core.particles.len() {
-                    return Err(Error::new("m2.texture_programs", "TXAC must contain one row per native material followed by one row per particle emitter"));
+                    return Err(Error::requirement(Location::new().field("m2").field("texture_programs"), "TXAC must contain one row per native material followed by one row per particle emitter"));
                 }
                 if programs
                     .iter()
@@ -498,7 +522,10 @@ where
                     .any(|value| value != [0; 2])
                 {
                     context.unsupported(
-                        "m2.material.texture_program",
+                        Location::new()
+                            .field("m2")
+                            .field("material")
+                            .field("texture_program"),
                         "nonzero material TXAC selectors have no logical surface mapping",
                     )?;
                 }
@@ -515,13 +542,13 @@ where
             | Chunk::Physics(_)
             | Chunk::Unknown { .. } => {}
             _ => context.unsupported(
-                "m2.extensions",
+                Location::new().field("m2").field("extensions"),
                 "extension semantics do not yet have a logical mapping",
             )?,
         }
         if let Chunk::Unknown { .. } = chunk {
             context.unknown_data(
-                "m2.chunk",
+                Location::new().field("m2").field("chunk"),
                 "unknown extension has no semantic representation",
             )?;
         }

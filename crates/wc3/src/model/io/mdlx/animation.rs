@@ -1,6 +1,7 @@
 //! Slot allocation and direct borrowed Warcraft III key arrays.
 use super::curves;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{
     animation::{Track as NativeTrack, TrackValue},
     Animatable,
@@ -41,7 +42,7 @@ impl<'a> Decoder<'a, '_> {
     pub fn bind<T, U>(
         &mut self,
         source: &Animatable<'_, T>,
-        name: &str,
+        name: &Location,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Property<U>, Error>
     where
@@ -56,7 +57,7 @@ impl<'a> Decoder<'a, '_> {
         &mut self,
         source: Option<&NativeTrack<'_, T>>,
         default: U,
-        name: &str,
+        name: &Location,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Property<U>, Error>
     where
@@ -73,7 +74,7 @@ impl<'a> Decoder<'a, '_> {
         &mut self,
         source: &NativeTrack<'_, T>,
         default: U,
-        name: &str,
+        name: &Location,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
         tangents: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Property<U>, Error>
@@ -86,10 +87,9 @@ impl<'a> Decoder<'a, '_> {
         let clock = source
             .global_sequence_id()
             .map(|index| {
-                self.globals
-                    .get(index as usize)
-                    .copied()
-                    .ok_or_else(|| Error::new(name, "shared animation clock does not exist"))
+                self.globals.get(index as usize).copied().ok_or_else(|| {
+                    Error::requirement(name.clone(), "shared animation clock does not exist")
+                })
             })
             .transpose()?
             .map_or(TimeSource::Animation, TimeSource::Shared);

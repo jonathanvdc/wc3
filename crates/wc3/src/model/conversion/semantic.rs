@@ -1,5 +1,6 @@
 //! Ordered graph rewrites followed by an exact target projection.
 use super::{Error, Issue, IssueKind, Plan, Report};
+use crate::model::error::Location;
 use crate::model::profiles::{Mdlx, Narrows, Universal, M2};
 use crate::model::{FeatureId, Light, LightActivation, Model, ModelBuilder, NodeFeature};
 
@@ -81,8 +82,8 @@ impl<'a, Q: Narrows<Universal>> Rewrite<'a, Q> for DropUnsupportedFeatures {
     fn apply(&self, draft: &mut ModelBuilder<'a>, report: &mut Report) -> Result<(), Error> {
         for &id in &self.selected {
             let Some(feature) = draft.model().feature(id) else {
-                return Err(Error::new(
-                    format!("features[{id:?}]"),
+                return Err(Error::requirement(
+                    Location::for_owner(id),
                     "selected feature is absent",
                 ));
             };
@@ -124,13 +125,13 @@ impl ConstantLightVisibility {
 impl<'a> Rewrite<'a, Mdlx> for ConstantLightVisibility {
     fn apply(&self, draft: &mut ModelBuilder<'a>, report: &mut Report) -> Result<(), Error> {
         for &id in &self.selected {
-            let path = format!("features[{id:?}].activation");
+            let path = Location::for_owner(id).field("activation");
             let feature = draft
                 .model()
                 .feature(id)
-                .ok_or_else(|| Error::new(&path, "selected feature is absent"))?;
+                .ok_or_else(|| Error::requirement(path.clone(), "selected feature is absent"))?;
             let NodeFeature::Light(Light::AmbientDiffuse(light)) = &feature.payload else {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     path,
                     "selected feature is not an ambient/diffuse light",
                 ));
@@ -139,22 +140,21 @@ impl<'a> Rewrite<'a, Mdlx> for ConstantLightVisibility {
                 continue;
             };
             if draft.model().is_animated(enabled) {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     path,
                     "animated light activation requires curve conversion",
                 ));
             }
-            let enabled = *draft
-                .model()
-                .values()
-                .get(enabled)
-                .ok_or_else(|| Error::new(&path, "activation value is absent"))?;
+            let enabled =
+                *draft.model().values().get(enabled).ok_or_else(|| {
+                    Error::requirement(path.clone(), "activation value is absent")
+                })?;
             let mut light = light.clone();
             let visibility = draft.add_value(if enabled { 1.0 } else { 0.0 });
             light.activation = LightActivation::Visibility(visibility);
             draft.set_feature(id, NodeFeature::Light(Light::AmbientDiffuse(light)))?;
             report.issues.push(Issue {
-                path,
+                path: path.to_string(),
                 kind: IssueKind::Normalized,
                 description: "expressed a constant light switch as zero-or-one visibility".into(),
             });
@@ -185,14 +185,14 @@ impl ConstantLightSwitch {
         max_error: f32,
     ) -> Result<Self, Error> {
         if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
-            return Err(Error::new(
-                "light_switch.threshold",
+            return Err(Error::requirement(
+                Location::new().field("light_switch").field("threshold"),
                 "expected a finite value from zero to one",
             ));
         }
         if !max_error.is_finite() || max_error < 0.0 {
-            return Err(Error::new(
-                "light_switch.max_error",
+            return Err(Error::requirement(
+                Location::new().field("light_switch").field("max_error"),
                 "expected a finite nonnegative activation error",
             ));
         }
@@ -206,13 +206,13 @@ impl ConstantLightSwitch {
 impl<'a> Rewrite<'a, M2> for ConstantLightSwitch {
     fn apply(&self, draft: &mut ModelBuilder<'a>, report: &mut Report) -> Result<(), Error> {
         for &id in &self.selected {
-            let path = format!("features[{id:?}].activation");
+            let path = Location::for_owner(id).field("activation");
             let feature = draft
                 .model()
                 .feature(id)
-                .ok_or_else(|| Error::new(&path, "selected feature is absent"))?;
+                .ok_or_else(|| Error::requirement(path.clone(), "selected feature is absent"))?;
             let NodeFeature::Light(Light::AmbientDiffuse(light)) = &feature.payload else {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     path,
                     "selected feature is not an ambient/diffuse light",
                 ));
@@ -221,18 +221,17 @@ impl<'a> Rewrite<'a, M2> for ConstantLightSwitch {
                 continue;
             };
             if draft.model().is_animated(visibility) {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     path,
                     "animated light visibility requires curve conversion",
                 ));
             }
-            let visibility = *draft
-                .model()
-                .values()
-                .get(visibility)
-                .ok_or_else(|| Error::new(&path, "visibility value is absent"))?;
+            let visibility =
+                *draft.model().values().get(visibility).ok_or_else(|| {
+                    Error::requirement(path.clone(), "visibility value is absent")
+                })?;
             if !visibility.is_finite() || !(0.0..=1.0).contains(&visibility) {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     path,
                     "switch approximation requires visibility from zero to one",
                 ));
@@ -240,7 +239,7 @@ impl<'a> Rewrite<'a, M2> for ConstantLightSwitch {
             let enabled = visibility >= self.threshold;
             let error = (f64::from(visibility) - if enabled { 1.0 } else { 0.0 }).abs();
             if error > f64::from(self.max_error) {
-                return Err(Error::new(
+                return Err(Error::requirement(
                     path,
                     format!(
                         "activation error {error} exceeds maximum {}",
@@ -252,7 +251,7 @@ impl<'a> Rewrite<'a, M2> for ConstantLightSwitch {
             light.activation = LightActivation::Enabled(draft.add_value(enabled));
             draft.set_feature(id, NodeFeature::Light(Light::AmbientDiffuse(light)))?;
             report.issues.push(Issue {
-                path,
+                path: path.to_string(),
                 kind: if error == 0.0 { IssueKind::Normalized } else { IssueKind::Approximated },
                 description: format!("converted visibility {visibility} to {enabled} using threshold {}; absolute activation error {error}, maximum {}", self.threshold, self.max_error),
             });

@@ -2,6 +2,7 @@
 use super::encode_animation::Encoder;
 use crate::model::common::{PackedArray, PackedValue};
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::{JointInfluences, LookId, MaterialId, MeshId, NodeId, Topology};
 use native::geometry::SkinWeight;
@@ -23,8 +24,8 @@ pub(super) fn write<'a, 'data, T: Dialect>(
             let mesh = model.mesh(instance.mesh).expect("validated mesh");
             let draw = mesh.resolve_draw(draw)?;
             if mesh.positions().len() > 65536 {
-                return Err(Error::new(
-                    "mesh.vertices",
+                return Err(Error::requirement(
+                    Location::new().field("mesh").field("vertices"),
                     "Warcraft III geosets use 16-bit vertex indices",
                 ));
             }
@@ -34,8 +35,9 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                 .iter()
                 .flatten()
                 .map(|index| {
-                    u16::try_from(*index)
-                        .map_err(|error| Error::new("mesh.triangles", error.to_string()))
+                    u16::try_from(*index).map_err(|error| {
+                        Error::from_source(Location::new().field("mesh").field("triangles"), error)
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let positions = packed(mesh.positions());
@@ -43,7 +45,7 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                 ZeroVec::alloc_from_slice(&vec![[0.; 3]; mesh.positions().len()])
             });
             let mut geoset = native::Geoset::<T::Version>::new(positions, normals, faces)
-                .map_err(|error| Error::new("mesh", error.to_string()))?;
+                .map_err(|error| Error::from_source(Location::new().field("mesh"), error))?;
             let mut remaining = draw.count as usize;
             let mut skip = draw.first as usize;
             let mut counts = Vec::new();
@@ -56,9 +58,12 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                     remaining -= taken;
                 }
             }
-            geoset
-                .set_triangle_group_counts(&counts)
-                .map_err(|error| Error::new("mesh.triangle_groups", error.to_string()))?;
+            geoset.set_triangle_group_counts(&counts).map_err(|error| {
+                Error::from_source(
+                    Location::new().field("mesh").field("triangle_groups"),
+                    error,
+                )
+            })?;
             geoset.material_id = materials[&model
                 .material_for_draw(instance_id, draw.id, look)
                 .expect("validated material look")];
@@ -72,22 +77,26 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                 if !mesh.name.is_empty() {
                     encoder
                         .context
-                        .unsupported("mesh.name", error.to_string())?;
+                        .unsupported_source(Location::new().field("mesh").field("name"), error)?;
                 }
             }
             if let Some(lod) = instance.lod {
                 if let Err(error) = geoset.try_set_level_of_detail(lod) {
                     if lod != 0 {
-                        encoder.context.unsupported("mesh.lod", error.to_string())?;
+                        encoder.context.unsupported_source(
+                            Location::new().field("mesh").field("lod"),
+                            error,
+                        )?;
                     }
                 }
             }
             geoset.set_uv_sets(mesh.texture_coordinates().iter().map(packed).collect());
             if let Some(tangents) = mesh.tangents() {
                 if let Err(error) = geoset.try_set_tangents(Some(packed(tangents))) {
-                    encoder
-                        .context
-                        .unsupported("mesh.tangents", error.to_string())?;
+                    encoder.context.unsupported_source(
+                        Location::new().field("mesh").field("tangents"),
+                        error,
+                    )?;
                 }
             }
             if let Some(metadata) = model.mesh(instance.mesh).map(|mesh| &mesh.properties) {
@@ -120,7 +129,10 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                     .joint_weights(index)
                     .expect("checked influence index");
                 let joints = instance.skin.and_then(|id| model.skin(id)).ok_or_else(|| {
-                    Error::new("mesh.skin", "influence array has no skin binding")
+                    Error::requirement(
+                        Location::new().field("mesh").field("skin"),
+                        "influence array has no skin binding",
+                    )
                 })?;
                 let group = row
                     .iter()
@@ -129,7 +141,12 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                             .joints
                             .get(influence.joint as usize)
                             .map(|id| nodes[id])
-                            .ok_or_else(|| Error::new("mesh.skin", "joint identity does not exist"))
+                            .ok_or_else(|| {
+                                Error::requirement(
+                                    Location::new().field("mesh").field("skin"),
+                                    "joint identity does not exist",
+                                )
+                            })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 exact_groups &= row
@@ -156,9 +173,9 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                 vertices.resize(mesh.positions().len(), 0);
             }
             if exact_groups && groups.len() <= 256 {
-                geoset
-                    .set_matrix_groups(groups)
-                    .map_err(|error| Error::new("mesh.skin", error.to_string()))?;
+                geoset.set_matrix_groups(groups).map_err(|error| {
+                    Error::from_source(Location::new().field("mesh").field("skin"), error)
+                })?;
                 geoset
                     .set_vertex_groups(
                         &vertices
@@ -166,43 +183,56 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                             .map(|index| *index as u8)
                             .collect::<Vec<_>>(),
                     )
-                    .map_err(|error| Error::new("mesh.skin", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(Location::new().field("mesh").field("skin"), error)
+                    })?;
             } else {
                 let rows = weighted
                     .into_iter()
                     .map(|row| {
                         if row.len() > 4 {
                             encoder.context.unsupported(
-                                "mesh.skin",
+                                Location::new().field("mesh").field("skin"),
                                 "weighted Warcraft III vertices support four influences",
                             )?;
                         }
                         let mut bones = [0u16; 4];
                         let mut weights = [0u16; 4];
                         for (slot, (bone, weight)) in row.into_iter().take(4).enumerate() {
-                            bones[slot] = u16::try_from(bone)
-                                .map_err(|error| Error::new("mesh.skin", error.to_string()))?;
+                            bones[slot] = u16::try_from(bone).map_err(|error| {
+                                Error::from_source(
+                                    Location::new().field("mesh").field("skin"),
+                                    error,
+                                )
+                            })?;
                             weights[slot] = quantize(weight, encoder.context)?;
                         }
                         <T::Version as native::GeosetLayout>::SkinWeights::from_influences(
                             bones, weights,
                         )
                         .ok_or_else(|| {
-                            Error::new("mesh.skin", "influence exceeds the selected skin layout")
+                            Error::requirement(
+                                Location::new().field("mesh").field("skin"),
+                                "influence exceeds the selected skin layout",
+                            )
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
                 if let Err(error) = geoset.try_set_skin_weights(Some(rows.into_iter().collect())) {
                     encoder
                         .context
-                        .unsupported("mesh.skin", error.to_string())?;
+                        .unsupported_source(Location::new().field("mesh").field("skin"), error)?;
                 }
                 geoset
                     .set_matrix_groups(vec![vec![nodes[&instance.node]]])
-                    .map_err(|error| Error::new("mesh.skin", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(Location::new().field("mesh").field("skin"), error)
+                    })?;
                 geoset
                     .set_vertex_groups(&vec![0; mesh.positions().len()])
-                    .map_err(|error| Error::new("mesh.skin", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(Location::new().field("mesh").field("skin"), error)
+                    })?;
             }
             mapping
                 .entry(instance.mesh)
@@ -219,7 +249,7 @@ fn quantize(weight: f32, context: &mut Context) -> Result<u16, Error> {
     let error = (weight - rounded / 255.).abs();
     if error > f32::EPSILON * 4. {
         context.approximate(
-            "mesh.skin.weights",
+            || Location::new().field("mesh").field("skin").field("weights"),
             error,
             "skin weight quantized to Warcraft III bytes",
         )?;

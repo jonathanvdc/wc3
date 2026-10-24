@@ -1,5 +1,6 @@
 //! Particle fields conversion components.
 use super::*;
+use crate::model::error::Location;
 
 pub(super) trait OptionalFloat {
     fn get(&self) -> f32;
@@ -24,7 +25,7 @@ impl OptionalFloat for () {
     fn make(value: f32, context: &mut Context) -> Result<Self, Error> {
         if value != 0. {
             context.unsupported(
-                "particles.variation",
+                Location::new().field("particles").field("variation"),
                 "target layout has no random variation field",
             )?;
         }
@@ -45,8 +46,8 @@ impl HeaderFields for native::records::WideParticleHeader {
     }
     fn make(blend: ParticleBlend, kind: ParticleGenerator, color: u32) -> Result<Self, Error> {
         if color != 0 {
-            return Err(Error::new(
-                "particles.color_index",
+            return Err(Error::requirement(
+                Location::new().field("particles").field("color_index"),
                 "legacy emitter has no color-table selector",
             ));
         }
@@ -67,16 +68,24 @@ impl HeaderFields for native::records::PackedParticleHeader {
     }
     fn make(blend: ParticleBlend, kind: ParticleGenerator, color: u32) -> Result<Self, Error> {
         Ok(Self {
-            blending: PackedParticleBlend::from_raw(
-                u8::try_from(blend.raw())
-                    .map_err(|_| Error::new("particles.blend", "blend exceeds u8"))?,
-            ),
-            emitter: PackedParticleGenerator::from_raw(
-                u8::try_from(kind.raw())
-                    .map_err(|_| Error::new("particles.kind", "kind exceeds u8"))?,
-            ),
-            color_index: u16::try_from(color)
-                .map_err(|_| Error::new("particles.color_index", "color selector exceeds u16"))?,
+            blending: PackedParticleBlend::from_raw(u8::try_from(blend.raw()).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("particles").field("blend"),
+                    "blend exceeds u8",
+                )
+            })?),
+            emitter: PackedParticleGenerator::from_raw(u8::try_from(kind.raw()).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("particles").field("kind"),
+                    "kind exceeds u8",
+                )
+            })?),
+            color_index: u16::try_from(color).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("particles").field("color_index"),
+                    "color selector exceeds u16",
+                )
+            })?,
         })
     }
 }
@@ -95,7 +104,7 @@ impl SpinFields for f32 {
     fn make(parts: [f32; 4], context: &mut Context) -> Result<Self, Error> {
         if parts[0] != 0. || parts[1] != 0. || parts[3] != 0. {
             context.unsupported(
-                "particles.spin",
+                Location::new().field("particles").field("spin"),
                 "legacy emitter has no initial or random spin fields",
             )?;
         }
@@ -129,7 +138,7 @@ pub(super) trait UvFields {
     fn set_legacy_parts(&mut self, parts: [u8; 2], context: &mut Context) -> Result<(), Error> {
         if parts != [0; 2] {
             context.unsupported(
-                "particles.legacy_shape",
+                Location::new().field("particles").field("legacy_shape"),
                 "modern particle layouts omit legacy shape and head/tail fields",
             )?;
         }
@@ -156,7 +165,7 @@ impl UvFields for native::records::LegacyTextureScale {
     fn make(scales: [f32; 2], context: &mut Context) -> Result<Self, Error> {
         if scales != [1.; 2] {
             context.unsupported(
-                "particles.uv_scale",
+                Location::new().field("particles").field("uv_scale"),
                 "legacy particle layouts omit layer UV scales",
             )?;
         }
@@ -172,14 +181,14 @@ impl UvFields for native::records::ModernTextureScale {
         let mut values = [0; 2];
         for (i, value) in scales.into_iter().enumerate() {
             if !value.is_finite() || !(0.0..=255.0 / 32.0).contains(&value) {
-                return Err(Error::new(
-                    "particles.uv_scale",
+                return Err(Error::requirement(
+                    Location::new().field("particles").field("uv_scale"),
                     "UV scale exceeds fixed8_5 range",
                 ));
             }
             values[i] = (value * 32.).round() as u8;
             context.approximate(
-                "particles.uv_scale",
+                || Location::new().field("particles").field("uv_scale"),
                 (value - f32::from(values[i]) / 32.).abs(),
                 "UV scale quantization",
             )?;
@@ -206,7 +215,7 @@ impl ScrollFields for () {
     fn make(values: Option<[i16; 8]>, context: &mut Context) -> Result<Self, Error> {
         if values.is_some_and(|v| v != [0; 8]) {
             context.unsupported(
-                "particles.uv_scroll",
+                Location::new().field("particles").field("uv_scroll"),
                 "target emitter has no UV scrolling fields",
             )?;
         }
@@ -252,7 +261,7 @@ impl RibbonTailFields for () {
     fn make(parts: [i16; 3], context: &mut Context) -> Result<Self, Error> {
         if parts != [0, 0, -1] {
             context.unsupported(
-                "ribbons.order",
+                Location::new().field("ribbons").field("order"),
                 "target ribbon lacks priority and lookup fields",
             )?;
         }
@@ -271,10 +280,18 @@ impl RibbonTailFields for native::records::RibbonModern {
     fn make(parts: [i16; 3], _: &mut Context) -> Result<Self, Error> {
         Ok(Self {
             priority_plane: parts[0],
-            color_index: i8::try_from(parts[1])
-                .map_err(|_| Error::new("ribbons.color", "color index exceeds i8"))?,
-            texture_transform_index: i8::try_from(parts[2])
-                .map_err(|_| Error::new("ribbons.transform", "transform index exceeds i8"))?,
+            color_index: i8::try_from(parts[1]).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("ribbons").field("color"),
+                    "color index exceeds i8",
+                )
+            })?,
+            texture_transform_index: i8::try_from(parts[2]).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("ribbons").field("transform"),
+                    "transform index exceeds i8",
+                )
+            })?,
         })
     }
 }
@@ -288,8 +305,8 @@ pub(in super::super) fn gravity_vector(word: u32, packed: bool) -> Result<[f32; 
     let y = f32::from(bytes[1] as i8) / 128.;
     let xy = x * x + y * y;
     if xy > 1. {
-        return Err(Error::new(
-            "particles.gravity",
+        return Err(Error::requirement(
+            Location::new().field("particles").field("gravity"),
             "compressed gravity direction lies outside the unit hemisphere",
         ));
     }
@@ -303,12 +320,12 @@ pub(in super::super) fn gravity_word(
     vector: [f32; 3],
     packed: bool,
     context: &mut Context,
-    path: &str,
+    path: &Location,
 ) -> Result<u32, Error> {
     if !packed {
         if vector[0] != 0. || vector[1] != 0. {
-            return Err(Error::new(
-                path,
+            return Err(Error::requirement(
+                path.clone(),
                 "scalar native gravity cannot represent a lateral direction",
             ));
         }
@@ -316,7 +333,10 @@ pub(in super::super) fn gravity_word(
     }
     let magnitude = vector.iter().map(|value| value * value).sum::<f32>().sqrt();
     if !magnitude.is_finite() {
-        return Err(Error::new(path, "gravity vector must be finite"));
+        return Err(Error::requirement(
+            path.clone(),
+            "gravity vector must be finite",
+        ));
     }
     if magnitude == 0. {
         return Ok(0);
@@ -331,8 +351,8 @@ pub(in super::super) fn gravity_word(
         || z < f32::from(i16::MIN)
         || z > f32::from(i16::MAX)
     {
-        return Err(Error::new(
-            path,
+        return Err(Error::requirement(
+            path.clone(),
             "gravity vector exceeds compressed component ranges",
         ));
     }
@@ -345,7 +365,7 @@ pub(in super::super) fn gravity_word(
         .map(|(a, b)| (a - b).abs())
         .fold(0., f32::max);
     context.approximate(
-        path,
+        || path.clone(),
         error,
         "particle gravity direction and magnitude quantization",
     )?;

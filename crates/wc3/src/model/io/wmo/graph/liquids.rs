@@ -1,5 +1,6 @@
 //! Authored liquid grids retain the explicitly selected flow vocabulary.
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::{GroupChunk, LiquidVertices};
 use crate::model::formats::wmo::{Dialect, Group};
 use crate::model::io::materialize;
@@ -62,7 +63,13 @@ pub(super) fn read<'a, D: Dialect>(
                     *materials
                         .get(usize::from(liquid.header.material))
                         .ok_or_else(|| {
-                            Error::new("world.liquid.material", "liquid material does not exist")
+                            Error::requirement(
+                                Location::new()
+                                    .field("world")
+                                    .field("liquid")
+                                    .field("material"),
+                                "liquid material does not exist",
+                            )
                         })?,
                 )
             };
@@ -105,31 +112,50 @@ pub(super) fn write<'a>(
     let [x, y] = dimensions;
     let dimensions = [
         x.map_err(|_| {
-            Error::new(
-                "world.liquid.dimensions",
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("liquid")
+                    .field("dimensions"),
                 "grid exceeds native dimension capacity",
             )
         })?,
         y.map_err(|_| {
-            Error::new(
-                "world.liquid.dimensions",
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("liquid")
+                    .field("dimensions"),
                 "grid exceeds native dimension capacity",
             )
         })?,
     ];
     let material = if database_ids {
-        u16::try_from(source.liquid_type)
-            .map_err(|_| Error::new("world.liquid.type", "liquid type exceeds native capacity"))?
+        u16::try_from(source.liquid_type).map_err(|_| {
+            Error::requirement(
+                Location::new().field("world").field("liquid").field("type"),
+                "liquid type exceeds native capacity",
+            )
+        })?
     } else {
         let id = source.material.ok_or_else(|| {
-            Error::new(
-                "world.liquid.material",
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("liquid")
+                    .field("material"),
                 "material-addressed liquid requires a material",
             )
         })?;
-        *materials
-            .get(&id)
-            .ok_or_else(|| Error::new("world.liquid.material", "liquid material is unavailable"))?
+        *materials.get(&id).ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("liquid")
+                    .field("material"),
+                "liquid material is unavailable",
+            )
+        })?
     };
     let rows = source.vertices.iter().collect::<Vec<_>>();
     let vertices = match rows.first() {
@@ -149,8 +175,11 @@ pub(super) fn write<'a>(
                         flow_1_percentage: *first_percentage,
                         filler: *control,
                     }),
-                    _ => Err(Error::new(
-                        "world.liquid.vertices",
+                    _ => Err(Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("liquid")
+                            .field("vertices"),
                         "one liquid grid cannot mix union interpretations",
                     )),
                 })
@@ -168,8 +197,11 @@ pub(super) fn write<'a>(
                         height: *height,
                         texture_coordinates: *coordinates,
                     }),
-                    _ => Err(Error::new(
-                        "world.liquid.vertices",
+                    _ => Err(Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("liquid")
+                            .field("vertices"),
                         "one liquid grid cannot mix union interpretations",
                     )),
                 })
@@ -188,8 +220,11 @@ pub(super) fn write<'a>(
                             data: [a[0], a[1], b[0], b[1]],
                         })
                     }
-                    _ => Err(Error::new(
-                        "world.liquid.vertices",
+                    _ => Err(Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("liquid")
+                            .field("vertices"),
                         "one liquid grid cannot mix union interpretations",
                     )),
                 })
@@ -213,8 +248,8 @@ pub(super) fn write<'a>(
 pub(super) fn category(region: &profile::Region<'_>, database_ids: bool) -> Result<u32, Error> {
     if let Some(value) = region.implicit_liquid {
         if !region.liquids.is_empty() {
-            return Err(Error::new(
-                "world.liquid",
+            return Err(Error::requirement(
+                Location::new().field("world").field("liquid"),
                 "implicit full-volume and explicit surface-grid declarations conflict",
             ));
         }
@@ -232,8 +267,8 @@ pub(super) fn category(region: &profile::Region<'_>, database_ids: bool) -> Resu
         .iter()
         .any(|liquid| liquid.liquid_type != value)
     {
-        return Err(Error::new(
-            "world.liquid.type",
+        return Err(Error::requirement(
+            Location::new().field("world").field("liquid").field("type"),
             "one material-addressed region cannot contain differing liquid categories",
         ));
     }

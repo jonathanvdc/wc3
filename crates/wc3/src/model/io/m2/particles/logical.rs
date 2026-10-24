@@ -1,6 +1,7 @@
 //! Native particle fields mapped directly into independent authoring state.
 use super::*;
 use crate::model::common::PackedArray;
+use crate::model::error::Location;
 use crate::model::io::m2::graph::texture_index;
 use crate::model::io::{materialize, owned};
 use crate::model::{self as semantic, profiles::m2 as profile, Curve, Time};
@@ -40,7 +41,7 @@ impl LogicalAge for native::records::ModernParticleLifetime<'_> {
     fn make(value: &profile::Appearance<'_>, context: &mut Context) -> Result<Self, Error> {
         if value.legacy_atlas.is_some() {
             context.unsupported(
-                "m2.particle.atlas",
+                Location::new().field("m2").field("particle").field("atlas"),
                 "modern age tracks do not encode classic atlas segments",
             )?
         }
@@ -50,14 +51,14 @@ impl LogicalAge for native::records::ModernParticleLifetime<'_> {
             })?,
             alpha: encode_age(value.alpha.as_ref(), context, |v, c| {
                 if !v.is_finite() || !(0. ..=65535. / 32767.).contains(&v) {
-                    return Err(Error::new(
-                        "m2.particle.alpha",
+                    return Err(Error::requirement(
+                        Location::new().field("m2").field("particle").field("alpha"),
                         "opacity exceeds unsigned fixed16 range",
                     ));
                 }
                 let raw = (v * 32767.).round() as u16;
                 c.approximate(
-                    "m2.particle.alpha",
+                    || Location::new().field("m2").field("particle").field("alpha"),
                     (f32::from(raw) / 32767. - v).abs(),
                     "age opacity quantized",
                 )?;
@@ -96,16 +97,16 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
                 || times.get(0).unwrap().as_seconds() != 0.
                 || times.get(2).unwrap().as_seconds() != 1.
             {
-                return Err(Error::new(
-                    "m2.particle.age",
+                return Err(Error::requirement(
+                    Location::new().field("m2").field("particle").field("age"),
                     "classic appearance requires beginning/midpoint/end keys",
                 ));
             }
             row.midpoint = times.get(1).unwrap().as_seconds() as f32;
             for other in curves.into_iter().flatten() {
                 if other.iter().ne(times.iter()) {
-                    return Err(Error::new(
-                        "m2.particle.age",
+                    return Err(Error::requirement(
+                        Location::new().field("m2").field("particle").field("age"),
                         "classic age curves must share the midpoint",
                     ));
                 }
@@ -125,14 +126,14 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
             let rgba = [rgb[2], rgb[1], rgb[0], alpha];
             for (j, v) in rgba.into_iter().enumerate() {
                 if !(0. ..=1.).contains(&v) {
-                    return Err(Error::new(
-                        "m2.particle.color",
+                    return Err(Error::requirement(
+                        Location::new().field("m2").field("particle").field("color"),
                         "classic appearance uses normalized byte colors",
                     ));
                 }
                 let raw = (v * 255.).round() as u8;
                 context.approximate(
-                    "m2.particle.color",
+                    || Location::new().field("m2").field("particle").field("color"),
                     (f32::from(raw) / 255. - v).abs(),
                     "appearance color quantized to a byte",
                 )?;
@@ -144,7 +145,10 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
                 .and_then(|c| c.values().get(i))
                 .unwrap_or(Vec2::from_array([1.; 2]));
             if scale[0] != scale[1] {
-                context.unsupported("m2.particle.scale", "classic appearance has uniform scale")?
+                context.unsupported(
+                    Location::new().field("m2").field("particle").field("scale"),
+                    "classic appearance has uniform scale",
+                )?
             }
             row.scales[i] = scale[0];
         }
@@ -156,7 +160,7 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
         }
         if value.head_uv.is_some() || value.tail_uv.is_some() {
             context.unsupported(
-                "m2.particle.atlas",
+                Location::new().field("m2").field("particle").field("atlas"),
                 "classic appearance has atlas segments rather than keyed cell selection",
             )?
         }
@@ -241,7 +245,15 @@ where
                     image.sampler = semantic::Sampler::default();
                     image
                 })
-                .ok_or_else(|| Error::new("m2.particle.texture", "missing texture resource"))
+                .ok_or_else(|| {
+                    Error::requirement(
+                        Location::new()
+                            .field("m2")
+                            .field("particle")
+                            .field("texture"),
+                        "missing texture resource",
+                    )
+                })
         })
         .collect::<Result<Vec<_>, _>>()?;
     let mut resource = |path: &'a ZeroVec<'data, u8>| {
@@ -332,7 +344,7 @@ fn encode_age<T: semantic::CurveValue, U: Value>(
     };
     if curve.interpolation() != semantic::Interpolation::Linear {
         context.unsupported(
-            "m2.particle.age",
+            Location::new().field("m2").field("particle").field("age"),
             "native particle-age ramps use linear interpolation",
         )?
     }
@@ -341,14 +353,14 @@ fn encode_age<T: semantic::CurveValue, U: Value>(
     for (i, time) in curve.times().iter().enumerate() {
         let time = time.as_seconds();
         if !(0. ..=1.).contains(&time) {
-            return Err(Error::new(
-                "m2.particle.age",
+            return Err(Error::requirement(
+                Location::new().field("m2").field("particle").field("age"),
                 "age must be within zero and one",
             ));
         }
         let raw = (time * 32767.).round() as u16;
         context.approximate(
-            "m2.particle.age",
+            || Location::new().field("m2").field("particle").field("age"),
             (f64::from(raw) / 32767. - time).abs() as f32,
             "age quantized to native fixed15 timestamps",
         )?;
@@ -375,8 +387,7 @@ where
     V::Lifetime<'static>: LogicalAge,
 {
     if payload.details.rendering.texture_program.is_some() {
-        return Err(Error::new(
-            "m2.particle.texture_program",
+        return Err(Error::requirement(Location::new().field("m2").field("particle").field("texture_program"),
             "a standalone particle record cannot encode container-level TXAC selectors; export the complete model graph",
         ));
     }
@@ -389,34 +400,59 @@ where
         .textures
         .iter()
         .map(|id| {
-            texture_index(model, textures, *id)
-                .ok_or_else(|| Error::new("m2.particle.texture", "missing texture resource"))
+            texture_index(model, textures, *id).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("particle")
+                        .field("texture"),
+                    "missing texture resource",
+                )
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
     value.texture_id = if value.flags.multi_texture() {
         if ids.len() != 3 || ids.iter().any(|i| *i > 31) {
-            return Err(Error::new(
-                "m2.particle.texture",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("m2")
+                    .field("particle")
+                    .field("texture"),
                 "multi-texture particles require three five-bit indices",
             ));
         }
         (ids[0] | (ids[1] << 5) | (ids[2] << 10)) as u16
     } else {
-        u16::try_from(
-            *ids.first()
-                .ok_or_else(|| Error::new("m2.particle.texture", "particle has no texture"))?,
-        )
-        .map_err(|_| Error::new("m2.particle.texture", "texture index exceeds u16"))?
+        u16::try_from(*ids.first().ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("m2")
+                    .field("particle")
+                    .field("texture"),
+                "particle has no texture",
+            )
+        })?)
+        .map_err(|_| {
+            Error::requirement(
+                Location::new()
+                    .field("m2")
+                    .field("particle")
+                    .field("texture"),
+                "texture index exceeds u16",
+            )
+        })?
     };
     let filename =
         |resource: &Option<semantic::ModelResourceId>| -> Result<ZeroVec<'static, u8>, Error> {
             match resource {
                 None => Ok(ZeroVec::new()),
                 Some(id) => {
-                    match model
-                        .model_resource(*id)
-                        .ok_or_else(|| Error::new("m2.particle.model", "missing model resource"))?
-                    {
+                    match model.model_resource(*id).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("particle").field("model"),
+                            "missing model resource",
+                        )
+                    })? {
                         M2ModelResource::Path(path) => Ok(ZeroVec::alloc_from_slice(
                             &path.iter().copied().chain([0]).collect::<Vec<_>>(),
                         )),
@@ -445,8 +481,11 @@ where
             .head_tail
             .legacy_code()
             .ok_or_else(|| {
-                Error::new(
-                    "m2.particle.head_tail",
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("particle")
+                        .field("head_tail"),
                     "legacy emitter geometry cannot represent disabled heads and tails",
                 )
             })?;
@@ -460,8 +499,11 @@ where
             GeometrySelection::Both => (true, true),
             GeometrySelection::Disabled => (false, false),
             GeometrySelection::Unknown(_) => {
-                return Err(Error::new(
-                    "m2.particle.head_tail",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("particle")
+                        .field("head_tail"),
                     "modern emitter style bits cannot represent an unknown legacy geometry code",
                 ));
             }
@@ -512,13 +554,21 @@ where
     if let Some(original) = payload.details.rendering.scroll {
         for (i, v) in original.into_iter().enumerate() {
             if !v.is_finite() || v * 512. < f32::from(i16::MIN) || v * 512. > f32::from(i16::MAX) {
-                return Err(Error::new(
-                    "m2.particle.scroll",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("particle")
+                        .field("scroll"),
                     "UV scrolling exceeds fixed16 range",
                 ));
             }
             context.approximate(
-                "m2.particle.scroll",
+                || {
+                    Location::new()
+                        .field("m2")
+                        .field("particle")
+                        .field("scroll")
+                },
                 (f32::from(scroll.unwrap()[i]) / 512. - v).abs(),
                 "UV scrolling quantized",
             )?

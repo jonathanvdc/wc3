@@ -3,6 +3,7 @@ use super::animation::Decoder;
 use super::state::ImportState;
 use super::storage::Storage;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
 use crate::model::PerspectiveProjection;
@@ -18,16 +19,19 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     profile: &mut ImportState<'a>,
 ) -> Result<(), Error> {
     for source in source.lights() {
-        let id = *ids
-            .get(&source.node.object_id)
-            .ok_or_else(|| Error::new("light.node", "node identity does not exist"))?;
+        let id = *ids.get(&source.node.object_id).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("light").field("node"),
+                "node identity does not exist",
+            )
+        })?;
         let feature = decoder.builder.reserve_feature(id);
 
         macro_rules! a {
             ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    concat!("light.", stringify!($field)),
+                    &Location::new().field("light").field(stringify!($field)),
                     |value| value.into(),
                 )?
             };
@@ -40,17 +44,37 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         };
         let shadow_range = if let Ok(range) = source.try_shadow_casting_range_ref() {
             Some([
-                decoder.bind(&range.start, "light::SHADOW_START", |value| value)?,
-                decoder.bind(&range.end, "light::SHADOW_END", |value| value)?,
+                decoder.bind(
+                    &range.start,
+                    &Location::new().field("light").field("SHADOW_START"),
+                    |value| value,
+                )?,
+                decoder.bind(
+                    &range.end,
+                    &Location::new().field("light").field("SHADOW_END"),
+                    |value| value,
+                )?,
             ])
         } else {
             None
         };
         let falloff = if let Some(falloff) = source.authored_falloff() {
             Some([
-                decoder.bind(&falloff.quadratic, "light::QUADRATIC", |value| value)?,
-                decoder.bind(&falloff.linear, "light::LINEAR", |value| value)?,
-                decoder.bind(&falloff.damping, "light::DAMPING", |value| value)?,
+                decoder.bind(
+                    &falloff.quadratic,
+                    &Location::new().field("light").field("QUADRATIC"),
+                    |value| value,
+                )?,
+                decoder.bind(
+                    &falloff.linear,
+                    &Location::new().field("light").field("LINEAR"),
+                    |value| value,
+                )?,
+                decoder.bind(
+                    &falloff.damping,
+                    &Location::new().field("light").field("DAMPING"),
+                    |value| value,
+                )?,
             ])
         } else {
             None
@@ -76,7 +100,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 activation: decoder.track(
                     source.visibility.as_ref(),
                     1.,
-                    "light::VISIBILITY",
+                    &Location::new().field("light").field("VISIBILITY"),
                     |value| value,
                 )?,
             });
@@ -97,13 +121,13 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let eye_offset = decoder.track(
             source.translation.as_ref(),
             Vec3::ZERO,
-            "camera::EYE_OFFSET",
+            &Location::new().field("camera").field("EYE_OFFSET"),
             |value| value.into(),
         )?;
         let target_offset = decoder.track(
             source.target_translation.as_ref(),
             Vec3::ZERO,
-            "camera::TARGET_OFFSET",
+            &Location::new().field("camera").field("TARGET_OFFSET"),
             |value| value.into(),
         )?;
         macro_rules! optional {
@@ -112,7 +136,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     Some(decoder.track(
                         source.$field.as_ref(),
                         0.,
-                        concat!("camera.", stringify!($field)),
+                        &Location::new().field("camera").field(stringify!($field)),
                         |value| value.into(),
                     )?)
                 } else {
@@ -130,12 +154,17 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     clipping: Vec2::from_array([source.near_clip, source.far_clip]),
                     axis: FieldOfViewAxis::Vertical,
                 },
-                roll: decoder.track(source.rotation.as_ref(), 0., "camera::ROLL", |value| value)?,
+                roll: decoder.track(
+                    source.rotation.as_ref(),
+                    0.,
+                    &Location::new().field("camera").field("ROLL"),
+                    |value| value,
+                )?,
                 role: None,
                 visibility: Some(decoder.track(
                     source.visibility.as_ref(),
                     1.,
-                    "camera::VISIBILITY",
+                    &Location::new().field("camera").field("VISIBILITY"),
                     |value| value,
                 )?),
                 lens: CameraLens {
@@ -157,8 +186,8 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         for (index, pose) in poses.enumerate() {
             profile.bind_poses.push((
                 *ids.get(index).ok_or_else(|| {
-                    Error::new(
-                        "bind_pose",
+                    Error::requirement(
+                        Location::new().field("bind_pose"),
                         "pose has no associated hierarchy node or camera",
                     )
                 })?,

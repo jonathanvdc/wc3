@@ -2,6 +2,7 @@
 use super::state::ImportState;
 use super::storage::Storage;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::geometry::SkinWeight;
 use crate::model::formats::mdlx::{self as native, Dialect, FormatVersion};
 use crate::model::io::{materialize, owned};
@@ -35,15 +36,15 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     let mut placements = Vec::new();
     for mesh in source.geosets() {
         if mesh.primitive_types().len() != mesh.primitive_counts().len() {
-            return Err(Error::new(
-                "mesh.topology",
+            return Err(Error::requirement(
+                Location::new().field("mesh").field("topology"),
                 "primitive type and count tables must have matching lengths",
             ));
         }
         if mesh.primitive_types().iter().any(|kind| kind != 4) || mesh.face_indices().len() % 3 != 0
         {
-            return Err(Error::new(
-                "mesh.topology",
+            return Err(Error::requirement(
+                Location::new().field("mesh").field("topology"),
                 "Warcraft III geometry is not a triangle list",
             ));
         }
@@ -62,16 +63,16 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             .iter()
             .map(|count| {
                 if count % 3 != 0 {
-                    return Err(Error::new(
-                        "mesh.topology",
+                    return Err(Error::requirement(
+                        Location::new().field("mesh").field("topology"),
                         "triangle group contains incomplete triangle",
                     ));
                 }
                 let start = offset;
                 offset += count as usize / 3;
                 if offset > triangles.len() {
-                    return Err(Error::new(
-                        "mesh.topology",
+                    return Err(Error::requirement(
+                        Location::new().field("mesh").field("topology"),
                         "triangle group exceeds index array",
                     ));
                 }
@@ -82,8 +83,8 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             })
             .collect::<Result<Vec<_>, Error>>()?;
         if offset != triangles.len() {
-            return Err(Error::new(
-                "mesh.topology",
+            return Err(Error::requirement(
+                Location::new().field("mesh").field("topology"),
                 "triangle groups do not cover index array",
             ));
         }
@@ -117,14 +118,19 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             maximum: Vec3::from_array(mesh.extent.maximum),
             sphere_radius: mesh.extent.bounds_radius,
         };
-        let rows = influences(mesh).map_err(|error| Error::new("mesh.skin", error))?;
+        let rows = influences(mesh).map_err(|error| {
+            Error::requirement(Location::new().field("mesh").field("skin"), error)
+        })?;
         let rows = ValueGroups::from_rows(
             rows.into_iter()
                 .map(|row| {
                     row.into_iter()
                         .map(|(id, weight)| {
                             let node = identities.get(&id).ok_or_else(|| {
-                                Error::new("mesh.skin", "influence references an absent node")
+                                Error::requirement(
+                                    Location::new().field("mesh").field("skin"),
+                                    "influence references an absent node",
+                                )
                             })?;
                             Ok(Influence {
                                 joint: node_indices[node],
@@ -156,8 +162,8 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                                 .unwrap_or(id);
                             slot.weight = f32::from(weight) / 255.;
                             if weight != 0 && !identities.contains_key(&id) {
-                                return Err(Error::new(
-                                    "mesh.skin",
+                                return Err(Error::requirement(
+                                    Location::new().field("mesh").field("skin"),
                                     "weighted joint does not exist",
                                 ));
                             }
@@ -182,9 +188,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let skin = builder.add_skin(Skin::identity(nodes.to_vec()))?;
         let placement = builder.add_named_node("Geometry")?;
         placements.push(placement);
-        let material = *materials
-            .get(mesh.material_id as usize)
-            .ok_or_else(|| Error::new("mesh.material", "material does not exist"))?;
+        let material = *materials.get(mesh.material_id as usize).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("mesh").field("material"),
+                "material does not exist",
+            )
+        })?;
         let subset = builder.add_primary_subset(mesh_id, 0, primitive_count)?;
         builder.add_instance_with_materials(
             MeshInstance {
@@ -222,14 +231,16 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     {
         let mut decoder = super::animation::Decoder { builder, globals };
         for source in source.geoset_animations() {
-            let mesh =
-                if source.geoset_id == u32::MAX {
-                    None
-                } else {
-                    Some(*meshes.get(source.geoset_id as usize).ok_or_else(|| {
-                        Error::new("geometry_animation.mesh", "mesh does not exist")
-                    })?)
-                };
+            let mesh = if source.geoset_id == u32::MAX {
+                None
+            } else {
+                Some(*meshes.get(source.geoset_id as usize).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("geometry_animation").field("mesh"),
+                        "mesh does not exist",
+                    )
+                })?)
+            };
             let placement = if mesh.is_some() {
                 placements[source.geoset_id as usize]
             } else {
@@ -240,8 +251,16 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             {
                 let payload = profile::Node::GeometryAnimation(profile::GeometryAnimation {
                     mesh,
-                    opacity: decoder.bind(&source.alpha, "geometry::OPACITY", |value| value)?,
-                    color: decoder.bind(&source.color, "geometry::COLOR", |value| value.into())?,
+                    opacity: decoder.bind(
+                        &source.alpha,
+                        &Location::new().field("geometry").field("OPACITY"),
+                        |value| value,
+                    )?,
+                    color: decoder.bind(
+                        &source.color,
+                        &Location::new().field("geometry").field("COLOR"),
+                        |value| value.into(),
+                    )?,
                     use_color: source.flags.color(),
                     drop_shadow: source.flags.drop_shadow(),
                 });
@@ -252,18 +271,19 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     }
     for bone in source.bones() {
         profile.bones.push((
-            *identities
-                .get(&bone.node.object_id)
-                .ok_or_else(|| Error::new("bone", "node does not exist"))?,
+            *identities.get(&bone.node.object_id).ok_or_else(|| {
+                Error::requirement(Location::new().field("bone"), "node does not exist")
+            })?,
             Bone {
                 mesh: if bone.geoset_id == u32::MAX {
                     None
                 } else {
-                    Some(
-                        *meshes
-                            .get(bone.geoset_id as usize)
-                            .ok_or_else(|| Error::new("bone.mesh", "mesh does not exist"))?,
-                    )
+                    Some(*meshes.get(bone.geoset_id as usize).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("bone").field("mesh"),
+                            "mesh does not exist",
+                        )
+                    })?)
                 },
                 animation: if bone.geoset_animation_id == u32::MAX {
                     None
@@ -272,7 +292,10 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         *animation_ids
                             .get(bone.geoset_animation_id as usize)
                             .ok_or_else(|| {
-                                Error::new("bone.animation", "geometry animation does not exist")
+                                Error::requirement(
+                                    Location::new().field("bone").field("animation"),
+                                    "geometry animation does not exist",
+                                )
                             })?,
                     )
                 },
@@ -280,11 +303,14 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         ));
     }
     for glider in source.gliders() {
-        profile.gliders.push(
-            *meshes
-                .get(glider.geoset_id as usize)
-                .ok_or_else(|| Error::new("glider.mesh", "mesh does not exist"))?,
-        );
+        profile
+            .gliders
+            .push(*meshes.get(glider.geoset_id as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("glider").field("mesh"),
+                    "mesh does not exist",
+                )
+            })?);
     }
     Ok(())
 }

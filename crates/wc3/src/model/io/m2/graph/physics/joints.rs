@@ -1,5 +1,6 @@
 //! Versioned joint payloads become direct typed constraints.
 use super::*;
+use crate::model::error::Location;
 use glam::Vec2;
 use native::records::PhysicsJointKind;
 use profile::{values::PhysicsMotorMode, Constraint, Joint, Motor, Spring};
@@ -31,9 +32,18 @@ macro_rules! rows {
 pub(super) fn joints(file: &PhysicsFile<'_>, bodies: &[NodeId]) -> Result<Vec<Joint>, Error> {
     let mut out = Vec::new();
     for definition in rows!(file, Joints) {
-        let index = usize::try_from(definition.joint_id)
-            .map_err(|_| Error::new("physics.joint", "negative payload index"))?;
-        let missing = || Error::new("physics.joint", "constraint payload is absent");
+        let index = usize::try_from(definition.joint_id).map_err(|_| {
+            Error::requirement(
+                Location::new().field("physics").field("joint"),
+                "negative payload index",
+            )
+        })?;
+        let missing = || {
+            Error::requirement(
+                Location::new().field("physics").field("joint"),
+                "constraint payload is absent",
+            )
+        };
         let (frame_a, frame_b, constraint) = match definition.joint_type {
             PhysicsJointKind::Spherical => {
                 let value = rows!(file, Sphericals).nth(index).ok_or_else(missing)?;
@@ -202,18 +212,30 @@ pub(super) fn joints(file: &PhysicsFile<'_>, bodies: &[NodeId]) -> Result<Vec<Jo
                 )
             }
             PhysicsJointKind::Unknown(value) => {
-                return Err(Error::new(
-                    "physics.joint",
+                return Err(Error::requirement(
+                    Location::new().field("physics").field("joint"),
                     format!("unknown constraint selector {value}"),
                 ));
             }
         };
-        let body_a = *bodies
-            .get(definition.body_a as usize)
-            .ok_or_else(|| Error::new("physics.joint.body_a", "body is absent"))?;
-        let body_b = *bodies
-            .get(definition.body_b as usize)
-            .ok_or_else(|| Error::new("physics.joint.body_b", "body is absent"))?;
+        let body_a = *bodies.get(definition.body_a as usize).ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("physics")
+                    .field("joint")
+                    .field("body_a"),
+                "body is absent",
+            )
+        })?;
+        let body_b = *bodies.get(definition.body_b as usize).ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("physics")
+                    .field("joint")
+                    .field("body_b"),
+                "body is absent",
+            )
+        })?;
         out.push(Joint {
             body_a,
             body_b,

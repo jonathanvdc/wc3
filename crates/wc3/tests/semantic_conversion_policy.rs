@@ -135,7 +135,9 @@ fn a_constant_light_switch_can_be_reexpressed_without_approximating_animation() 
         .with_rule(ConstantLightVisibility::new([feature]))
         .plan(&animated)
         .unwrap_err();
-    assert!(error.description.contains("animated"));
+    assert!(
+        matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("animated"))
+    );
 }
 
 #[test]
@@ -243,7 +245,9 @@ fn light_switch_rule_rejects_invalid_parameters_and_unbounded_inputs() {
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 1.).unwrap())
         .plan(&source)
         .unwrap_err();
-    assert!(error.description.contains("animated"));
+    assert!(
+        matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("animated"))
+    );
     let (source, feature) = fractional_light(1., false);
     let plan = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.).unwrap())

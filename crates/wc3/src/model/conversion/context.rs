@@ -2,6 +2,8 @@ use super::{
     ApproximationPolicy, Error, ExportOptions, ImportOptions, Issue, IssueKind, LossPolicy, Report,
     UnknownPolicy,
 };
+use crate::model::error::Location;
+use std::error::Error as StdError;
 
 /// Shared policy enforcement used by native adapters.
 pub struct Context {
@@ -49,52 +51,63 @@ impl Context {
     /// Rejects or reports unsupported nondefault semantics.
     pub fn unsupported(
         &mut self,
-        path: impl Into<String>,
+        path: Location,
         description: impl Into<String>,
     ) -> Result<(), Error> {
-        let path = path.into();
         let description = description.into();
         if self.loss_policy == LossPolicy::Reject {
-            return Err(Error::new(path, description));
+            return Err(Error::requirement(path, description));
         }
-        self.issue(path, IssueKind::Dropped, description);
+        self.issue(path.to_string(), IssueKind::Dropped, description);
+        Ok(())
+    }
+    /// Retains a rejected operation's cause, or reports its explicitly accepted loss.
+    pub fn unsupported_source(
+        &mut self,
+        location: Location,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Result<(), Error> {
+        if self.loss_policy == LossPolicy::Reject {
+            return Err(Error::from_source(location, source));
+        }
+        self.issue(location.to_string(), IssueKind::Dropped, source.to_string());
         Ok(())
     }
     /// Rejects or reports discarded source data without a semantic representation.
     pub fn unknown_data(
         &mut self,
-        path: impl Into<String>,
+        path: Location,
         description: impl Into<String>,
     ) -> Result<(), Error> {
-        let path = path.into();
         let description = description.into();
         match self.unknown {
-            UnknownPolicy::Reject => Err(Error::new(path, description)),
+            UnknownPolicy::Reject => Err(Error::requirement(path, description)),
             UnknownPolicy::Drop => {
-                self.issue(path, IssueKind::Dropped, description);
+                self.issue(path.to_string(), IssueKind::Dropped, description);
                 Ok(())
             }
         }
     }
     /// Checks one explicit numeric approximation against the configured tolerance.
+    /// Builds diagnostic context only when the representation changes.
     pub fn approximate(
         &mut self,
-        path: impl Into<String>,
+        path: impl FnOnce() -> Location,
         error: f32,
         description: impl Into<String>,
     ) -> Result<(), Error> {
-        let path = path.into();
-        let description = description.into();
         if error == 0.0 {
             return Ok(());
         }
+        let path = path();
+        let description = description.into();
         if let ApproximationPolicy::Allow { tolerance } = self.approximation {
             if tolerance.is_finite() && tolerance >= 0.0 && error.is_finite() && error <= tolerance
             {
-                self.issue(path, IssueKind::Approximated, description);
+                self.issue(path.to_string(), IssueKind::Approximated, description);
                 return Ok(());
             }
         }
-        Err(Error::new(path, description))
+        Err(Error::requirement(path, description))
     }
 }

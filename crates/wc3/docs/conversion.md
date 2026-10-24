@@ -71,8 +71,20 @@ and optional chunk tag for MDX, or a source span for MDL. An MDL error's
 `diagnostic(source)` formats that location against the original text. Every
 variant exposes its original cause through `std::error::Error::source`.
 Imports of already decoded documents and export planning instead return
-`conversion::Error`, which identifies the semantic field that could not be
-represented.
+`conversion::Error`. Its `Semantic` variant retains the checked model error,
+including its domain reason and structured `Location`. Its `Source` variant
+retains a concrete native or checked-operation error behind `Arc`; inspect it
+through `std::error::Error::source` and downcast when the native API is known.
+Cloning either diagnostic preserves the original cause rather than formatting it.
+The `Requirement` variant describes an authored native-layout or policy constraint
+that has no underlying exception. These descriptive requirements are intentionally
+not a complete taxonomy of native format capacities.
+
+Use `error.location()` to inspect owner identities, fields, and indices as
+`Location` segments. Adding enclosing context preserves those segments and the
+original cause. Displayed paths remain useful in messages, but callers should not
+parse them to classify failures. Errors carrying arbitrary application or native
+causes have no general equality contract.
 
 ## Selecting a vocabulary and layout
 
@@ -212,8 +224,11 @@ Strict policies are the default. Unsupported semantics fail at a concrete field
 path. `LossPolicy::Drop` permits identified semantics to be discarded, while
 `ApproximationPolicy::Allow { tolerance }` permits an identified numeric
 approximation within the configured absolute component error. Both record their
-decisions. Normalization reports an equivalent change of representation, such
-as rebuilding a collision acceleration structure from its reachable membership
+decisions. A rejected checked native operation retains its concrete cause;
+when the selected loss policy accepts that operation's omission, its explanation
+becomes a descriptive report entry instead. Reports describe accepted decisions
+rather than retained exceptions. Normalization reports an equivalent change of
+representation, such as rebuilding a collision acceleration structure from its reachable membership
 instead of retaining inert tree nodes.
 
 Coordinate basis and length units describe numeric authoring values. Changing

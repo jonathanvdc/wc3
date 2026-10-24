@@ -2,6 +2,7 @@
 use super::animation::Decoder;
 use super::storage::Storage;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::materials::{Layer, LayerFresnel};
 use crate::model::formats::mdlx::{self as native, Animatable, FormatVersion};
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
@@ -40,8 +41,8 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             .copied()
             .map(Some)
             .ok_or_else(|| {
-                Error::new(
-                    "material.texture",
+                Error::requirement(
+                    Location::new().field("material").field("texture"),
                     "texture selector is outside the model texture table",
                 )
             })
@@ -91,7 +92,10 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                         transforms
                             .get(layer.texture_animation_id as usize)
                             .ok_or_else(|| {
-                                Error::new("material.texture_transform", "transform does not exist")
+                                Error::requirement(
+                                    Location::new().field("material").field("texture_transform"),
+                                    "transform does not exist",
+                                )
                             })?;
                         Construct::construct(values)
                     },
@@ -189,8 +193,11 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     for (index, (source, layer)) in source.layers.iter().zip(&mut material.steps).enumerate() {
         if legacy && index > 0 {
             let map = texture_map(textures, &source.texture_id)?;
-            layer.shader.inputs_mut().binding.image =
-                decoder.bind(&source.texture_id, "layer.texture_role", map)?;
+            layer.shader.inputs_mut().binding.image = decoder.bind(
+                &source.texture_id,
+                &Location::new().field("layer").field("texture_role"),
+                map,
+            )?;
             continue;
         }
         let classic = matches!(layer.shader, Shader::Classic(_));
@@ -201,19 +208,19 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 translation: decoder.track(
                     transform.translation.as_ref(),
                     Vec3::ZERO,
-                    "layer.translation",
+                    &Location::new().field("layer").field("translation"),
                     |value| value.into(),
                 )?,
                 rotation: decoder.track(
                     transform.rotation.as_ref(),
                     Quat::IDENTITY,
-                    "layer.rotation",
+                    &Location::new().field("layer").field("rotation"),
                     Quat::from_array,
                 )?,
                 scale: decoder.track(
                     transform.scaling.as_ref(),
                     Vec3::ONE,
-                    "layer.scale",
+                    &Location::new().field("layer").field("scale"),
                     |value| value.into(),
                 )?,
             };
@@ -224,23 +231,39 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             &source.texture_id
         };
         let map = texture_map(textures, primary)?;
-        inputs.binding.image = decoder.bind(primary, "layer.texture", map)?;
-        inputs.opacity = decoder.bind(&source.alpha, "layer.opacity", |value| value)?;
+        inputs.binding.image = decoder.bind(
+            primary,
+            &Location::new().field("layer").field("texture"),
+            map,
+        )?;
+        inputs.opacity = decoder.bind(
+            &source.alpha,
+            &Location::new().field("layer").field("opacity"),
+            |value| value,
+        )?;
         if let Ok(source) = source.try_emissive_gain() {
             inputs.emissive_gain = Some(decoder.track(
                 source.track(),
                 emissive_default(source),
-                "layer.emissive_gain",
+                &Location::new().field("layer").field("emissive_gain"),
                 |value| value,
             )?);
         }
         if let (Ok(source), Some(target)) = (source.try_fresnel(), layer.shader.fresnel_mut()) {
             *target = Fresnel {
-                color: decoder.bind(&source.color, "layer.fresnel_color", |value| value.into())?,
-                opacity: decoder.bind(&source.opacity, "layer.fresnel_opacity", |value| value)?,
+                color: decoder.bind(
+                    &source.color,
+                    &Location::new().field("layer").field("fresnel_color"),
+                    |value| value.into(),
+                )?,
+                opacity: decoder.bind(
+                    &source.opacity,
+                    &Location::new().field("layer").field("fresnel_opacity"),
+                    |value| value,
+                )?,
                 team_color: decoder.bind(
                     &source.team_color,
-                    "layer.fresnel_team_color",
+                    &Location::new().field("layer").field("fresnel_team_color"),
                     |value| value,
                 )?,
             };
@@ -252,7 +275,11 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             .zip(layer.shader.textures_mut())
         {
             let map = texture_map(textures, &source.texture_id)?;
-            slot.binding.image = decoder.bind(&source.texture_id, "layer.texture_slot", map)?;
+            slot.binding.image = decoder.bind(
+                &source.texture_id,
+                &Location::new().field("layer").field("texture_slot"),
+                map,
+            )?;
         }
     }
     legacy_roles(source, material)
@@ -274,8 +301,8 @@ fn legacy_roles<'a, V: FormatVersion>(
         return Ok(material);
     }
     if material.steps.len() > 6 {
-        return Err(Error::new(
-            "material.layers",
+        return Err(Error::requirement(
+            Location::new().field("material").field("layers"),
             "legacy DefaultUnit material has more than six texture roles",
         ));
     }
@@ -347,8 +374,8 @@ fn texture_map<'a>(
         .iter()
         .any(|selector| *selector != u32::MAX && *selector as usize >= textures.len())
     {
-        return Err(Error::new(
-            "material.texture",
+        return Err(Error::requirement(
+            Location::new().field("material").field("texture"),
             "animated selector references an absent texture",
         ));
     }

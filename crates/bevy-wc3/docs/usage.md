@@ -107,9 +107,13 @@ Playback clocks use seconds. Set `paused` or `speed` to control advancement.
 `clip_time` drives the selected clip, while `shared_time` drives independent
 clocks. `seek(seconds)` skips crossed events; direct clock edits keep normal
 forward traversal. `restart` resets clocks and includes start events again.
-Invalid typed selections produce `PlaybackError` during evaluation. See
-[transitions](rendering/animation-blending.md) and [event delivery](rendering/events.md)
-for timing details.
+Invalid selections produce `PlaybackError` during evaluation. Its optional
+`wc3::model::Error` retains the typed reason, requested clip identity, and
+structured context; nonfinite clocks distinguish `playback.clip_time` from
+`playback.shared_time`. Inspect `kind()` and `location()` for application policy,
+and format the error when presenting it. Successful evaluation clears the
+component's stored failure. See [transitions](rendering/animation-blending.md) and
+[event delivery](rendering/events.md) for timing details.
 
 `PoseOverrides` maps source `NodeId`s to authored local transforms after animation
 sampling. Use it for gameplay poses, IK, or an external solver. Removing an

@@ -2,6 +2,7 @@
 use super::{bounds, geometry, relationships, root_view::CommonRoot, scene::Identities};
 use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::legacy::{Batch14, Batch16, LegacyGroupChunk};
 use crate::model::formats::wmo::records::{CullingBox, GroupFlags, TriangleFlags2};
@@ -20,6 +21,7 @@ use crate::model::{
 use glam::Vec3;
 use glam::Vec4;
 use std::borrow::Cow;
+use std::error::Error as StdError;
 
 pub(super) struct Header<'a> {
     pub name: u32,
@@ -177,8 +179,11 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
         }
     }
     if !indices.len().is_multiple_of(3) {
-        return Err(Error::new(
-            "world.group.indices",
+        return Err(Error::requirement(
+            Location::new()
+                .field("world")
+                .field("group")
+                .field("indices"),
             "historical indices must form complete triangles",
         ));
     }
@@ -209,7 +214,12 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
     for index in super::spatial_queries::faces(common(), context)? {
         faces
             .get_mut(index)
-            .ok_or_else(|| Error::new("world.group.query", "query references absent face"))?
+            .ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("world").field("group").field("query"),
+                    "query references absent face",
+                )
+            })?
             .spatial_queries = true;
     }
     let mut geometry = WmoGeometry::triangles(positions, triangles)?
@@ -277,8 +287,11 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                         *materials
                             .get(usize::from(liquid.header.material))
                             .ok_or_else(|| {
-                                Error::new(
-                                    "world.liquid.material",
+                                Error::requirement(
+                                    Location::new()
+                                        .field("world")
+                                        .field("liquid")
+                                        .field("material"),
                                     "liquid material does not exist",
                                 )
                             })?,
@@ -348,14 +361,17 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             for row in rows.iter() {
                 let row = row.map_err(read_error)?;
                 if row.first() % 3 != 0 || row.count() % 3 != 0 {
-                    return Err(Error::new(
-                        "world.group.batch",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("group").field("batch"),
                         "historical draw does not cover whole triangles",
                     ));
                 }
-                let material = *materials
-                    .get(usize::from(row.material()))
-                    .ok_or_else(|| Error::new("world.group.batch", "material does not exist"))?;
+                let material = *materials.get(usize::from(row.material())).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("group").field("batch"),
+                        "material does not exist",
+                    )
+                })?;
                 let lighting = if draws.len() < header.transition {
                     Lighting::Transition
                 } else if draws.len() < header.transition + header.interior {
@@ -412,6 +428,6 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
 pub(super) fn group_options(flags: GroupFlags, supplemental: u32) -> GroupOptions {
     super::group_flags::read(flags, supplemental)
 }
-fn read_error(error: impl std::fmt::Display) -> Error {
-    Error::new("world.group", error.to_string())
+fn read_error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("world").field("group"), error)
 }

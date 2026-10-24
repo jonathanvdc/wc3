@@ -1,5 +1,6 @@
 //! TimeSource components for native animation conversion.
 use super::*;
+use crate::model::error::Location;
 
 /// Decodes the two native animation clock representations.
 pub trait SequenceClock {
@@ -43,14 +44,20 @@ pub(in super::super) fn sequence_tables<'view, 'data, D: Dialect>(
     let mut seen = std::collections::BTreeSet::new();
     while key != source.key {
         if !seen.insert(key.clone()) {
-            return Err(Error::new("skeleton.parent", "parent skeleton cycle"));
+            return Err(Error::requirement(
+                Location::new().field("skeleton").field("parent"),
+                "parent skeleton cycle",
+            ));
         }
         let Some(File::Skeleton(skeleton)) = source.file(&key) else {
             break;
         };
-        let typed = skeleton
-            .as_typed::<D::Layout>()
-            .ok_or_else(|| Error::new("skeleton.layout", "skeleton layout differs from model"))?;
+        let typed = skeleton.as_typed::<D::Layout>().ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("skeleton").field("layout"),
+                "skeleton layout differs from model",
+            )
+        })?;
         let mut parent = None;
         for chunk in &typed.chunks {
             match chunk {

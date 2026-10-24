@@ -1,5 +1,7 @@
 //! Historical lighting selections are relocated with joined vertex and draw arrays.
 use crate::model::conversion::Error;
+use crate::model::error::Location;
+use std::error::Error as StdError;
 
 type LightingWindows = Option<[[u16; 4]; 4]>;
 
@@ -35,24 +37,34 @@ fn append(
         if count == 0 && batches == 0 {
             continue;
         }
-        let vertex =
-            if count == 0 {
-                0
-            } else {
-                u16::try_from(vertices.checked_add(u32::from(vertex)).ok_or_else(|| {
-                    Error::new("world.group.lighting", "vertex selection overflows")
-                })?)
-                .map_err(error)?
-            };
-        let batch =
-            if batches == 0 {
-                0
-            } else {
-                u16::try_from(draws.checked_add(u32::from(batch)).ok_or_else(|| {
-                    Error::new("world.group.lighting", "batch selection overflows")
-                })?)
-                .map_err(error)?
-            };
+        let vertex = if count == 0 {
+            0
+        } else {
+            u16::try_from(vertices.checked_add(u32::from(vertex)).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("group")
+                        .field("lighting"),
+                    "vertex selection overflows",
+                )
+            })?)
+            .map_err(error)?
+        };
+        let batch = if batches == 0 {
+            0
+        } else {
+            u16::try_from(draws.checked_add(u32::from(batch)).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("group")
+                        .field("lighting"),
+                    "batch selection overflows",
+                )
+            })?)
+            .map_err(error)?
+        };
         if let Some(previous) = target.last_mut() {
             let adjacent = (count == 0 && previous[1] == 0
                 || u32::from(previous[0]) + u32::from(previous[1]) == u32::from(vertex))
@@ -77,8 +89,11 @@ fn finish(source: Option<Vec<[u16; 4]>>) -> Result<Option<[[u16; 4]; 4]>, Error>
     source
         .map(|source| {
             if source.len() > 4 {
-                return Err(Error::new(
-                    "world.group.lighting",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("group")
+                        .field("lighting"),
                     "joined geometry needs more than four disjoint historical lighting windows",
                 ));
             }
@@ -90,8 +105,14 @@ fn finish(source: Option<Vec<[u16; 4]>>) -> Result<Option<[[u16; 4]; 4]>, Error>
         })
         .transpose()
 }
-fn error(value: impl std::fmt::Display) -> Error {
-    Error::new("world.group.lighting", value.to_string())
+fn error(value: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(
+        Location::new()
+            .field("world")
+            .field("group")
+            .field("lighting"),
+        value,
+    )
 }
 
 #[cfg(test)]

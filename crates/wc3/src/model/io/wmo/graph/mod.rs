@@ -1,4 +1,5 @@
 //! Direct typed world-model authoring graph codecs.
+use crate::model::error::Location;
 use crate::model::Model;
 use glam::Vec3;
 mod alpha_materials;
@@ -40,7 +41,7 @@ pub(super) fn import<'a, D: Dialect>(
 ) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     source
         .validate_complete()
-        .map_err(|error| Error::new("world", error.to_string()))?;
+        .map_err(|error| Error::from_source(Location::new().field("world"), error))?;
     let mut context = Context::import(options);
     for chunk in source.root.chunks() {
         use crate::model::formats::wmo::root::RootChunk;
@@ -96,18 +97,20 @@ pub(super) fn import<'a, D: Dialect>(
     let mut keys: BTreeSet<_> = (0..header.group_count as usize)
         .map(|index| GroupKey { index, lod: 0 })
         .collect();
-    for dependency in source
-        .dependencies()
-        .map_err(|error| Error::new("world.dependencies", error.to_string()))?
-    {
+    for dependency in source.dependencies().map_err(|error| {
+        Error::from_source(Location::new().field("world").field("dependencies"), error)
+    })? {
         if let crate::model::formats::wmo::DependencyKind::Group { index, lod } = dependency.kind {
             keys.insert(GroupKey { index, lod });
         }
     }
     for key in keys {
-        let group = source
-            .group(key)
-            .ok_or_else(|| Error::new("world.group", "required group companion is missing"))?;
+        let group = source.group(key).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("world").field("group"),
+                "required group companion is missing",
+            )
+        })?;
         for chunk in group.chunks() {
             use crate::model::formats::wmo::group::GroupChunk;
             let unresolved = match chunk {
@@ -182,10 +185,14 @@ pub(super) fn import<'a, D: Dialect>(
         match chunk {
             crate::model::formats::wmo::root::RootChunk::Groups(rows) => {
                 for row in rows.iter() {
-                    let row =
-                        row.map_err(|error| Error::new("world.catalog", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("catalog"), error)
+                    })?;
                     let group = world.groups.get_mut(catalog_index).ok_or_else(|| {
-                        Error::new("world.catalog", "catalog exceeds group count")
+                        Error::requirement(
+                            Location::new().field("world").field("catalog"),
+                            "catalog exceeds group count",
+                        )
                     })?;
                     catalog_index += 1;
                     group.name = if row.name_offset < 0 {
@@ -200,10 +207,14 @@ pub(super) fn import<'a, D: Dialect>(
             }
             crate::model::formats::wmo::root::RootChunk::Groups2(rows) => {
                 for (index, row) in rows.iter().enumerate() {
-                    let row =
-                        row.map_err(|error| Error::new("world.catalog", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("catalog"), error)
+                    })?;
                     let group = world.groups.get_mut(index).ok_or_else(|| {
-                        Error::new("world.catalog", "supplemental catalog exceeds group count")
+                        Error::requirement(
+                            Location::new().field("world").field("catalog"),
+                            "supplemental catalog exceeds group count",
+                        )
                     })?;
                     group.supplemental = Some(row.flags2.bits().into());
                     group.detail_selection = Some(row.lod_index);
@@ -243,8 +254,8 @@ pub(super) fn plan<'a, D: Dialect>(
 
 fn handle_unknown(context: &mut Context, file: FileKey, tag: [u8; 4]) -> Result<(), Error> {
     context.unknown_data(
-        format!("world.{file:?}.unknown.{}", String::from_utf8_lossy(&tag)),
-        "unknown native payload has no semantic representation",
+        Location::new().field("world").field("unknown"),
+        format!("unknown native payload {tag:?} in {file:?} has no semantic representation"),
     )
 }
 

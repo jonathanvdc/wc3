@@ -3,6 +3,7 @@ use super::animation::Decoder;
 use super::state::ImportState;
 use super::storage::Storage;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
@@ -30,9 +31,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     profile: &mut ImportState<'a>,
 ) -> Result<(), Error> {
     let node = |id| {
-        ids.get(&id)
-            .copied()
-            .ok_or_else(|| Error::new("feature.node", "node identity does not exist"))
+        ids.get(&id).copied().ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("feature").field("node"),
+                "node identity does not exist",
+            )
+        })
     };
     let texture = |index: u32| {
         if index == u32::MAX {
@@ -42,7 +46,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 .get(index as usize)
                 .copied()
                 .map(Some)
-                .ok_or_else(|| Error::new("emitter.texture", "texture identity does not exist"))
+                .ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("emitter").field("texture"),
+                        "texture identity does not exist",
+                    )
+                })
         }
     };
     let mut decoder = Decoder { builder, globals };
@@ -54,7 +63,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    concat!("particle.", stringify!($field)),
+                    &Location::new().field("particle").field(stringify!($field)),
                     |value| value.into(),
                 )?
             };
@@ -99,7 +108,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     activation: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        "particle::VISIBILITY",
+                        &Location::new().field("particle").field("VISIBILITY"),
                         |value| value,
                     )?,
                     variation: (),
@@ -127,7 +136,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    concat!("particle2.", stringify!($field)),
+                    &Location::new().field("particle2").field(stringify!($field)),
                     |value| value.into(),
                 )?
             };
@@ -188,7 +197,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     activation: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        "particle2::VISIBILITY",
+                        &Location::new().field("particle2").field("VISIBILITY"),
                         |value| value,
                     )?,
                     variation: (),
@@ -212,7 +221,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    concat!("ribbon.", stringify!($field)),
+                    &Location::new().field("ribbon").field(stringify!($field)),
                     |value| value.into(),
                 )?
             };
@@ -237,7 +246,10 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         None
                     } else {
                         Some(*materials.get(source.material_id as usize).ok_or_else(|| {
-                            Error::new("ribbon.material", "material identity does not exist")
+                            Error::requirement(
+                                Location::new().field("ribbon").field("material"),
+                                "material identity does not exist",
+                            )
                         })?)
                     },
                 },
@@ -246,7 +258,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        "ribbon::VISIBILITY",
+                        &Location::new().field("ribbon").field("VISIBILITY"),
                         |value| value,
                     )?,
                 },
@@ -263,7 +275,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 ($field:ident) => {
                     decoder.bind(
                         &source.$field,
-                        concat!("popcorn.", stringify!($field)),
+                        &Location::new().field("popcorn").field(stringify!($field)),
                         |value| value.into(),
                     )?
                 };
@@ -297,7 +309,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        "popcorn::VISIBILITY",
+                        &Location::new().field("popcorn").field("VISIBILITY"),
                         |value| value,
                     )?,
                     unlit: flags.unshaded(),
@@ -331,7 +343,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        "attachment::VISIBILITY",
+                        &Location::new().field("attachment").field("VISIBILITY"),
                         |value| value,
                     )?,
                 },
@@ -344,11 +356,14 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let clock = if source.global_sequence_id == u32::MAX {
             TimeSource::Animation
         } else {
-            TimeSource::Shared(
-                *globals
-                    .get(source.global_sequence_id as usize)
-                    .ok_or_else(|| Error::new("events.clock", "shared clock does not exist"))?,
-            )
+            TimeSource::Shared(*globals.get(source.global_sequence_id as usize).ok_or_else(
+                || {
+                    Error::requirement(
+                        Location::new().field("events").field("clock"),
+                        "shared clock does not exist",
+                    )
+                },
+            )?)
         };
         let event_source = decoder.builder.add_event_source(profile::EventSource {
             node: id,

@@ -2,6 +2,7 @@
 use super::super::companion_scope::CompanionScope;
 use super::super::overrides::resource;
 use super::*;
+use crate::model::error::Location;
 use crate::model::io::materialize;
 use glam::Vec3;
 use profile::{
@@ -39,9 +40,12 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
         let native_bodies = bodies::bodies(file);
         let mut placements = Vec::new();
         for (index, body) in native_bodies.iter().enumerate() {
-            let bone = *nodes
-                .get(body.bone as usize)
-                .ok_or_else(|| Error::new("physics.body.bone", "bone is absent"))?;
+            let bone = *nodes.get(body.bone as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("physics").field("body").field("bone"),
+                    "bone is absent",
+                )
+            })?;
             let node = builder
                 .new_node(format!("physics-body-{index}"))
                 .with_parent(bone)
@@ -56,16 +60,42 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
         }
         let mut bodies = Vec::new();
         for (index, body) in native_bodies.iter().enumerate() {
-            let first = usize::try_from(body.first)
-                .map_err(|_| Error::new("physics.body.shapes", "negative first shape"))?;
-            let count = usize::try_from(body.count)
-                .map_err(|_| Error::new("physics.body.shapes", "negative shape count"))?;
-            let end = first
-                .checked_add(count)
-                .ok_or_else(|| Error::new("physics.body.shapes", "shape range overflow"))?;
-            let selected = shapes
-                .get(first..end)
-                .ok_or_else(|| Error::new("physics.body.shapes", "shape range is absent"))?;
+            let first = usize::try_from(body.first).map_err(|_| {
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("shapes"),
+                    "negative first shape",
+                )
+            })?;
+            let count = usize::try_from(body.count).map_err(|_| {
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("shapes"),
+                    "negative shape count",
+                )
+            })?;
+            let end = first.checked_add(count).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("shapes"),
+                    "shape range overflow",
+                )
+            })?;
+            let selected = shapes.get(first..end).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("shapes"),
+                    "shape range is absent",
+                )
+            })?;
             let parent_body = if body.attachment.parent_body() == 0 {
                 None
             } else {
@@ -73,7 +103,13 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
                     *placements
                         .get(body.attachment.parent_body() as usize)
                         .ok_or_else(|| {
-                            Error::new("physics.body.parent", "parent body is absent")
+                            Error::requirement(
+                                Location::new()
+                                    .field("physics")
+                                    .field("body")
+                                    .field("parent"),
+                                "parent body is absent",
+                            )
                         })?,
                 )
             };

@@ -1,5 +1,6 @@
 //! Static target dialect capabilities and version-selected field families.
 use super::*;
+use crate::model::error::Location;
 use zerovec::ZeroVec;
 
 /// Native skin placement selected by the target core layout.
@@ -85,7 +86,10 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
     ) -> Result<(), Error> {
         if geometry.iter().chain(&recursive).any(|id| *id != 0) {
             context.unsupported(
-                "m2.particle.model_resource",
+                Location::new()
+                    .field("m2")
+                    .field("particle")
+                    .field("model_resource"),
                 "flat MD20 cannot carry numeric GPID/RPID child models; provide legacy filenames",
             )?;
         }
@@ -99,7 +103,10 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
     ) -> Result<(), Error> {
         if !values.is_empty() {
             context.unsupported(
-                "m2.particle.texture_program",
+                Location::new()
+                    .field("m2")
+                    .field("particle")
+                    .field("texture_program"),
                 "flat MD20 cannot carry TXAC particle texture programmes",
             )?;
         }
@@ -119,7 +126,7 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
     ) -> Result<(), Error> {
         if id.is_some() {
             context.unsupported(
-                "physics.id",
+                Location::new().field("physics").field("id"),
                 "flat MD20 requires a sibling filename instead of PFID",
             )?;
         }
@@ -133,7 +140,7 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
     ) -> Result<(), Error> {
         if !ids.is_empty() {
             context.unsupported(
-                "bonefiles.ids",
+                Location::new().field("bonefiles").field("ids"),
                 "flat MD20 cannot encode BFID customization identities",
             )?;
         }
@@ -142,8 +149,8 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
 
     fn texture_ids(_: &mut native::Document<'static, Self>, ids: Vec<u32>) -> Result<(), Error> {
         if ids.iter().any(|id| *id != 0) {
-            Err(Error::new(
-                "textures.id",
+            Err(Error::requirement(
+                Location::new().field("textures").field("id"),
                 "flat MD20 cannot carry numeric texture IDs; provide filenames",
             ))
         } else {

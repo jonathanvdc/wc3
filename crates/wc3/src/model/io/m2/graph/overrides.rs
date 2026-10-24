@@ -1,6 +1,7 @@
 //! Sparse customization transforms are logical bone bindings, not saved encoded files.
 use super::companion_scope::CompanionScope;
 use super::*;
+use crate::model::error::Location;
 use crate::model::io::materialize;
 use crate::model::M2ResourceLocator;
 use glam::Mat4;
@@ -17,8 +18,8 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
         if let File::Bone(file) = file {
             let resource = Some(builder.add_bone_override_resource(resource(key)));
             if file.indices.len() != file.matrices.len() {
-                return Err(Error::new(
-                    "m2.bone_override",
+                return Err(Error::requirement(
+                    Location::new().field("m2").field("bone_override"),
                     "index and matrix cardinalities differ",
                 ));
             }
@@ -28,10 +29,12 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
                     .indices
                     .iter()
                     .map(|i| {
-                        nodes
-                            .get(i as usize)
-                            .copied()
-                            .ok_or_else(|| Error::new("m2.bone_override", "missing bone"))
+                        nodes.get(i as usize).copied().ok_or_else(|| {
+                            Error::requirement(
+                                Location::new().field("m2").field("bone_override"),
+                                "missing bone",
+                            )
+                        })
                     })
                     .collect::<Result<_, _>>()?,
                 transforms: materialize(file.matrices.len(), move |i| {
@@ -70,10 +73,19 @@ pub(super) fn export<D: ExportDialect>(
                 nodes
                     .iter()
                     .position(|n| n == id)
-                    .ok_or_else(|| Error::new("m2.bone_override", "missing bone"))
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("bone_override"),
+                            "missing bone",
+                        )
+                    })
                     .and_then(|i| {
-                        u16::try_from(i)
-                            .map_err(|_| Error::new("m2.bone_override", "index exceeds u16"))
+                        u16::try_from(i).map_err(|_| {
+                            Error::requirement(
+                                Location::new().field("m2").field("bone_override"),
+                                "index exceeds u16",
+                            )
+                        })
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;

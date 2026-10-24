@@ -1,6 +1,7 @@
 //! Static world actors and named placement membership compiled to native root tables.
 use super::encode::{append, array};
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::records;
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Dialect;
@@ -46,7 +47,10 @@ pub(super) fn write<'a, D: Dialect>(
         let node = model.node(feature.node).expect("validated feature anchor");
         if node.parent.is_some() {
             context.unsupported(
-                "world.actor.parent",
+                Location::new()
+                    .field("world")
+                    .field("actor")
+                    .field("parent"),
                 "world root actor tables contain absolute transforms",
             )?;
         }
@@ -54,7 +58,10 @@ pub(super) fn write<'a, D: Dialect>(
             profile::Node::Light(source) => {
                 if model.is_animated(source.color) || model.is_animated(source.intensity) {
                     context.unsupported(
-                        "world.light.animation",
+                        Location::new()
+                            .field("world")
+                            .field("light")
+                            .field("animation"),
                         "root light tables encode constant color and intensity",
                     )?;
                 }
@@ -66,7 +73,7 @@ pub(super) fn write<'a, D: Dialect>(
                     if node.transform.defaults(model.values()).rotation
                         != crate::model::Quat::default()
                     {
-                        context.unsupported("world.light.rotation","native modern light Euler axis order is not established for quaternion translation")?;
+                        context.unsupported(Location::new().field("world").field("light").field("rotation"),"native modern light Euler axis order is not established for quaternion translation")?;
                     }
                     let kind = match source.kind {
                         profile::LightKind::Point => records::NewLightKind::Point,
@@ -74,7 +81,7 @@ pub(super) fn write<'a, D: Dialect>(
                         profile::LightKind::Unknown(value) => records::NewLightKind::Unknown(value),
                         _ => {
                             context.unsupported(
-                                "world.light.kind",
+                                Location::new().field("world").field("light").field("kind"),
                                 "modern light table supports point and spot illumination",
                             )?;
                             records::NewLightKind::Point
@@ -88,8 +95,11 @@ pub(super) fn write<'a, D: Dialect>(
                         .map(|id| {
                             match model.image_resource(id.resource).expect("validated image") {
                                 WorldImageResource::FileDataId(value) => Ok(*value),
-                                _ => Err(Error::new(
-                                    "world.light.cookie",
+                                _ => Err(Error::requirement(
+                                    Location::new()
+                                        .field("world")
+                                        .field("light")
+                                        .field("cookie"),
                                     "light cookies require a database file identifier",
                                 )),
                             }
@@ -102,7 +112,10 @@ pub(super) fn write<'a, D: Dialect>(
                         flags,
                         doodad_set: extra.doodad_set.map_or(Ok(0), |id| {
                             i32::try_from(id.index).map_err(|_| {
-                                Error::new("world.light.set", "set index exceeds native capacity")
+                                Error::requirement(
+                                    Location::new().field("world").field("light").field("set"),
+                                    "set index exceeds native capacity",
+                                )
                             })
                         })?,
                         inner_color: color,
@@ -143,7 +156,10 @@ pub(super) fn write<'a, D: Dialect>(
                     indices.modern.insert(
                         feature_id,
                         u16::try_from(modern.len()).map_err(|_| {
-                            Error::new("world.lights", "light count exceeds capacity")
+                            Error::requirement(
+                                Location::new().field("world").field("lights"),
+                                "light count exceeds capacity",
+                            )
                         })?,
                     );
                     modern.push(row);
@@ -155,8 +171,8 @@ pub(super) fn write<'a, D: Dialect>(
                         profile::LightKind::Ambient => records::LightKind::Ambient,
                         profile::LightKind::Unknown(value) => {
                             records::LightKind::Unknown(u8::try_from(value).map_err(|_| {
-                                Error::new(
-                                    "world.light.kind",
+                                Error::requirement(
+                                    Location::new().field("world").field("light").field("kind"),
                                     "legacy kind exceeds eight-bit selector",
                                 )
                             })?)
@@ -166,7 +182,10 @@ pub(super) fn write<'a, D: Dialect>(
                     indices.lights.insert(
                         feature_id,
                         u16::try_from(lights.len()).map_err(|_| {
-                            Error::new("world.lights", "light count exceeds capacity")
+                            Error::requirement(
+                                Location::new().field("world").field("lights"),
+                                "light count exceeds capacity",
+                            )
                         })?,
                     );
                     if let Some(terms) = source.directional_terms {
@@ -176,8 +195,11 @@ pub(super) fn write<'a, D: Dialect>(
                                 value,
                             }),
                             light_index: u8::try_from(lights.len()).map_err(|_| {
-                                Error::new(
-                                    "world.light.extension",
+                                Error::requirement(
+                                    Location::new()
+                                        .field("world")
+                                        .field("light")
+                                        .field("extension"),
                                     "extension light identity exceeds eight-bit capacity",
                                 )
                             })?,
@@ -208,7 +230,10 @@ pub(super) fn write<'a, D: Dialect>(
                         != node.transform.defaults(model.values()).scale[0]
                 {
                     context.unsupported(
-                        "world.doodad.scale",
+                        Location::new()
+                            .field("world")
+                            .field("doodad")
+                            .field("scale"),
                         "native doodads store one uniform scale",
                     )?;
                 }
@@ -219,14 +244,21 @@ pub(super) fn write<'a, D: Dialect>(
                     WorldModelResource::FileDataId(file) => match root.addressing() {
                         super::root_output::Addressing::PathsOrFileIds => {
                             file_mode = true;
-                            let selector = u32::try_from(files.len())
-                                .map_err(|error| Error::new("world.doodad", error.to_string()))?;
+                            let selector = u32::try_from(files.len()).map_err(|error| {
+                                Error::from_source(
+                                    Location::new().field("world").field("doodad"),
+                                    error,
+                                )
+                            })?;
                             files.push(*file);
                             selector
                         }
                         super::root_output::Addressing::Paths => {
                             context.unsupported(
-                                "world.doodad.resource",
+                                Location::new()
+                                    .field("world")
+                                    .field("doodad")
+                                    .field("resource"),
                                 "historical doodad placements require model file paths",
                             )?;
                             path_mode = true;
@@ -237,8 +269,8 @@ pub(super) fn write<'a, D: Dialect>(
                         path_mode = true;
                         let selector = names.len() as u32;
                         if path.contains(&0) {
-                            return Err(Error::new(
-                                "world.doodad.path",
+                            return Err(Error::requirement(
+                                Location::new().field("world").field("doodad").field("path"),
                                 "resource path contains NUL",
                             ));
                         }
@@ -248,8 +280,11 @@ pub(super) fn write<'a, D: Dialect>(
                     }
                 };
                 if selector > 0xffffff {
-                    return Err(Error::new(
-                        "world.doodad.reference",
+                    return Err(Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("doodad")
+                            .field("reference"),
                         "doodad resource selector exceeds native capacity",
                     ));
                 }
@@ -271,11 +306,20 @@ pub(super) fn write<'a, D: Dialect>(
                         g,
                         r,
                         u8::try_from(*indices.lights.get(&light).ok_or_else(|| {
-                            Error::new("world.doodad.light", "tint references a nonlegacy light")
+                            Error::requirement(
+                                Location::new()
+                                    .field("world")
+                                    .field("doodad")
+                                    .field("light"),
+                                "tint references a nonlegacy light",
+                            )
                         })?)
                         .map_err(|_| {
-                            Error::new(
-                                "world.doodad.light",
+                            Error::requirement(
+                                Location::new()
+                                    .field("world")
+                                    .field("doodad")
+                                    .field("light"),
                                 "light selector exceeds native capacity",
                             )
                         })?,
@@ -284,7 +328,10 @@ pub(super) fn write<'a, D: Dialect>(
                 indices.doodads.insert(
                     feature_id,
                     u16::try_from(doodads.len()).map_err(|_| {
-                        Error::new("world.doodads", "doodad count exceeds reference capacity")
+                        Error::requirement(
+                            Location::new().field("world").field("doodads"),
+                            "doodad count exceeds reference capacity",
+                        )
                     })?,
                 );
                 multipliers.push(source.appearance.color_multiplier);
@@ -308,8 +355,8 @@ pub(super) fn write<'a, D: Dialect>(
         }
     }
     if path_mode && file_mode {
-        return Err(Error::new(
-            "world.doodads",
+        return Err(Error::requirement(
+            Location::new().field("world").field("doodads"),
             "one root cannot mix path and database doodad reference modes",
         ));
     }
@@ -319,11 +366,12 @@ pub(super) fn write<'a, D: Dialect>(
             .members
             .iter()
             .map(|node| {
-                indices
-                    .doodads
-                    .get(node)
-                    .copied()
-                    .ok_or_else(|| Error::new("world.set", "set member has no doodad feature"))
+                indices.doodads.get(node).copied().ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("set"),
+                        "set member has no doodad feature",
+                    )
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         let first = members.first().copied().unwrap_or(0);
@@ -333,14 +381,17 @@ pub(super) fn write<'a, D: Dialect>(
             .any(|(offset, index)| usize::from(*index) != usize::from(first) + offset)
         {
             context.unsupported(
-                "world.set.membership",
+                Location::new()
+                    .field("world")
+                    .field("set")
+                    .field("membership"),
                 "native doodad sets require a consecutive placement interval",
             )?;
         }
         let mut name = [0u8; 20];
         if source.name.len() > 20 || source.name.as_bytes().contains(&0) {
-            return Err(Error::new(
-                "world.set.name",
+            return Err(Error::requirement(
+                Location::new().field("world").field("set").field("name"),
                 "name exceeds native field or contains NUL",
             ));
         }
@@ -369,8 +420,11 @@ pub(super) fn write<'a, D: Dialect>(
     }
     if multipliers.iter().any(Option::is_some) {
         if multipliers.iter().any(Option::is_none) {
-            return Err(Error::new(
-                "world.doodad.color_multiplier",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("doodad")
+                    .field("color_multiplier"),
                 "native multiplier table must cover every placement",
             ));
         }
@@ -405,7 +459,7 @@ fn color(source: [f32; 4], context: &mut Context) -> Result<[u8; 4], Error> {
         let error = (value - f32::from(*target) / 255.).abs();
         if error != 0. {
             context.approximate(
-                "world.light.color",
+                || Location::new().field("world").field("light").field("color"),
                 error,
                 "native light colors use eight-bit normalized components",
             )?;
@@ -436,7 +490,7 @@ fn half(value: f32, context: &mut Context) -> Result<u16, Error> {
     let restored = super::scene::half(encoded);
     if restored.to_bits() != value.to_bits() {
         context.approximate(
-            "world.light.half",
+            || Location::new().field("world").field("light").field("half"),
             (restored - value).abs(),
             "native light control uses binary16 precision",
         )?;

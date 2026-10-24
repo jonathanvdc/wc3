@@ -1,6 +1,7 @@
 //! Independent world-surface fields and borrowed external texture identities.
 use super::encode::append;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::{self as native, Dialect};
 use crate::model::materials::bindings::TextureBinding;
 use crate::model::materials::state::{Lighting, PassState};
@@ -25,7 +26,11 @@ fn records<T: for<'d> native::Read<'d> + native::RecordLayout>(
     rows: &native::codec::Array<'_, T>,
 ) -> Result<Vec<T>, Error> {
     rows.iter()
-        .map(|row| row.map_err(|error| Error::new("world.material", error.to_string())))
+        .map(|row| {
+            row.map_err(|error| {
+                Error::from_source(Location::new().field("world").field("material"), error)
+            })
+        })
         .collect()
 }
 pub(super) fn read<'a, 'data: 'a>(
@@ -190,10 +195,17 @@ pub(super) fn write<'a, D: Dialect>(
         let value = match model.image_resource(id).expect("validated image") {
             WorldImageResource::Path(path) => {
                 named = true;
-                let offset = u32::try_from(names.len())
-                    .map_err(|_| Error::new("world.texture", "name table exceeds capacity"))?;
+                let offset = u32::try_from(names.len()).map_err(|_| {
+                    Error::requirement(
+                        Location::new().field("world").field("texture"),
+                        "name table exceeds capacity",
+                    )
+                })?;
                 if path.contains(&0) {
-                    return Err(Error::new("world.texture", "resource path contains NUL"));
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("texture"),
+                        "resource path contains NUL",
+                    ));
                 }
                 names.extend_from_slice(path);
                 names.push(0);
@@ -206,7 +218,7 @@ pub(super) fn write<'a, D: Dialect>(
                 }
                 super::root_output::Addressing::Paths => {
                     context.unsupported(
-                        "world.texture",
+                        Location::new().field("world").field("texture"),
                         "historical material textures require model file paths",
                     )?;
                     0
@@ -214,7 +226,7 @@ pub(super) fn write<'a, D: Dialect>(
             },
             _ => {
                 context.unsupported(
-                    "world.texture",
+                    Location::new().field("world").field("texture"),
                     "world-model textures require paths or game file identifiers",
                 )?;
                 0
@@ -223,8 +235,8 @@ pub(super) fn write<'a, D: Dialect>(
         selectors.insert(id, value);
     }
     if named && file_ids {
-        return Err(Error::new(
-            "world.textures",
+        return Err(Error::requirement(
+            Location::new().field("world").field("textures"),
             "one native root cannot mix path-addressed and database-addressed material textures",
         ));
     }
@@ -240,7 +252,10 @@ pub(super) fn write<'a, D: Dialect>(
                 shader
             } else {
                 context.unsupported(
-                    "world.material.shader",
+                    Location::new()
+                        .field("world")
+                        .field("material")
+                        .field("shader"),
                     "selected native material requires an explicit shader-table selection",
                 )?;
                 0
@@ -251,7 +266,10 @@ pub(super) fn write<'a, D: Dialect>(
         };
         if source.state.rasterization.controls.self_illuminated {
             context.unsupported(
-                "world.material.self_illuminated",
+                Location::new()
+                    .field("world")
+                    .field("material")
+                    .field("self_illuminated"),
                 "no established native self-illumination switch is available",
             )?;
         }
@@ -261,23 +279,51 @@ pub(super) fn write<'a, D: Dialect>(
         row.ground_type = source.ground_type;
         for (slot, texture) in step.inputs().into_iter().enumerate() {
             row.set_texture(slot, texture.image.map_or(0, |id| selectors[&id]))
-                .map_err(|error| Error::new("world.material.texture", error.to_string()))?;
+                .map_err(|error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("material")
+                            .field("texture"),
+                        error,
+                    )
+                })?;
         }
         if let Some(value) = source.legacy_color {
             row.tail
                 .set_texture(0, u32::from_le_bytes(color(value)))
-                .map_err(|error| Error::new("world.material.color", error.to_string()))?;
+                .map_err(|error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("material")
+                            .field("color"),
+                        error,
+                    )
+                })?;
         }
         if let Some(value) = source.legacy_controls {
-            row.tail
-                .set_texture(1, value)
-                .map_err(|error| Error::new("world.material.controls", error.to_string()))?;
+            row.tail.set_texture(1, value).map_err(|error| {
+                Error::from_source(
+                    Location::new()
+                        .field("world")
+                        .field("material")
+                        .field("controls"),
+                    error,
+                )
+            })?;
         }
         if let Some(values) = source.legacy_runtime {
             for (slot, value) in values.into_iter().enumerate() {
-                row.tail
-                    .set_texture(slot + 2, value)
-                    .map_err(|error| Error::new("world.material.runtime", error.to_string()))?;
+                row.tail.set_texture(slot + 2, value).map_err(|error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("material")
+                            .field("runtime"),
+                        error,
+                    )
+                })?;
             }
         }
         scrolls.push(native::records::MaterialUvAnimation {
@@ -297,25 +343,37 @@ pub(super) fn write<'a, D: Dialect>(
         ));
         mapping.insert(
             id,
-            u16::try_from(materials.len())
-                .map_err(|_| Error::new("world.materials", "material count exceeds capacity"))?,
+            u16::try_from(materials.len()).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("world").field("materials"),
+                    "material count exceeds capacity",
+                )
+            })?,
         );
         materials.push(row);
     }
     if !file_ids {
         append(
             root,
-            RootChunk::TextureNames(
-                native::codec::Array::from_records(&names)
-                    .map_err(|error| Error::new("world.texture.names", error.to_string()))?,
-            ),
+            RootChunk::TextureNames(native::codec::Array::from_records(&names).map_err(
+                |error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("texture")
+                            .field("names"),
+                        error,
+                    )
+                },
+            )?),
         )?;
     }
     append(
         root,
         RootChunk::Materials(
-            native::codec::Array::from_records(&materials)
-                .map_err(|error| Error::new("world.materials", error.to_string()))?,
+            native::codec::Array::from_records(&materials).map_err(|error| {
+                Error::from_source(Location::new().field("world").field("materials"), error)
+            })?,
         ),
     )?;
     if scrolls
@@ -324,10 +382,17 @@ pub(super) fn write<'a, D: Dialect>(
     {
         append(
             root,
-            RootChunk::UvAnimations(
-                native::codec::Array::from_records(&scrolls)
-                    .map_err(|error| Error::new("world.material.scroll", error.to_string()))?,
-            ),
+            RootChunk::UvAnimations(native::codec::Array::from_records(&scrolls).map_err(
+                |error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("material")
+                            .field("scroll"),
+                        error,
+                    )
+                },
+            )?),
         )?;
     }
     if model
@@ -338,8 +403,15 @@ pub(super) fn write<'a, D: Dialect>(
         append(
             root,
             RootChunk::MaterialExtensions(
-                native::codec::Array::from_records(&extensions)
-                    .map_err(|error| Error::new("world.material.extension", error.to_string()))?,
+                native::codec::Array::from_records(&extensions).map_err(|error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("material")
+                            .field("extension"),
+                        error,
+                    )
+                })?,
             ),
         )?;
     }
@@ -355,8 +427,9 @@ fn resource<'view, 'data: 'view>(
         RootChunk::TextureNames(names) => Some(names.as_bytes()),
         _ => None,
     }) {
-        let bytes = native::resources::string_at(names, selector)
-            .map_err(|error| Error::new("world.texture", error.to_string()))?;
+        let bytes = native::resources::string_at(names, selector).map_err(|error| {
+            Error::from_source(Location::new().field("world").field("texture"), error)
+        })?;
         Ok((!bytes.is_empty()).then_some(ImageResource::Path(Cow::Borrowed(bytes))))
     } else {
         Ok((selector != 0).then_some(ImageResource::file_data_id(selector)))
@@ -373,7 +446,9 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
     for chunk in source.chunks() {
         if let RootChunk14::Materials(rows) = chunk {
             for row in rows.iter() {
-                let row = row.map_err(|error| Error::new("world.material", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("material"), error)
+                })?;
                 let mut bindings = Vec::new();
                 for selector in [row.texture0, row.texture1] {
                     let resource = resource(source, selector)?;
@@ -492,8 +567,11 @@ pub(super) fn native_flags(
     let mut samplers = inputs.iter().map(|input| input.sampling);
     let sampler = samplers.next().unwrap_or_default();
     if samplers.any(|other| other != sampler) {
-        return Err(Error::new(
-            "world.material.sampler",
+        return Err(Error::requirement(
+            Location::new()
+                .field("world")
+                .field("material")
+                .field("sampler"),
             "WMO requires all image inputs in one material to share address modes",
         ));
     }

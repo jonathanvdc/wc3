@@ -2,6 +2,7 @@
 use super::{geometry, materials};
 use crate::model::common::FileKey;
 use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
+use crate::model::error::Location;
 use crate::model::formats::wmo::codec::Array;
 use crate::model::formats::wmo::records::{HeaderTailField, RootFlags};
 use crate::model::formats::wmo::root::RootChunk;
@@ -31,7 +32,7 @@ fn write_model<'a, D: Dialect>(
     mut context: Context,
 ) -> Result<Plan<Bundle<'a, D>>, Error> {
     if model.bounds().is_none() {
-        context.unsupported("world.bounds", "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
+        context.unsupported(Location::new().field("world").field("bounds"), "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
     }
     let mut root = Root::<D>::new();
     let controls = model.metadata();
@@ -47,8 +48,8 @@ fn write_model<'a, D: Dialect>(
         match model.model_resource(*skybox).expect("validated skybox") {
             WorldModelResource::Path(bytes) => {
                 if bytes.contains(&0) {
-                    return Err(Error::new(
-                        "world.skybox",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("skybox"),
                         "skybox path contains an interior terminator",
                     ));
                 }
@@ -56,7 +57,10 @@ fn write_model<'a, D: Dialect>(
                 bytes.push(0);
                 append(&mut root, RootChunk::SkyboxName(array(&bytes)?))?;
             }
-            _ => context.unsupported("world.skybox", "native skybox selection requires a path")?,
+            _ => context.unsupported(
+                Location::new().field("world").field("skybox"),
+                "native skybox selection requires a path",
+            )?,
         }
     }
     let world = model
@@ -65,14 +69,14 @@ fn write_model<'a, D: Dialect>(
         .next()
         .map(|(_, world)| world)
         .ok_or_else(|| {
-            Error::new(
-                "world.system",
+            Error::requirement(
+                Location::new().field("world").field("system"),
                 "world export requires a world-system collection",
             )
         })?;
     if model.systems().len() != 1 {
-        return Err(Error::new(
-            "world.systems",
+        return Err(Error::requirement(
+            Location::new().field("world").field("systems"),
             "one root cannot contain independent world-system collections",
         ));
     }
@@ -153,12 +157,18 @@ fn write_model<'a, D: Dialect>(
         .unwrap_or(0);
     flags.set_has_group_lods(max_lod != 0);
     root.header_mut().tail.set_flags(flags);
-    if !root.header_mut().tail.set_lod_count(
-        u16::try_from(max_lod)
-            .map_err(|_| Error::new("world.lod", "LOD exceeds header capacity"))?,
-    ) {
+    if !root
+        .header_mut()
+        .tail
+        .set_lod_count(u16::try_from(max_lod).map_err(|_| {
+            Error::requirement(
+                Location::new().field("world").field("lod"),
+                "LOD exceeds header capacity",
+            )
+        })?)
+    {
         context.unsupported(
-            "world.lod",
+            Location::new().field("world").field("lod"),
             "selected native root tail has no LOD declaration",
         )?;
     }
@@ -174,18 +184,23 @@ fn write_model<'a, D: Dialect>(
                 .file_id
                 .is_some()
         });
-    let mut file_ids =
-        vec![
-            0u32;
-            world
-                .groups
-                .len()
-                .checked_mul(max_lod as usize + 1)
-                .ok_or_else(|| Error::new("world.groups", "resource table size overflows"))?
-        ];
+    let mut file_ids = vec![
+        0u32;
+        world
+            .groups
+            .len()
+            .checked_mul(max_lod as usize + 1)
+            .ok_or_else(|| Error::requirement(
+                Location::new().field("world").field("groups"),
+                "resource table size overflows"
+            ))?
+    ];
     if max_lod != 0 && !use_file_ids {
-        return Err(Error::new(
-            "world.groups.resources",
+        return Err(Error::requirement(
+            Location::new()
+                .field("world")
+                .field("groups")
+                .field("resources"),
             "additional native LOD geometry requires assigned database resource identities",
         ));
     }
@@ -194,7 +209,7 @@ fn write_model<'a, D: Dialect>(
             for id in &group.instances {
                 let instance = model.instance(*id).expect("validated placement");
                 let region = &instance.properties;
-                let id=region.file_id.filter(|id| *id!=0).ok_or_else(||Error::new("world.groups.resources","database-addressed group table requires a nonzero identity for every placed region"))?;
+                let id=region.file_id.filter(|id| *id!=0).ok_or_else(||Error::requirement(Location::new().field("world").field("groups").field("resources"),"database-addressed group table requires a nonzero identity for every placed region"))?;
                 file_ids[instance.lod.unwrap_or(0) as usize * world.groups.len() + index] = id;
             }
         }
@@ -211,8 +226,11 @@ fn write_model<'a, D: Dialect>(
                 .lod
                 .unwrap_or(0);
             if !lods.insert(lod) {
-                return Err(Error::new(
-                    "world.group.instances",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("group")
+                        .field("instances"),
                     "multiple placements at one detail level require geometry merging",
                 ));
             }
@@ -261,13 +279,14 @@ fn write_model<'a, D: Dialect>(
             RootChunk::PortalRefs(array(&portal_refs)?),
         )?;
     }
-    bundle
-        .validate_complete()
-        .map_err(|error| Error::new("world.output", error.to_string()))?;
+    bundle.validate_complete().map_err(|error| {
+        Error::from_source(Location::new().field("world").field("output"), error)
+    })?;
     Ok(Plan::new(bundle, context.report))
 }
 pub(super) fn array<'a, T: Write + RecordLayout>(rows: &[T]) -> Result<Array<'a, T>, Error> {
-    Array::from_records(rows).map_err(|error| Error::new("world.array", error.to_string()))
+    Array::from_records(rows)
+        .map_err(|error| Error::from_source(Location::new().field("world").field("array"), error))
 }
 pub(super) fn append<'a, D: Dialect>(
     root: &mut impl super::root_output::RootOutput<'a, D>,

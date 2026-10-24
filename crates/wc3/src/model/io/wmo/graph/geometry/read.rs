@@ -3,6 +3,7 @@ use super::bounds;
 use super::face;
 use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::records::{BatchMetadata, HeaderTailMetadata, TriangleFlags2};
 use crate::model::formats::wmo::{Dialect, Group, GroupKey};
@@ -34,16 +35,19 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     for chunk in source.chunks() {
         match chunk {
             GroupChunk::Positions(values) => {
-                positions = PackedArray::parse_bytes(values.as_bytes())
-                    .map_err(|error| Error::new("world.positions", error.to_string()))?
+                positions = PackedArray::parse_bytes(values.as_bytes()).map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("positions"), error)
+                })?
             }
             GroupChunk::Normals(values) => {
-                normals = PackedArray::parse_bytes(values.as_bytes())
-                    .map_err(|error| Error::new("world.normals", error.to_string()))?
+                normals = PackedArray::parse_bytes(values.as_bytes()).map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("normals"), error)
+                })?
             }
             GroupChunk::TextureCoordinates(values) => coordinates.push(
-                PackedArray::parse_bytes(values.as_bytes())
-                    .map_err(|error| Error::new("world.coordinates", error.to_string()))?,
+                PackedArray::parse_bytes(values.as_bytes()).map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("coordinates"), error)
+                })?,
             ),
             GroupChunk::VertexColors(values) | GroupChunk::VertexColors2(values) => {
                 colors.push(materialize(values.len(), move |index| {
@@ -60,8 +64,10 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                 })
             }
             GroupChunk::Tangents(rows) => {
-                tangent_vectors = PackedArray::parse_bytes(rows.tangents.as_bytes())
-                    .map_err(|error| Error::new("world.tangents", error.to_string()))?
+                tangent_vectors =
+                    PackedArray::parse_bytes(rows.tangents.as_bytes()).map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("tangents"), error)
+                    })?
             }
             GroupChunk::TangentsUnresolved(bytes) => {
                 let count = source
@@ -75,14 +81,21 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                         }
                     })
                     .unwrap_or(0);
-                let prefix = count
-                    .checked_mul(2)
-                    .ok_or_else(|| Error::new("world.tangents", "batch map length overflows"))?;
-                let bytes = bytes.get(prefix..).ok_or_else(|| {
-                    Error::new("world.tangents", "batch map exceeds tangent payload")
+                let prefix = count.checked_mul(2).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("tangents"),
+                        "batch map length overflows",
+                    )
                 })?;
-                tangent_vectors = PackedArray::parse_bytes(bytes)
-                    .map_err(|error| Error::new("world.tangents", error.to_string()))?;
+                let bytes = bytes.get(prefix..).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("tangents"),
+                        "batch map exceeds tangent payload",
+                    )
+                })?;
+                tangent_vectors = PackedArray::parse_bytes(bytes).map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("tangents"), error)
+                })?;
             }
             GroupChunk::Indices(values) => {
                 indices = materialize(values.len(), move |index| {
@@ -106,8 +119,8 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
         }
     }
     if !indices.len().is_multiple_of(3) {
-        return Err(Error::new(
-            "world.triangles",
+        return Err(Error::requirement(
+            Location::new().field("world").field("triangles"),
             "indices do not form complete triangles",
         ));
     }
@@ -123,7 +136,9 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
         match chunk {
             GroupChunk::Triangles(rows) => {
                 for row in rows.iter() {
-                    let row = row.map_err(|error| Error::new("world.face", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("face"), error)
+                    })?;
                     face_controls.push(face(
                         TriangleFlags2(u16::from(row.flags.bits())),
                         u16::from(row.material),
@@ -134,7 +149,9 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
             }
             GroupChunk::Triangles2(rows) => {
                 for row in rows.iter() {
-                    let row = row.map_err(|error| Error::new("world.face", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("face"), error)
+                    })?;
                     face_controls.push(face(
                         row.flags,
                         row.material,
@@ -149,7 +166,12 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     for index in super::super::spatial_queries::faces(source.chunks().iter(), context)? {
         face_controls
             .get_mut(index)
-            .ok_or_else(|| Error::new("world.query", "spatial query references absent face"))?
+            .ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("world").field("query"),
+                    "spatial query references absent face",
+                )
+            })?
             .spatial_queries = true;
     }
     let query_start = source
@@ -164,11 +186,14 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
         if let GroupChunk::GroundTypes(rows) = chunk {
             for (offset, value) in rows.iter().enumerate() {
                 let face = face_controls.get_mut(query_start + offset).ok_or_else(|| {
-                    Error::new("world.ground_types", "query range exceeds geometry")
+                    Error::requirement(
+                        Location::new().field("world").field("ground_types"),
+                        "query range exceeds geometry",
+                    )
                 })?;
-                face.ground_type = Some(
-                    value.map_err(|error| Error::new("world.ground_types", error.to_string()))?,
-                );
+                face.ground_type = Some(value.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("ground_types"), error)
+                })?);
             }
         }
     }
@@ -190,17 +215,22 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     for chunk in source.chunks() {
         if let GroupChunk::Batches(values) = chunk {
             for batch in values.iter() {
-                let batch = batch.map_err(|error| Error::new("world.batch", error.to_string()))?;
+                let batch = batch.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("batch"), error)
+                })?;
                 if batch.start_index % 3 != 0 || batch.index_count % 3 != 0 {
-                    return Err(Error::new(
-                        "world.batch",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("batch"),
                         "batch does not cover complete triangles",
                     ));
                 }
                 let material = *materials
                     .get(usize::from(batch.material_index()))
                     .ok_or_else(|| {
-                        Error::new("world.material", "batch references absent material")
+                        Error::requirement(
+                            Location::new().field("world").field("material"),
+                            "batch references absent material",
+                        )
                     })?;
                 let lighting = if ordinal < usize::from(header.transition_batch_count) {
                     Lighting::Transition
@@ -232,7 +262,12 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                                 }
                             })
                             .transpose()
-                            .map_err(|error| Error::new("world.strips", error.to_string()))?
+                            .map_err(|error| {
+                                Error::from_source(
+                                    Location::new().field("world").field("strips"),
+                                    error,
+                                )
+                            })?
                             .map(|row| StripWindow {
                                 first: row.start_index,
                                 count: u32::from(row.index_count),
@@ -262,10 +297,12 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     for chunk in source.chunks() {
         if let GroupChunk::ShadowBatches(rows) = chunk {
             for row in rows.iter() {
-                let row = row.map_err(|error| Error::new("world.shadow", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("shadow"), error)
+                })?;
                 if row.start < 0 || row.count < 0 || row.start % 3 != 0 || row.count % 3 != 0 {
-                    return Err(Error::new(
-                        "world.shadow",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("shadow"),
                         "shadow pass must cover whole triangles",
                     ));
                 }
@@ -275,7 +312,13 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                     u16::from(row.material)
                 };
                 let material = *materials.get(usize::from(material)).ok_or_else(|| {
-                    Error::new("world.shadow.material", "shadow pass material is absent")
+                    Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("shadow")
+                            .field("material"),
+                        "shadow pass material is absent",
+                    )
                 })?;
                 draws.push(bind_draw(
                     builder,
@@ -347,7 +390,12 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                             index,
                         })
                     })
-                    .map_err(|_| Error::new("world.group.split", "negative group selector"))
+                    .map_err(|_| {
+                        Error::requirement(
+                            Location::new().field("world").field("group").field("split"),
+                            "negative group selector",
+                        )
+                    })
             }
         };
         region.parent_or_first_child = resolve(first)?;
@@ -377,18 +425,27 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
 fn tangent_start<D: Dialect>(source: &Group<'_, D>, ordinal: usize) -> Result<Option<u16>, Error> {
     for chunk in source.chunks() {
         let first = match chunk {
-            GroupChunk::Tangents(rows) => rows
-                .first_tangent
-                .get(ordinal)
-                .transpose()
-                .map_err(|error| Error::new("world.tangents", error.to_string()))?,
+            GroupChunk::Tangents(rows) => {
+                rows.first_tangent
+                    .get(ordinal)
+                    .transpose()
+                    .map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("tangents"), error)
+                    })?
+            }
             GroupChunk::TangentsUnresolved(bytes) => {
-                let offset = ordinal
-                    .checked_mul(2)
-                    .ok_or_else(|| Error::new("world.tangents", "batch selection overflows"))?;
-                let bytes = bytes
-                    .get(offset..offset + 2)
-                    .ok_or_else(|| Error::new("world.tangents", "batch map is truncated"))?;
+                let offset = ordinal.checked_mul(2).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("tangents"),
+                        "batch selection overflows",
+                    )
+                })?;
+                let bytes = bytes.get(offset..offset + 2).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("tangents"),
+                        "batch map is truncated",
+                    )
+                })?;
                 Some(u16::from_le_bytes([bytes[0], bytes[1]]))
             }
             _ => continue,

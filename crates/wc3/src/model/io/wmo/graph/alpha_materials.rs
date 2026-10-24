@@ -2,6 +2,7 @@
 use super::encode::array;
 use super::materials::{native_blend, native_flags};
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::legacy::{Material14, Root14, RootChunk14};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::Wmo;
@@ -9,6 +10,7 @@ use crate::model::WorldImageResource;
 use crate::model::{MaterialId, Model};
 use glam::Vec2;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error as StdError;
 pub(super) fn write<'a>(
     model: &Model<'_, Wmo>,
     output: &mut Root14<'a>,
@@ -31,13 +33,16 @@ pub(super) fn write<'a>(
         let selector = match model.image_resource(id).expect("validated image") {
             WorldImageResource::Path(path) => {
                 if path.contains(&0) {
-                    return Err(Error::new(
-                        "world.texture",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("texture"),
                         "texture path contains an interior terminator",
                     ));
                 }
                 let index = u32::try_from(names.len()).map_err(|_| {
-                    Error::new("world.texture", "texture-name table exceeds address space")
+                    Error::requirement(
+                        Location::new().field("world").field("texture"),
+                        "texture-name table exceeds address space",
+                    )
                 })?;
                 names.extend_from_slice(path);
                 names.push(0);
@@ -45,7 +50,7 @@ pub(super) fn write<'a>(
             }
             _ => {
                 context.unsupported(
-                    "world.texture",
+                    Location::new().field("world").field("texture"),
                     "historical material textures require file paths",
                 )?;
                 0
@@ -67,11 +72,14 @@ pub(super) fn write<'a>(
             || surface.legacy_runtime.is_some()
             || surface.uv_scroll.iter().any(|value| *value != Vec2::ZERO)
         {
-            context.unsupported("world.material", "historical fixed-function materials have two texture slots and no shader selection, scroll curves, or later shader controls")?;
+            context.unsupported(Location::new().field("world").field("material"), "historical fixed-function materials have two texture slots and no shader selection, scroll curves, or later shader controls")?;
         }
         if surface.state.rasterization.controls.self_illuminated {
             context.unsupported(
-                "world.material.self_illuminated",
+                Location::new()
+                    .field("world")
+                    .field("material")
+                    .field("self_illuminated"),
                 "no established native self-illumination switch is available",
             )?;
         }
@@ -95,8 +103,8 @@ pub(super) fn write<'a>(
         mapping.insert(
             id,
             u16::try_from(records.len()).map_err(|_| {
-                Error::new(
-                    "world.material",
+                Error::requirement(
+                    Location::new().field("world").field("material"),
                     "material count exceeds native selection space",
                 )
             })?,
@@ -109,10 +117,14 @@ pub(super) fn write<'a>(
     output
         .push_chunk(RootChunk14::Materials(array(&records)?))
         .map_err(write_error)?;
-    output.header_mut().texture_count = u32::try_from(records.len())
-        .map_err(|_| Error::new("world.material", "material count exceeds header capacity"))?;
+    output.header_mut().texture_count = u32::try_from(records.len()).map_err(|_| {
+        Error::requirement(
+            Location::new().field("world").field("material"),
+            "material count exceeds header capacity",
+        )
+    })?;
     Ok(mapping)
 }
-fn write_error(error: impl std::fmt::Display) -> Error {
-    Error::new("world.material", error.to_string())
+fn write_error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("world").field("material"), error)
 }

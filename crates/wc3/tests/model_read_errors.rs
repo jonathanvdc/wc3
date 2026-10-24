@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::error::Error as _;
 use wc3::model::common::FileKey;
 use wc3::model::conversion::{self, ImportOptions};
+use wc3::model::error::{Location, ReferenceError};
 use wc3::model::formats::mdlx::{
     self as native,
     chunks::{ModelChunk, RawChunk, UnknownChunk},
@@ -11,6 +12,7 @@ use wc3::model::formats::mdlx::{
     DynamicDocument, NoExtensions,
 };
 use wc3::model::io::{asset, mdlx};
+use wc3::model::Error as SemanticError;
 
 fn reader_error(bytes: &[u8]) -> asset::Error {
     asset::Reader::new(
@@ -112,21 +114,25 @@ fn valid_mdl_with_invalid_graph_reports_import_phase_and_semantic_path() {
     "#;
     let document = native::Document::<native::V800>::decode_mdl(source).unwrap();
     let expected = mdlx::import_owned(&document, &ImportOptions::default()).unwrap_err();
-    assert_eq!(expected.path, "nodes");
+    assert_eq!(expected.location(), &Location::new().field("nodes"));
 
     let direct = mdlx::decode_mdl(source, &ImportOptions::default()).unwrap_err();
     let mdlx::ReadError::Import(import) = &direct else {
         panic!("a decoded invalid graph must fail during semantic import");
     };
-    assert_eq!(import, &expected);
-    assert_eq!(
-        direct.source().unwrap().downcast_ref::<conversion::Error>(),
-        Some(&expected)
-    );
+    assert_same_requirement(import, &expected);
+    assert!(std::ptr::eq(
+        direct
+            .source()
+            .unwrap()
+            .downcast_ref::<conversion::Error>()
+            .unwrap(),
+        import
+    ));
     let asset::Error::Import { source: import, .. } = reader_error(source.as_bytes()) else {
         panic!("asset loading must retain the semantic phase");
     };
-    assert_eq!(import, expected);
+    assert_same_requirement(&import, &expected);
 }
 
 #[test]
@@ -143,19 +149,64 @@ fn valid_mdx_with_rejected_unknown_data_reports_import_phase() {
     ));
     let bytes = document.encode_mdx().unwrap();
     let expected = mdlx::import_owned(&document, &ImportOptions::default()).unwrap_err();
-    assert_eq!(expected.path, "chunks");
+    assert_eq!(expected.location(), &Location::new().field("chunks"));
 
     let direct = mdlx::decode_mdx(&bytes, &ImportOptions::default()).unwrap_err();
     let mdlx::ReadError::Import(import) = &direct else {
         panic!("unknown native data is decoded before import policy rejects it");
     };
-    assert_eq!(import, &expected);
-    assert_eq!(
-        direct.source().unwrap().downcast_ref::<conversion::Error>(),
-        Some(&expected)
-    );
+    assert_same_requirement(import, &expected);
+    assert!(std::ptr::eq(
+        direct
+            .source()
+            .unwrap()
+            .downcast_ref::<conversion::Error>()
+            .unwrap(),
+        import
+    ));
     let asset::Error::Import { source: import, .. } = reader_error(&bytes) else {
         panic!("asset loading must retain the semantic phase");
     };
-    assert_eq!(import, expected);
+    assert_same_requirement(&import, &expected);
+}
+
+fn assert_same_requirement(actual: &conversion::Error, expected: &conversion::Error) {
+    let (
+        conversion::Error::Requirement {
+            location: a,
+            requirement: ar,
+        },
+        conversion::Error::Requirement {
+            location: b,
+            requirement: br,
+        },
+    ) = (actual, expected)
+    else {
+        panic!("expected an authored native import requirement");
+    };
+    assert_eq!(a, b);
+    assert_eq!(ar, br);
+}
+
+#[test]
+fn semantic_causes_and_context_survive_conversion_and_direct_io_wrappers() {
+    let location = Location::new().field("model").field("links").index(3);
+    let semantic = SemanticError::at(location.clone(), ReferenceError::InvalidValue);
+    let direct = mdlx::ReadError::Import(conversion::Error::from(semantic));
+    let conversion = direct
+        .source()
+        .unwrap()
+        .downcast_ref::<conversion::Error>()
+        .unwrap();
+    assert_eq!(conversion.location(), &location);
+    let semantic = conversion
+        .source()
+        .unwrap()
+        .downcast_ref::<SemanticError>()
+        .unwrap();
+    assert_eq!(semantic.location(), &location);
+    assert!(matches!(
+        semantic.source().unwrap().downcast_ref::<ReferenceError>(),
+        Some(ReferenceError::InvalidValue)
+    ));
 }

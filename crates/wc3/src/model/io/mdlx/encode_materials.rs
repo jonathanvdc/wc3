@@ -2,6 +2,7 @@
 use super::encode_animation::Encoder;
 use super::encode_helpers::texture_transform;
 use crate::model::conversion::{Error, IssueKind};
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, FormatVersion};
 use crate::model::materials::mdlx::{AlphaAdditiveEncoding, Shader};
 use crate::model::profiles::mdlx as profile;
@@ -14,14 +15,14 @@ pub(super) fn write<'a, V: FormatVersion>(
     textures: &BTreeMap<Texture, u32>,
     encoder: &mut Encoder<'_, '_, '_>,
     transforms: &mut Vec<native::TextureAnimation<'a>>,
-    path: &str,
+    path: &Location,
 ) -> Result<native::Material<'a, V>, Error> {
     let map = |id: Option<Texture>| {
         id.map(|id| {
             textures
                 .get(&id)
                 .copied()
-                .ok_or_else(|| Error::new(path, "texture identity does not exist"))
+                .ok_or_else(|| Error::requirement(path.clone(), "texture identity does not exist"))
         })
         .transpose()
         .map(|id| id.unwrap_or(u32::MAX))
@@ -64,8 +65,8 @@ pub(super) fn write<'a, V: FormatVersion>(
     let grouped_crystal = named_crystal && source.steps.len() == 1;
     let named_hd = named_default_unit || grouped_crystal;
     if named_default_unit && source.steps.len() != 1 {
-        return Err(Error::new(
-            path,
+        return Err(Error::requirement(
+            path.clone(),
             "legacy grouped HD export supports one surface, not multiple draw passes",
         ));
     }
@@ -103,12 +104,12 @@ pub(super) fn write<'a, V: FormatVersion>(
             } else {
                 encoder
                     .context
-                    .unsupported(format!("{path}.shader"), error.to_string())?;
+                    .unsupported_source(path.clone().field("shader"), error)?;
             }
         }
     }
     for (index, source) in source.steps.iter().enumerate() {
-        let path = format!("{path}.layers[{index}]");
+        let path = path.clone().field("layers").index(index);
         let inputs = source.shader.inputs();
         let selector = match &source.shader {
             Shader::Classic(_)
@@ -126,7 +127,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             mode
         } else {
             encoder.context.unsupported(
-                format!("{path}.layers[{index}].blend"),
+                path.clone().field("blend"),
                 "unweighted source-color addition has no exact Warcraft III layer selector",
             )?;
             native::LayerFilterMode::None
@@ -160,7 +161,8 @@ pub(super) fn write<'a, V: FormatVersion>(
         layer
             .shading_flags
             .set_ambient_occlusion(controls.ambient_occlusion);
-        layer.texture_id = encoder.value(&inputs.binding.image, map, &format!("{path}.texture"))?;
+        layer.texture_id =
+            encoder.value(&inputs.binding.image, map, &path.clone().field("texture"))?;
         let transform = texture_transform(&inputs.binding.coordinates.transform, encoder)?;
         layer.texture_animation_id = if transform.translation.is_none()
             && transform.rotation.is_none()
@@ -179,13 +181,13 @@ pub(super) fn write<'a, V: FormatVersion>(
         };
 
         layer.coordinate_id = inputs.binding.coordinates.source;
-        layer.alpha = encoder.value(&inputs.opacity, Ok, &format!("{path}.opacity"))?;
+        layer.alpha = encoder.value(&inputs.opacity, Ok, &path.clone().field("opacity"))?;
         if let Some(source) = &inputs.emissive_gain {
-            let value = encoder.value(source, Ok, &format!("{path}.emissive_gain"))?;
+            let value = encoder.value(source, Ok, &path.clone().field("emissive_gain"))?;
             if let Err(error) = layer.try_set_emissive_gain(value) {
                 encoder
                     .context
-                    .unsupported(format!("{path}.emissive_gain"), error.to_string())?;
+                    .unsupported_source(path.clone().field("emissive_gain"), error)?;
             }
         }
         if let Some(source) = source.shader.fresnel() {
@@ -193,19 +195,23 @@ pub(super) fn write<'a, V: FormatVersion>(
                 color: encoder.value(
                     &source.color,
                     |v| Ok(v.to_array()),
-                    &format!("{path}.fresnel.color"),
+                    &path.clone().field("fresnel").field("color"),
                 )?,
-                opacity: encoder.value(&source.opacity, Ok, &format!("{path}.fresnel.opacity"))?,
+                opacity: encoder.value(
+                    &source.opacity,
+                    Ok,
+                    &path.clone().field("fresnel").field("opacity"),
+                )?,
                 team_color: encoder.value(
                     &source.team_color,
                     Ok,
-                    &format!("{path}.fresnel.team_color"),
+                    &path.clone().field("fresnel").field("team_color"),
                 )?,
             };
             if let Err(error) = layer.try_set_fresnel(value) {
                 encoder
                     .context
-                    .unsupported(format!("{path}.fresnel"), error.to_string())?;
+                    .unsupported_source(path.clone().field("fresnel"), error)?;
             }
         }
         if let Some(source) = selector.filter(|_| !(named_hd || named_crystal)) {
@@ -214,7 +220,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             {
                 encoder
                     .context
-                    .unsupported(format!("{path}.shader"), error.to_string())?;
+                    .unsupported_source(path.clone().field("shader"), error)?;
             }
         }
         let mut slots = source
@@ -228,7 +234,7 @@ pub(super) fn write<'a, V: FormatVersion>(
                     texture_id: encoder.value(
                         &source.binding.image,
                         map,
-                        &format!("{path}.textures[{index}]"),
+                        &path.clone().field("textures").index(index),
                     )?,
                 })
             })
@@ -245,8 +251,8 @@ pub(super) fn write<'a, V: FormatVersion>(
                 if slot.texture_type > 5
                     || roles.insert(slot.texture_type, slot.texture_id).is_some()
                 {
-                    return Err(Error::new(
-                        &path,
+                    return Err(Error::requirement(
+                        path.clone(),
                         "legacy HD requires unique texture roles zero through five",
                     ));
                 }
@@ -273,7 +279,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             if let Err(error) = layer.try_set_texture_slots(&slots) {
                 encoder
                     .context
-                    .unsupported(format!("{path}.textures"), error.to_string())?;
+                    .unsupported_source(path.clone().field("textures"), error)?;
             }
         }
         material.layers.push(layer);

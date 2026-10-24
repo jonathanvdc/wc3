@@ -1,6 +1,7 @@
 //! Native clock restrictions applied only when exporting logical curves.
 use super::animation::Value;
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{
     animation::{TangentKeyframe, Track as NativeTrack, TrackValue, ValueKeyframe},
     Animatable,
@@ -26,7 +27,7 @@ impl Encoder<'_, '_, '_> {
         slot: Property<U>,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         identity: T,
-        path: &str,
+        path: &Location,
     ) -> Result<Option<NativeTrack<'static, T>>, Error> {
         let value = map(self.constant(slot))?;
         Ok(self
@@ -42,7 +43,7 @@ impl Encoder<'_, '_, '_> {
                 .any(|(target, _)| *target == channel.target())
             {
                 self.context.unsupported(
-                    "animation.target",
+                    Location::new().field("animation").field("target"),
                     format!(
                         "Warcraft III has no output binding for {:?}",
                         channel.target()
@@ -56,7 +57,7 @@ impl Encoder<'_, '_, '_> {
         &mut self,
         source: &Property<U>,
         map: impl Fn(U) -> Result<T, Error> + Clone,
-        path: &str,
+        path: &Location,
     ) -> Result<Animatable<'static, T>, Error>
     where
         T: TrackValue,
@@ -73,7 +74,7 @@ impl Encoder<'_, '_, '_> {
         &mut self,
         binding: &Property<U>,
         map: impl Fn(U) -> Result<T, Error> + Clone,
-        path: &str,
+        path: &Location,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
     where
         T: TrackValue,
@@ -85,7 +86,7 @@ impl Encoder<'_, '_, '_> {
         &mut self,
         property: &ValueSlot,
         map: impl Fn(U) -> Result<T, Error> + Clone,
-        path: &str,
+        path: &Location,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
     where
         T: TrackValue,
@@ -99,7 +100,7 @@ impl Encoder<'_, '_, '_> {
         property: &ValueSlot,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         tangent_map: impl Fn(U, Interpolation) -> Result<T, Error> + Clone,
-        path: &str,
+        path: &Location,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
     where
         T: TrackValue,
@@ -128,20 +129,17 @@ impl Encoder<'_, '_, '_> {
                 && matches!(mode, Interpolation::Hermite | Interpolation::Bezier)
                 && !track.curve.uses_spherical_controls()
             {
-                self.context.unsupported(path, "Warcraft III rotation splines require spherical controls; component splines cannot be encoded faithfully")?;
+                self.context.unsupported(path.clone(), "Warcraft III rotation splines require spherical controls; component splines cannot be encoded faithfully")?;
                 continue;
             }
             let global = match track.clock {
                 TimeSource::Animation => None,
-                TimeSource::Shared(id) => Some(
-                    *self
-                        .globals
-                        .get(&id)
-                        .ok_or_else(|| Error::new(path, "shared clock does not exist"))?,
-                ),
+                TimeSource::Shared(id) => Some(*self.globals.get(&id).ok_or_else(|| {
+                    Error::requirement(path.clone(), "shared clock does not exist")
+                })?),
             };
             if behavior.is_some_and(|old| old != (mode, global)) {
-                self.context.unsupported(path, "Warcraft III cannot combine different interpolation or evaluation clocks in one property")?;
+                self.context.unsupported(path.clone(), "Warcraft III cannot combine different interpolation or evaluation clocks in one property")?;
                 continue;
             }
             behavior = Some((mode, global));
@@ -175,7 +173,7 @@ impl Encoder<'_, '_, '_> {
             }
             for (frame, frame_keys) in track_keys {
                 if keys.get(&frame).is_some_and(|old| *old != frame_keys) {
-                    self.context.unsupported(path, "clip curves assign conflicting coincident values or tangents at one native frame")?;
+                    self.context.unsupported(path.clone(), "clip curves assign conflicting coincident values or tangents at one native frame")?;
                 }
                 keys.insert(frame, frame_keys);
             }
@@ -213,29 +211,29 @@ impl Encoder<'_, '_, '_> {
             Interpolation::Hermite => NativeTrack::hermite(spline(), global),
             Interpolation::Bezier => NativeTrack::bezier(spline(), global),
             Interpolation::Tcb | Interpolation::Slerp | Interpolation::Nlerp => {
-                return Err(Error::new(
-                    path,
+                return Err(Error::requirement(
+                    path.clone(),
                     "Warcraft III tracks cannot encode explicit TCB, SLERP or NLERP directives",
                 ));
             }
         }
-        .map_err(|error| Error::new(path, error.to_string()))?;
+        .map_err(|error| Error::from_source(path.clone(), error))?;
         Ok(Some(track))
     }
 }
-fn milliseconds(seconds: f64, context: &mut Context, path: &str) -> Result<f64, Error> {
+fn milliseconds(seconds: f64, context: &mut Context, path: &Location) -> Result<f64, Error> {
     let value = seconds * 1000.;
     let rounded = value.round();
     if !value.is_finite() {
-        return Err(Error::new(
-            path,
+        return Err(Error::requirement(
+            path.clone(),
             "time exceeds the finite native millisecond range",
         ));
     }
     let difference = (value - rounded).abs();
     if difference > f64::EPSILON * value.abs().max(1.) * 8. {
         context.approximate(
-            path,
+            || path.clone(),
             (difference / 1000.) as f32,
             "time rounded to Warcraft III milliseconds",
         )?;
@@ -246,12 +244,12 @@ pub(super) fn frame_at(
     seconds: f64,
     offset: f64,
     context: &mut Context,
-    path: &str,
+    path: &Location,
 ) -> Result<i32, Error> {
     let value = milliseconds(seconds, context, path)? + milliseconds(offset, context, path)?;
     if value < f64::from(i32::MIN) || value > f64::from(i32::MAX) {
-        return Err(Error::new(
-            path,
+        return Err(Error::requirement(
+            path.clone(),
             "key time exceeds the signed native millisecond range",
         ));
     }
@@ -260,20 +258,20 @@ pub(super) fn frame_at(
 pub(super) fn unsigned_frame(
     seconds: f64,
     context: &mut Context,
-    path: &str,
+    path: &Location,
 ) -> Result<u32, Error> {
     let value = seconds * 1000.;
     let rounded = value.round();
     if !value.is_finite() || rounded < 0. || rounded > f64::from(u32::MAX) {
-        return Err(Error::new(
-            path,
+        return Err(Error::requirement(
+            path.clone(),
             "duration or interval exceeds the unsigned native millisecond range",
         ));
     }
     let difference = (value - rounded).abs();
     if difference > f64::EPSILON * value.abs().max(1.) * 8. {
         context.approximate(
-            path,
+            || path.clone(),
             (difference / 1000.) as f32,
             "time rounded to Warcraft III milliseconds",
         )?;

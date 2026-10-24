@@ -1,6 +1,7 @@
 //! World placements and illumination as independent attached features.
 use super::rgba;
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::records::{FlickerMode, LightKind, NewLightKind};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::wmo as profile;
@@ -31,7 +32,7 @@ pub(super) fn read<'a, 'data: 'a>(
     };
     for (ordinal, row) in source
         .lights()
-        .map_err(|error| Error::new("world.light", error.to_string()))?
+        .map_err(|error| Error::from_source(Location::new().field("world").field("light"), error))?
         .into_iter()
         .enumerate()
     {
@@ -71,8 +72,9 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in source.common_chunks() {
         if let RootChunk::NewLights(rows) = chunk {
             for row in rows.iter() {
-                let row =
-                    row.map_err(|error| Error::new("world.modern_light", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("modern_light"), error)
+                })?;
                 let node = builder.new_node(format!("Modern light {}", row.light_index));
                 builder
                     .values_mut()
@@ -117,7 +119,13 @@ pub(super) fn read<'a, 'data: 'a>(
                                 Some(profile::DoodadSetId {
                                     system: owner,
                                     index: u32::try_from(row.doodad_set).map_err(|_| {
-                                        Error::new("world.light.set", "negative set selection")
+                                        Error::requirement(
+                                            Location::new()
+                                                .field("world")
+                                                .field("light")
+                                                .field("set"),
+                                            "negative set selection",
+                                        )
                                     })?,
                                 })
                             },
@@ -163,13 +171,26 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in source.common_chunks() {
         if let RootChunk::LightExtensions(rows) = chunk {
             for row in rows.iter() {
-                let row =
-                    row.map_err(|error| Error::new("world.light.extension", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("light")
+                            .field("extension"),
+                        error,
+                    )
+                })?;
                 let node = *ids
                     .lights
                     .get(usize::from(row.light_index))
                     .ok_or_else(|| {
-                        Error::new("world.light.extension", "extension references absent light")
+                        Error::requirement(
+                            Location::new()
+                                .field("world")
+                                .field("light")
+                                .field("extension"),
+                            "extension references absent light",
+                        )
                     })?;
                 let id = node;
                 let payload = &builder
@@ -208,21 +229,35 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in source.common_chunks() {
         if let RootChunk::Doodads(rows) = chunk {
             for (ordinal, row) in rows.iter().enumerate() {
-                let row = row.map_err(|error| Error::new("world.doodad", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("doodad"), error)
+                })?;
                 let selector = row.name_and_flags.name_index();
                 let file_id = files
                     .map(|files| {
                         files
                             .get(selector as usize)
-                            .ok_or_else(|| Error::new("world.doodad", "file selector is absent"))?
-                            .map_err(|error| Error::new("world.doodad", error.to_string()))
+                            .ok_or_else(|| {
+                                Error::requirement(
+                                    Location::new().field("world").field("doodad"),
+                                    "file selector is absent",
+                                )
+                            })?
+                            .map_err(|error| {
+                                Error::from_source(
+                                    Location::new().field("world").field("doodad"),
+                                    error,
+                                )
+                            })
                     })
                     .transpose()?;
                 let resource = if let Some(file) = file_id {
                     ImageResource::file_data_id(file)
                 } else {
                     let bytes = crate::model::formats::wmo::resources::string_at(paths, selector)
-                        .map_err(|error| Error::new("world.doodad", error.to_string()))?;
+                        .map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("doodad"), error)
+                    })?;
                     ImageResource::Path(Cow::Borrowed(bytes))
                 };
                 let node = builder.new_node(format!("Doodad {ordinal}"));
@@ -239,7 +274,13 @@ pub(super) fn read<'a, 'data: 'a>(
                 let flags = row.name_and_flags.flags();
                 let light = if flags.has_light_reference() {
                     Some(*ids.lights.get(usize::from(row.color[3])).ok_or_else(|| {
-                        Error::new("world.doodad.light", "doodad references absent light")
+                        Error::requirement(
+                            Location::new()
+                                .field("world")
+                                .field("doodad")
+                                .field("light"),
+                            "doodad references absent light",
+                        )
                     })?)
                 } else {
                     None
@@ -274,8 +315,11 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in source.common_chunks() {
         if let RootChunk::DoodadColorMultipliers(rows) = chunk {
             if rows.len() != ids.doodads.len() {
-                return Err(Error::new(
-                    "world.doodad.color_multiplier",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("doodad")
+                        .field("color_multiplier"),
                     "multiplier table must match placements",
                 ));
             }
@@ -288,7 +332,13 @@ pub(super) fn read<'a, 'data: 'a>(
                     .clone();
                 if let profile::Node::Attachment(source) = &mut payload {
                     source.appearance.color_multiplier = Some(value.map_err(|error| {
-                        Error::new("world.doodad.color_multiplier", error.to_string())
+                        Error::from_source(
+                            Location::new()
+                                .field("world")
+                                .field("doodad")
+                                .field("color_multiplier"),
+                            error,
+                        )
                     })?);
                 }
                 builder.set_feature(*id, payload)?;
@@ -298,12 +348,19 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in source.common_chunks() {
         if let RootChunk::DoodadSets(rows) = chunk {
             for row in rows.iter() {
-                let row = row.map_err(|error| Error::new("world.doodad_set", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("doodad_set"), error)
+                })?;
                 let end = row.start_index as usize + row.count as usize;
                 let nodes = ids
                     .doodads
                     .get(row.start_index as usize..end)
-                    .ok_or_else(|| Error::new("world.doodad_set", "set range exceeds placements"))?
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("world").field("doodad_set"),
+                            "set range exceeds placements",
+                        )
+                    })?
                     .to_vec();
                 let text = &row.name[..row
                     .name
@@ -314,7 +371,13 @@ pub(super) fn read<'a, 'data: 'a>(
                     name: Cow::Owned(
                         std::str::from_utf8(text)
                             .map_err(|error| {
-                                Error::new("world.doodad_set.name", error.to_string())
+                                Error::from_source(
+                                    Location::new()
+                                        .field("world")
+                                        .field("doodad_set")
+                                        .field("name"),
+                                    error,
+                                )
                             })?
                             .to_owned(),
                     ),

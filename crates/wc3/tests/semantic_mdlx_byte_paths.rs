@@ -106,5 +106,7 @@ fn mismatched_native_primitive_tables_are_semantically_invalid() {
     let geoset = Geoset::<native::V800>::decode_mdx(&bytes).unwrap();
     source.set_geosets([geoset]);
     let error = io::mdlx::import(&source, &ImportOptions::default()).unwrap_err();
-    assert!(error.description.contains("matching lengths"));
+    assert!(
+        matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("matching lengths"))
+    );
 }

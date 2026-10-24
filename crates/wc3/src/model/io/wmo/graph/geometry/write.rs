@@ -1,5 +1,6 @@
 //! Native static geometry rebuilt from independent authored streams.
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::records::{BatchMetadata, HeaderTailMetadata, TriangleFlags2};
 use crate::model::formats::wmo::{Dialect, Group};
@@ -18,9 +19,12 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
 ) -> Result<Group<'a, D>, Error> {
     use crate::model::formats::wmo::records::{Batch, BatchFlags, GroupFlags2, Triangle2};
     use crate::model::Topology;
-    let instance = model
-        .instance(instance_id)
-        .ok_or_else(|| Error::new("world.instance", "group placement does not exist"))?;
+    let instance = model.instance(instance_id).ok_or_else(|| {
+        Error::requirement(
+            Location::new().field("world").field("instance"),
+            "group placement does not exist",
+        )
+    })?;
     let mesh = model
         .mesh(instance.mesh)
         .expect("validated geometry handle");
@@ -36,7 +40,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             })
         })
     {
-        context.unsupported("world.group.baked_light", "selected modern group layout cannot encode historical baked-light coordinates or selectors")?;
+        context.unsupported(Location::new().field("world").field("group").field("baked_light"), "selected modern group layout cannot encode historical baked-light coordinates or selectors")?;
     }
     let region = &instance.properties;
     if !region.lightmap_images.is_empty()
@@ -45,14 +49,17 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         || region.interior_windows.is_some()
         || region.exterior_windows.is_some()
     {
-        context.unsupported("world.group.historical_lighting", "selected modern group layout cannot encode historical baked-light resources or lighting windows")?;
+        context.unsupported(Location::new().field("world").field("group").field("historical_lighting"), "selected modern group layout cannot encode historical baked-light resources or lighting windows")?;
     }
     let node = model.node(instance.node).expect("validated placement node");
     if node.transform.defaults(model.values()) != crate::model::Transform::default()
         || node.parent.is_some()
     {
         context.unsupported(
-            "world.group.transform",
+            Location::new()
+                .field("world")
+                .field("group")
+                .field("transform"),
             "group transforms need static geometry baking before native encoding",
         )?;
     }
@@ -71,7 +78,10 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             .is_some_and(|value| !header.tail.set_control(*value))
     {
         context.unsupported(
-            "world.group.controls",
+            Location::new()
+                .field("world")
+                .field("group")
+                .field("controls"),
             "selected header has no matching supplemental region controls",
         )?;
     }
@@ -86,8 +96,8 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     let resolve = |id: Option<crate::model::profiles::wmo::GroupId>| {
         id.map_or(Ok(-1), |id| {
             i16::try_from(id.index).map_err(|_| {
-                Error::new(
-                    "world.group.split",
+                Error::requirement(
+                    Location::new().field("world").field("group").field("split"),
                     "group index exceeds split-header capacity",
                 )
             })
@@ -98,7 +108,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         resolve(region.next_child)?,
     ) {
         context.unsupported(
-            "world.group.split",
+            Location::new().field("world").field("group").field("split"),
             "selected group-header layout has no split links",
         )?;
     }
@@ -120,8 +130,12 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                 ) == is_box
             })
             .count();
-        let index = u16::try_from(index)
-            .map_err(|_| Error::new("world.fog", "fog identity exceeds native capacity"))?;
+        let index = u16::try_from(index).map_err(|_| {
+            Error::requirement(
+                Location::new().field("world").field("fog"),
+                "fog identity exceeds native capacity",
+            )
+        })?;
         if is_box {
             box_fogs.push(index)
         } else {
@@ -168,7 +182,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                     let error = (source - f32::from(rounded) / 255.).abs();
                     if error != 0. {
                         context.approximate(
-                            "world.colors",
+                            || Location::new().field("world").field("colors"),
                             error,
                             "native vertex colors use eight-bit normalized components",
                         )?;
@@ -184,8 +198,8 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         )?;
     }
     let Topology::Triangles(triangles) = mesh.topology() else {
-        return Err(Error::new(
-            "world.topology",
+        return Err(Error::requirement(
+            Location::new().field("world").field("topology"),
             "world geometry requires triangle connectivity",
         ));
     };
@@ -269,8 +283,8 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         .filter_map(|(index, face)| face.spatial_queries.then_some(index))
         .map(|index| {
             u16::try_from(index).map_err(|_| {
-                Error::new(
-                    "world.query",
+                Error::requirement(
+                    Location::new().field("world").field("query"),
                     "spatial-query face index exceeds native capacity",
                 )
             })
@@ -288,7 +302,10 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             negative_child: -1,
             positive_child: -1,
             face_count: u16::try_from(query_faces.len()).map_err(|_| {
-                Error::new("world.query", "spatial-query leaf exceeds face capacity")
+                Error::requirement(
+                    Location::new().field("world").field("query"),
+                    "spatial-query leaf exceeds face capacity",
+                )
             })?,
             first_face: 0,
             plane_distance: 0.,
@@ -328,7 +345,10 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                         supplemental[index / 2].to_le_bytes()[index % 2]
                     }),
                     start: i32::try_from(u64::from(first) * 3).map_err(|_| {
-                        Error::new("world.shadow", "shadow start exceeds native capacity")
+                        Error::requirement(
+                            Location::new().field("world").field("shadow"),
+                            "shadow start exceeds native capacity",
+                        )
                     })?,
                     count: (count * 3) as i16,
                     large_material: material,
@@ -375,13 +395,13 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                         .map(|(source, value)| (source - f32::from(*value)).abs())
                         .fold(0f32, f32::max);
                     context.approximate(
-                        "world.draw.bounds",
+                        || Location::new().field("world").field("draw").field("bounds"),
                         error,
                         "draw culling bounds quantized to signed sixteen-bit coordinates",
                     )?;
                     if !batch.prefix.set_culling_bounds(corners) {
                         context.unsupported(
-                            "world.draw.bounds",
+                            Location::new().field("world").field("draw").field("bounds"),
                             "target batch prefix has no historical culling bounds",
                         )?;
                     }
@@ -391,7 +411,10 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                     Lighting::Interior => output.header_mut().interior_batch_count += 1,
                     Lighting::Exterior => output.header_mut().exterior_batch_count += 1,
                     Lighting::Unknown(_) => context.unsupported(
-                        "world.draw.lighting",
+                        Location::new()
+                            .field("world")
+                            .field("draw")
+                            .field("lighting"),
                         "unknown illumination class has no native batch-count role",
                     )?,
                 }
@@ -402,8 +425,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             if remaining != draw.count as usize
                 && (draw.subset.strip.is_some() || draw.subset.tangents.is_some())
             {
-                return Err(Error::new(
-                    "world.draw.streams",
+                return Err(Error::requirement(Location::new().field("world").field("draw").field("streams"),
                     "splitting an authored strip or tangent association requires explicit draw windows",
                 ));
             }
@@ -416,8 +438,9 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                 },
             ));
             tangent_starts.push(tangent.map_or(Ok(u16::MAX), |window| {
-                u16::try_from(window.first_tangent)
-                    .map_err(|error| Error::new("world.tangents", error.to_string()))
+                u16::try_from(window.first_tangent).map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("tangents"), error)
+                })
             })?);
             let (minimum, maximum) = draw
                 .subset
@@ -434,7 +457,9 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             batch
                 .prefix
                 .set_selection(&mut batch.flags, material, (minimum, maximum))
-                .map_err(|error| Error::new("world.batch", error.to_string()))?;
+                .map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("batch"), error)
+                })?;
             batches.push(batch);
             first += count;
             remaining -= count;
@@ -460,8 +485,8 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             })
             .any(|window| window.selection.range.count() > u32::from(u16::MAX))
         {
-            return Err(Error::new(
-                "world.strips",
+            return Err(Error::requirement(
+                Location::new().field("world").field("strips"),
                 "strip window exceeds native count capacity",
             ));
         }
@@ -476,7 +501,9 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             .strip_indices()
             .iter()
             .map(|index| {
-                u16::try_from(index).map_err(|error| Error::new("world.strips", error.to_string()))
+                u16::try_from(index).map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("strips"), error)
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         append_group(
@@ -537,8 +564,8 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             .iter()
             .map(|value| {
                 value.ok_or_else(|| {
-                    Error::new(
-                        "world.ground_types",
+                    Error::requirement(
+                        Location::new().field("world").field("ground_types"),
                         "native query table requires a contiguous classification range",
                     )
                 })

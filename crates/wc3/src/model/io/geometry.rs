@@ -2,6 +2,7 @@
 use super::{Context, Error};
 use crate::model::common::Borrowed as _;
 use crate::model::common::PackedArray;
+use crate::model::error::Location;
 use crate::model::io::{materialize, owned};
 use crate::model::profiles::Profile;
 use crate::model::{
@@ -188,12 +189,18 @@ pub fn project<'a, 'data: 'a, P: Profile>(
     _context: &mut Context,
 ) -> Result<Vec<ProjectedDraw<'a>>, Error> {
     let instance_id = instance;
-    let instance = model
-        .instance(instance)
-        .ok_or_else(|| Error::new("geometry.instance", "placement is absent"))?;
-    let source = model
-        .mesh(instance.mesh)
-        .ok_or_else(|| Error::new("geometry.mesh", "geometry is absent"))?;
+    let instance = model.instance(instance).ok_or_else(|| {
+        Error::requirement(
+            Location::new().field("geometry").field("instance"),
+            "placement is absent",
+        )
+    })?;
+    let source = model.mesh(instance.mesh).ok_or_else(|| {
+        Error::requirement(
+            Location::new().field("geometry").field("mesh"),
+            "geometry is absent",
+        )
+    })?;
     if source.attributes().iter().any(|attribute| {
         attribute.domain == AttributeDomain::Pool
             || attribute.semantic == AttributeSemantic::TriangleProperties
@@ -206,8 +213,8 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             .tangent_pool()
             .is_some_and(|values| !values.is_empty())
     {
-        return Err(Error::new(
-            "geometry.domains",
+        return Err(Error::requirement(
+            Location::new().field("geometry").field("domains"),
             "triangle properties and indexed draw pools require an explicit domain translation",
         ));
     }
@@ -216,14 +223,17 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             subset.strip.is_some() || subset.tangents.is_some() || subset.vertex_window.is_some()
         })
     }) {
-        return Err(Error::new(
-            "geometry.subset.bindings",
+        return Err(Error::requirement(
+            Location::new()
+                .field("geometry")
+                .field("subset")
+                .field("bindings"),
             "supplemental selections and pool associations require explicit domain translation",
         ));
     }
     if matches!(source.influences(), InfluenceRows::Nodes(_)) {
-        return Err(Error::new(
-            "geometry.influences",
+        return Err(Error::requirement(
+            Location::new().field("geometry").field("influences"),
             "direct-node rig contributions require an explicit binding translation",
         ));
     }
@@ -292,13 +302,19 @@ pub fn project<'a, 'data: 'a, P: Profile>(
     }
     let mut out = Vec::new();
     for draw in &instance.draws {
-        let subset = source
-            .subset(draw.subset)
-            .ok_or_else(|| Error::new("geometry.subset", "draw subset is absent"))?;
+        let subset = source.subset(draw.subset).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("geometry").field("subset"),
+                "draw subset is absent",
+            )
+        })?;
         let topology = source
             .connectivity(subset.selection.connectivity)
             .ok_or_else(|| {
-                Error::new("geometry.connectivity", "selected connectivity is absent")
+                Error::requirement(
+                    Location::new().field("geometry").field("connectivity"),
+                    "selected connectivity is absent",
+                )
             })?;
         let mut all = Vec::new();
         let (first, count) = match subset.selection.range {
@@ -314,8 +330,8 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             }
             PrimitiveRange::StripIndices { first, count } => {
                 let Topology::TriangleStrip(indices) = topology else {
-                    return Err(Error::new(
-                        "geometry.selection",
+                    return Err(Error::requirement(
+                        Location::new().field("geometry").field("selection"),
                         "strip selection requires strip connectivity",
                     ));
                 };
@@ -343,9 +359,12 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 (0, all.len())
             }
         };
-        let selected = all
-            .get(first..first + count)
-            .ok_or_else(|| Error::new("geometry.draw", "primitive range is absent"))?;
+        let selected = all.get(first..first + count).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("geometry").field("draw"),
+                "primitive range is absent",
+            )
+        })?;
         let material = model.material_for_draw(instance_id, draw.id(), look)?;
         let mut points = Vec::new();
         let mut groups = Vec::new();
@@ -555,8 +574,8 @@ fn vector3<'a, 'data: 'a, P: Profile>(
             .unwrap_or_else(|| mesh.subsets.primary()),
     ) {
         let AttributeValues::Vector3(values) = &attribute.values else {
-            return Err(Error::new(
-                "geometry.attribute",
+            return Err(Error::requirement(
+                Location::new().field("geometry").field("attribute"),
                 "expected a three-component vector",
             ));
         };
@@ -590,8 +609,8 @@ fn vector4<'a, 'data: 'a, P: Profile>(
             .unwrap_or_else(|| mesh.subsets.primary()),
     ) {
         let AttributeValues::Vector4(values) = &attribute.values else {
-            return Err(Error::new(
-                "geometry.attribute",
+            return Err(Error::requirement(
+                Location::new().field("geometry").field("attribute"),
                 "expected a four-component vector",
             ));
         };
@@ -625,8 +644,8 @@ fn vector2<'a, 'data: 'a, P: Profile>(
             .unwrap_or_else(|| mesh.subsets.primary()),
     ) {
         let AttributeValues::Vector2(values) = &attribute.values else {
-            return Err(Error::new(
-                "geometry.attribute",
+            return Err(Error::requirement(
+                Location::new().field("geometry").field("attribute"),
                 "expected a two-component vector",
             ));
         };
@@ -709,8 +728,8 @@ fn triangulate<P: Profile>(
                 || (cd_a == 0.0 && on(a, c, d))
                 || (cd_b == 0.0 && on(b, c, d))
             {
-                return Err(Error::new(
-                    "geometry.polygon",
+                return Err(Error::requirement(
+                    Location::new().field("geometry").field("polygon"),
                     "polygon boundary intersects itself",
                 ));
             }
@@ -723,8 +742,8 @@ fn triangulate<P: Profile>(
         })
         .sum();
     if area == 0.0 {
-        return Err(Error::new(
-            "geometry.polygon",
+        return Err(Error::requirement(
+            Location::new().field("geometry").field("polygon"),
             "polygon has zero projected area",
         ));
     }
@@ -750,7 +769,10 @@ fn triangulate<P: Profile>(
                 })
             })
             .ok_or_else(|| {
-                Error::new("geometry.polygon", "polygon is degenerate or is not simple")
+                Error::requirement(
+                    Location::new().field("geometry").field("polygon"),
+                    "polygon is degenerate or is not simple",
+                )
             })?;
         let a = remaining[(ear + remaining.len() - 1) % remaining.len()];
         let b = remaining[ear];

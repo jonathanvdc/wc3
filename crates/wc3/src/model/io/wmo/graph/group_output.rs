@@ -1,8 +1,10 @@
 //! Destination-selected sinks for common group records and actor selections.
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::legacy::{Group14, Group16, LegacyGroupChunk};
 use crate::model::formats::wmo::{Classic, Dialect, Group};
+use std::error::Error as StdError;
 pub(super) trait GroupOutput<'a, D: Dialect> {
     fn push(&mut self, chunk: GroupChunk<'a, D>);
     fn actor_flags(&mut self, lights: bool, doodads: bool);
@@ -50,6 +52,12 @@ impl<'a> GroupOutput<'a, Classic> for Group16<'a> {
         Ok(())
     }
 }
-fn error(error: impl std::fmt::Display) -> Error {
-    Error::new("world.group.portal", error.to_string())
+fn error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(
+        Location::new()
+            .field("world")
+            .field("group")
+            .field("portal"),
+        error,
+    )
 }

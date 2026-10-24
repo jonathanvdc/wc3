@@ -1,5 +1,6 @@
 //! Deterministic convex-boundary reconstruction for native polytope topology.
 use super::{native, Error};
+use crate::model::error::Location;
 use native::companions::{PhysicsEdge, Polytope, PolytopeHeader};
 use native::ZeroVec;
 use std::array::from_fn;
@@ -31,8 +32,11 @@ fn orient(points: &[[f32; 3]], mut face: [usize; 3], inside: [f32; 3]) -> [usize
 }
 pub(super) fn hull(points: Vec<[f32; 3]>) -> Result<Polytope<'static>, Error> {
     if points.len() < 4 || points.len() > 256 || points.iter().flatten().any(|v| !v.is_finite()) {
-        return Err(Error::new(
-            "physics.hull.points",
+        return Err(Error::requirement(
+            Location::new()
+                .field("physics")
+                .field("hull")
+                .field("points"),
             "native hull needs four to 256 finite points",
         ));
     }
@@ -69,8 +73,11 @@ pub(super) fn hull(points: Vec<[f32; 3]>) -> Result<Polytope<'static>, Error> {
         })
         .unwrap();
     if dot(normal, difference(points[d], points[a])) == 0. {
-        return Err(Error::new(
-            "physics.hull.points",
+        return Err(Error::requirement(
+            Location::new()
+                .field("physics")
+                .field("hull")
+                .field("points"),
             "points do not enclose a three-dimensional hull",
         ));
     }
@@ -119,8 +126,11 @@ pub(super) fn hull(points: Vec<[f32; 3]>) -> Result<Polytope<'static>, Error> {
         }
     }
     if faces.len() * 3 > 256 {
-        return Err(Error::new(
-            "physics.hull.topology",
+        return Err(Error::requirement(
+            Location::new()
+                .field("physics")
+                .field("hull")
+                .field("topology"),
             "triangulated half-edge count exceeds native byte indices",
         ));
     }
@@ -135,7 +145,13 @@ pub(super) fn hull(points: Vec<[f32; 3]>) -> Result<Polytope<'static>, Error> {
         let normal = plane(&points, [a, b, c]);
         let length = dot(normal, normal).sqrt();
         if length == 0. {
-            return Err(Error::new("physics.hull.topology", "degenerate hull face"));
+            return Err(Error::requirement(
+                Location::new()
+                    .field("physics")
+                    .field("hull")
+                    .field("topology"),
+                "degenerate hull face",
+            ));
         }
         let n = normal.map(|v| v / length);
         planes.push([
@@ -176,9 +192,15 @@ pub(super) fn hull(points: Vec<[f32; 3]>) -> Result<Polytope<'static>, Error> {
         if inverse[index] != usize::MAX {
             continue;
         }
-        let twin = *pairs
-            .get(&(to, from))
-            .ok_or_else(|| Error::new("physics.hull.topology", "hull boundary is not closed"))?;
+        let twin = *pairs.get(&(to, from)).ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("physics")
+                    .field("hull")
+                    .field("topology"),
+                "hull boundary is not closed",
+            )
+        })?;
         inverse[index] = order.len();
         order.push(index);
         inverse[twin] = order.len();
@@ -198,8 +220,11 @@ pub(super) fn hull(points: Vec<[f32; 3]>) -> Result<Polytope<'static>, Error> {
         .collect();
 
     if volume <= 0. {
-        return Err(Error::new(
-            "physics.hull.volume",
+        return Err(Error::requirement(
+            Location::new()
+                .field("physics")
+                .field("hull")
+                .field("volume"),
             "convex boundary has no positive volume",
         ));
     }

@@ -1,6 +1,7 @@
 //! Attached logical features mapped directly to native Warcraft III record families.
 use super::encode_animation::Encoder;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
@@ -49,7 +50,10 @@ pub(super) fn write<'a, T: Dialect>(
                 .mesh
                 .map(|mesh| {
                     meshes.get(&mesh).ok_or_else(|| {
-                        Error::new("geometry_animation.mesh", "mesh has no native draw")
+                        Error::requirement(
+                            Location::new().field("geometry_animation").field("mesh"),
+                            "mesh has no native draw",
+                        )
                     })
                 })
                 .transpose()?;
@@ -57,11 +61,15 @@ pub(super) fn write<'a, T: Dialect>(
             let mut indices = Vec::new();
             for mesh in targets {
                 let mut record = native::GeosetAnimation::new(mesh);
-                record.alpha = encoder.value(&source.opacity, Ok, "geometry_animation.opacity")?;
+                record.alpha = encoder.value(
+                    &source.opacity,
+                    Ok,
+                    &Location::new().field("geometry_animation").field("opacity"),
+                )?;
                 record.color = encoder.value(
                     &source.color,
                     |v| Ok(v.to_array()),
-                    "geometry_animation.color",
+                    &Location::new().field("geometry_animation").field("color"),
                 )?;
                 record.flags = native::GeosetAnimationFlags(0);
                 record.flags.set_color(source.use_color);
@@ -102,8 +110,9 @@ pub(super) fn write<'a, T: Dialect>(
                 .values()
                 .any(|source| source.node == feature.node)
         {
-            node = Node::new(&node.name.text(), next)
-                .map_err(|error| Error::new("feature.name", error.to_string()))?;
+            node = Node::new(&node.name.text(), next).map_err(|error| {
+                Error::from_source(Location::new().field("feature").field("name"), error)
+            })?;
             node.parent_id = nodes[&feature.node].object_id;
             next += 1;
         } else {
@@ -122,18 +131,23 @@ pub(super) fn write<'a, T: Dialect>(
         }
         match source {
             profile::Node::Particle(source) => {
-                let mut record = native::ParticleEmitter::new(node, "")
-                    .map_err(|error| Error::new("particle.resource", error.to_string()))?;
+                let mut record = native::ParticleEmitter::new(node, "").map_err(|error| {
+                    Error::from_source(Location::new().field("particle").field("resource"), error)
+                })?;
                 record
                     .path
                     .set_bytes(particle_path(model, source.details.resource)?)
-                    .map_err(|error| Error::new("particle.resource", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("particle").field("resource"),
+                            error,
+                        )
+                    })?;
                 macro_rules! a {
                     ($($field:ident).+) => {
                         encoder.value(
                             &source.$($field).+,
-                            Ok,
-                            concat!("particle.", stringify!($($field).+)),
+                            Ok,&Location::new().field("particle")$(.field(stringify!($field)))+,
                         )?
                     };
                 }
@@ -146,7 +160,7 @@ pub(super) fn write<'a, T: Dialect>(
                 record.visibility = super::encode_helpers::visibility(
                     &source.emission.activation,
                     encoder,
-                    "particle.visibility",
+                    &Location::new().field("particle").field("visibility"),
                 )?;
                 let mut flags = record.flags();
                 flags.set_emitter_uses_mdl(matches!(
@@ -163,8 +177,7 @@ pub(super) fn write<'a, T: Dialect>(
                     ($($field:ident).+) => {
                         encoder.value(
                             &source.$($field).+,
-                            Ok,
-                            concat!("particle2.", stringify!($($field).+)),
+                            Ok,&Location::new().field("particle2")$(.field(stringify!($field)))+,
                         )?
                     };
                 }
@@ -204,7 +217,7 @@ pub(super) fn write<'a, T: Dialect>(
                     profile::Blend::Unknown(value) => native::Particle2FilterMode::Unknown(value),
                     _ => {
                         encoder.context.unsupported(
-                            "particle2.blend",
+                            Location::new().field("particle2").field("blend"),
                             "blend operation has no Warcraft III particle operation",
                         )?;
                         native::Particle2FilterMode::Blend
@@ -227,30 +240,46 @@ pub(super) fn write<'a, T: Dialect>(
                 record.visibility = super::encode_helpers::visibility(
                     &source.emission.activation,
                     encoder,
-                    "particle2.visibility",
+                    &Location::new().field("particle2").field("visibility"),
                 )?;
                 particles2.push(record);
             }
             profile::Node::Ribbon(source) => {
                 if source.geometry.axis != Axis::PositiveY {
                     encoder.context.unsupported(
-                        "ribbon.geometry.axis",
+                        Location::new()
+                            .field("ribbon")
+                            .field("geometry")
+                            .field("axis"),
                         "Warcraft III ribbon cross-sections extend along local positive Y",
                     )?;
                 }
                 let mut record = native::RibbonEmitter::new(node);
-                record.height_above =
-                    encoder.value(&source.geometry.height_above, Ok, "ribbon.height_above")?;
-                record.height_below =
-                    encoder.value(&source.geometry.height_below, Ok, "ribbon.height_below")?;
-                record.alpha = encoder.value(&source.appearance.opacity, Ok, "ribbon.opacity")?;
+                record.height_above = encoder.value(
+                    &source.geometry.height_above,
+                    Ok,
+                    &Location::new().field("ribbon").field("height_above"),
+                )?;
+                record.height_below = encoder.value(
+                    &source.geometry.height_below,
+                    Ok,
+                    &Location::new().field("ribbon").field("height_below"),
+                )?;
+                record.alpha = encoder.value(
+                    &source.appearance.opacity,
+                    Ok,
+                    &Location::new().field("ribbon").field("opacity"),
+                )?;
                 record.color = encoder.value(
                     &source.appearance.color,
                     |v| Ok(v.to_array()),
-                    "ribbon.color",
+                    &Location::new().field("ribbon").field("color"),
                 )?;
-                record.texture_slot =
-                    encoder.value(&source.appearance.texture_slot, Ok, "ribbon.texture_slot")?;
+                record.texture_slot = encoder.value(
+                    &source.appearance.texture_slot,
+                    Ok,
+                    &Location::new().field("ribbon").field("texture_slot"),
+                )?;
                 record.life_span = source.lifetime;
                 record.emission_rate = source.emission_rate;
                 record.rows = source.appearance.atlas[0];
@@ -264,34 +293,56 @@ pub(super) fn write<'a, T: Dialect>(
                 record.visibility = super::encode_helpers::visibility(
                     &source.behavior.visibility,
                     encoder,
-                    "ribbon.visibility",
+                    &Location::new().field("ribbon").field("visibility"),
                 )?;
                 ribbons.push(record);
             }
             profile::Node::ParticleProgram(source) => {
                 let mut record = native::PopcornEmitter::new(node, "", &source.visibility_guide)
-                    .map_err(|error| Error::new("popcorn.resource", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("popcorn").field("resource"),
+                            error,
+                        )
+                    })?;
                 let resource = source
                     .resource
                     .map(|id| model.effect_resource(id).expect("validated effect"))
                     .map(path_bytes)
                     .unwrap_or_default();
-                record
-                    .path
-                    .set_bytes(resource)
-                    .map_err(|error| Error::new("popcorn.resource", error.to_string()))?;
-                record.life_span = encoder.value(&source.life_span, Ok, "popcorn.life_span")?;
-                record.emission_rate =
-                    encoder.value(&source.emission_rate, Ok, "popcorn.emission_rate")?;
-                record.speed = encoder.value(&source.speed, Ok, "popcorn.speed")?;
-                record.color =
-                    encoder.value(&source.color, |v| Ok(v.to_array()), "popcorn.color")?;
-                record.alpha = encoder.value(&source.opacity, Ok, "popcorn.opacity")?;
+                record.path.set_bytes(resource).map_err(|error| {
+                    Error::from_source(Location::new().field("popcorn").field("resource"), error)
+                })?;
+                record.life_span = encoder.value(
+                    &source.life_span,
+                    Ok,
+                    &Location::new().field("popcorn").field("life_span"),
+                )?;
+                record.emission_rate = encoder.value(
+                    &source.emission_rate,
+                    Ok,
+                    &Location::new().field("popcorn").field("emission_rate"),
+                )?;
+                record.speed = encoder.value(
+                    &source.speed,
+                    Ok,
+                    &Location::new().field("popcorn").field("speed"),
+                )?;
+                record.color = encoder.value(
+                    &source.color,
+                    |v| Ok(v.to_array()),
+                    &Location::new().field("popcorn").field("color"),
+                )?;
+                record.alpha = encoder.value(
+                    &source.opacity,
+                    Ok,
+                    &Location::new().field("popcorn").field("opacity"),
+                )?;
                 record.replaceable_id = source.replaceable;
                 record.visibility = super::encode_helpers::visibility(
                     &source.visibility,
                     encoder,
-                    "popcorn.visibility",
+                    &Location::new().field("popcorn").field("visibility"),
                 )?;
                 let mut flags = record.flags();
                 flags.set_unshaded(source.unlit);
@@ -303,18 +354,28 @@ pub(super) fn write<'a, T: Dialect>(
             }
             profile::Node::Attachment(source) => {
                 let mut record = native::Attachment::new(node, "", source.socket.identity)
-                    .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("attachment").field("resource"),
+                            error,
+                        )
+                    })?;
                 let resource = model
                     .model_resource(source.resource)
                     .expect("validated model");
                 record
                     .path
                     .set_bytes(path_bytes(resource))
-                    .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("attachment").field("resource"),
+                            error,
+                        )
+                    })?;
                 record.visibility = super::encode_helpers::visibility(
                     &source.socket.visibility,
                     encoder,
-                    "attachment.visibility",
+                    &Location::new().field("attachment").field("visibility"),
                 )?;
                 attachments.push(record);
             }
@@ -338,7 +399,7 @@ pub(super) fn write<'a, T: Dialect>(
                     }
                     profile::Collision::Unknown { .. } => {
                         encoder.context.unsupported(
-                            "collision.kind",
+                            Location::new().field("collision").field("kind"),
                             "unknown collision shape has no native encoding",
                         )?;
                         continue;
@@ -376,8 +437,9 @@ pub(super) fn write<'a, T: Dialect>(
                 .count()
                 > 1
         {
-            node = Node::new(&node.name.text(), next)
-                .map_err(|error| Error::new("event.name", error.to_string()))?;
+            node = Node::new(&node.name.text(), next).map_err(|error| {
+                Error::from_source(Location::new().field("event").field("name"), error)
+            })?;
             node.parent_id = nodes[&source.node].object_id;
             next += 1;
         } else {
@@ -399,14 +461,17 @@ pub(super) fn write<'a, T: Dialect>(
             let mesh = metadata
                 .mesh
                 .map(|id| {
-                    meshes
-                        .get(&id)
-                        .ok_or_else(|| Error::new("bone.mesh", "mesh has no native draw"))
+                    meshes.get(&id).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("bone").field("mesh"),
+                            "mesh has no native draw",
+                        )
+                    })
                 })
                 .transpose()?;
             if mesh.is_some_and(|indices| indices.len() != 1) {
                 encoder.context.unsupported(
-                    "bone.mesh",
+                    Location::new().field("bone").field("mesh"),
                     "a native bone mesh gate cannot span multiple projected geosets",
                 )?;
             }
@@ -414,13 +479,16 @@ pub(super) fn write<'a, T: Dialect>(
                 .animation
                 .map(|id| {
                     animation_ids.get(&id).ok_or_else(|| {
-                        Error::new("bone.animation", "geometry animation has no native record")
+                        Error::requirement(
+                            Location::new().field("bone").field("animation"),
+                            "geometry animation has no native record",
+                        )
                     })
                 })
                 .transpose()?;
             if animation.is_some_and(|indices| indices.len() != 1) {
                 encoder.context.unsupported(
-                    "bone.animation",
+                    Location::new().field("bone").field("animation"),
                     "a native bone controller reference cannot span multiple projected geosets",
                 )?;
             }
@@ -452,7 +520,9 @@ pub(super) fn write<'a, T: Dialect>(
     target.set_event_objects(events);
     if !popcorn.is_empty() {
         if let Err(error) = target.try_set_popcorn_emitters(popcorn) {
-            encoder.context.unsupported("popcorn", error.to_string())?;
+            encoder
+                .context
+                .unsupported_source(Location::new().field("popcorn"), error)?;
         }
     }
     super::encode_helpers::controls(target, encoder, meshes)?;
@@ -475,8 +545,8 @@ fn particle_path<'a>(
         MdlxParticle1Resource::Image(Some(id)) => {
             match model.image_resource(id).expect("validated image") {
                 MdlxImageResource::Path(path) => Ok(path),
-                _ => Err(Error::new(
-                    "particle.resource",
+                _ => Err(Error::requirement(
+                    Location::new().field("particle").field("resource"),
                     "resource particle requires an image path",
                 )),
             }
