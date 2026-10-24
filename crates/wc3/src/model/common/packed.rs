@@ -1,12 +1,11 @@
 //! Packed storage independent of the mathematical value's memory layout.
-use super::{AsULE, Borrowed, Detached, ZeroVec};
+use super::{AsULE, Borrowed, Detached, ZeroSlice, ZeroVec};
 use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::ops::Range;
 use std::sync::Arc;
 use zerovec::ule::UleError;
-use zerovec::ZeroSlice;
 
 /// A value with a lossless packed representation. Conversion preserves components;
 /// validation and normalization belong to the value's semantic domain.
