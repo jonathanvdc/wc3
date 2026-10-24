@@ -258,6 +258,7 @@ fn light_switch_rule_rejects_invalid_parameters_and_unbounded_inputs() {
 
 #[test]
 fn selected_drop_checks_graph_dependent_feature_constraints() {
+    use wc3::model::error::{ErrorKind, Location, ProfileError, ProfileKind, ProfileViolation};
     use wc3::model::profiles::mdlx;
     use wc3::model::{Camera, Curve, DynamicTrack, Light, Time, TimeSource, Track};
     let mut draft = Model::<Mdlx>::builder("animated camera");
@@ -288,7 +289,22 @@ fn selected_drop_checks_graph_dependent_feature_constraints() {
             Ok(())
         })
         .unwrap();
-    assert!(Policy::<Mdlx>::new().plan(&source).is_err());
+    let Error::Semantic(error) = Policy::<Mdlx>::new().plan(&source).unwrap_err() else {
+        panic!("exact projection must preserve its semantic failure")
+    };
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Profile(ProfileError {
+            target: ProfileKind::Mdlx,
+            violation: ProfileViolation::AnimatedField,
+        })
+    ));
+    assert_eq!(
+        error.location(),
+        &Location::for_owner(feature)
+            .field("projection")
+            .field("field_of_view")
+    );
     let plan = Policy::<Mdlx>::new()
         .with_rule(DropUnsupportedFeatures::new([feature]))
         .plan(&source)
@@ -299,9 +315,11 @@ fn selected_drop_checks_graph_dependent_feature_constraints() {
         panic!("expected retained light");
     };
     assert!(plan.draft().is_animated(light.diffuse.intensity));
+    assert_eq!(plan.report().issues.len(), 1);
     assert_eq!(plan.report().issues[0].kind, IssueKind::Dropped);
-    assert!(plan.report().issues[0]
-        .description
-        .contains("constant field of view"));
+    assert_eq!(
+        plan.report().issues[0].path,
+        format!("features[{feature:?}]")
+    );
     assert!(source.feature(feature).is_some());
 }
