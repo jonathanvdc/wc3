@@ -3,6 +3,7 @@ use super::m2::MaterialStep as M2MaterialStep;
 use super::mdlx::{MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
 use crate::model::common::{Detached, IntoOwned};
+use crate::model::error::{Location, ProfileError, ProfileKind, ProfileViolation};
 use crate::model::profiles::{NoProperties, SurfacePayload};
 use crate::model::{Error, Link, ValidateLinks};
 
@@ -73,12 +74,23 @@ impl MaterialStep<'_> {
 }
 impl SurfacePayload for MaterialSurface<'_> {
     fn validate(&self) -> Result<(), Error> {
-        self.steps.iter().try_for_each(MaterialStep::validate)
+        self.steps.iter().enumerate().try_for_each(|(index, step)| {
+            step.validate()
+                .map_err(|error| error.with_context(Location::new().field("steps").index(index)))
+        })
     }
 }
 
-fn incompatible(message: &str) -> Error {
-    Error::new("surface", message)
+fn incompatible(target: ProfileKind, step: &MaterialStep<'_>, index: usize) -> Error {
+    let actual = match step {
+        MaterialStep::Mdlx(_) => ProfileKind::Mdlx,
+        MaterialStep::M2(_) => ProfileKind::M2,
+        MaterialStep::Wmo(_) => ProfileKind::Wmo,
+    };
+    Error::at(
+        Location::new().field("steps").index(index),
+        ProfileError::new(target, ProfileViolation::MaterialDialect { actual }),
+    )
 }
 impl<'a> From<MdlxMaterialStep> for MaterialSurface<'a> {
     fn from(value: MdlxMaterialStep) -> Self {
@@ -107,8 +119,9 @@ impl<'a> From<WmoMaterialStep<'a>> for MaterialSurface<'a> {
 impl<'a> TryFrom<MaterialSurface<'a>> for M2MaterialStep<'a> {
     type Error = Error;
     fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
-        let MaterialStep::M2(value) = single_step(value)? else {
-            return Err(incompatible("surface is not an M2 shader step"));
+        let value = single_step(value, ProfileKind::M2)?;
+        let MaterialStep::M2(value) = value else {
+            return Err(incompatible(ProfileKind::M2, &value, 0));
         };
         Ok(*value)
     }
@@ -116,24 +129,37 @@ impl<'a> TryFrom<MaterialSurface<'a>> for M2MaterialStep<'a> {
 impl<'a> TryFrom<MaterialSurface<'a>> for WmoMaterialStep<'a> {
     type Error = Error;
     fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
-        let MaterialStep::Wmo(value) = single_step(value)? else {
-            return Err(incompatible("surface is not a WMO shader step"));
+        let value = single_step(value, ProfileKind::Wmo)?;
+        let MaterialStep::Wmo(value) = value else {
+            return Err(incompatible(ProfileKind::Wmo, &value, 0));
         };
         Ok(*value)
     }
 }
-fn single_step(value: MaterialSurface<'_>) -> Result<MaterialStep<'_>, Error> {
-    require_no_declaration(&value)?;
+fn single_step(value: MaterialSurface<'_>, target: ProfileKind) -> Result<MaterialStep<'_>, Error> {
+    require_no_declaration(&value, target)?;
     let mut stack = value;
     if stack.steps.len() != 1 {
-        return Err(incompatible("surface requires exactly one step"));
+        return Err(Error::at(
+            Location::new().field("steps"),
+            ProfileError::new(
+                target,
+                ProfileViolation::MaterialStepCount {
+                    expected: 1,
+                    actual: stack.steps.len(),
+                },
+            ),
+        ));
     }
     Ok(stack.steps.pop().expect("one step"))
 }
 
 impl SurfacePayload for MaterialProgram<M2MaterialStep<'_>> {
     fn validate(&self) -> Result<(), Error> {
-        self.steps.iter().try_for_each(M2MaterialStep::validate)
+        self.steps.iter().enumerate().try_for_each(|(index, step)| {
+            step.validate()
+                .map_err(|error| error.with_context(Location::new().field("steps").index(index)))
+        })
     }
 }
 impl<'a> From<MaterialProgram<M2MaterialStep<'a>>> for MaterialSurface<'a> {
@@ -151,15 +177,16 @@ impl<'a> From<MaterialProgram<M2MaterialStep<'a>>> for MaterialSurface<'a> {
 impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<M2MaterialStep<'a>> {
     type Error = Error;
     fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
-        require_no_declaration(&value)?;
+        require_no_declaration(&value, ProfileKind::M2)?;
         Ok(Self {
             declaration: NoProperties,
             steps: value
                 .steps
                 .into_iter()
-                .map(|s| match s {
+                .enumerate()
+                .map(|(index, step)| match step {
                     MaterialStep::M2(v) => Ok(*v),
-                    _ => Err(incompatible("surface contains a non-M2 material step")),
+                    step => Err(incompatible(ProfileKind::M2, &step, index)),
                 })
                 .collect::<Result<_, _>>()?,
         })
@@ -201,23 +228,25 @@ impl<'a> TryFrom<MaterialSurface<'a>>
             steps: value
                 .steps
                 .into_iter()
-                .map(|step| match step {
+                .enumerate()
+                .map(|(index, step)| match step {
                     MaterialStep::Mdlx(step) => Ok(*step),
-                    _ => Err(incompatible("surface contains a non-MDLX material step")),
+                    step => Err(incompatible(ProfileKind::Mdlx, &step, index)),
                 })
                 .collect::<Result<_, _>>()?,
         })
     }
 }
 
-fn require_no_declaration(value: &MaterialSurface<'_>) -> Result<(), Error> {
+fn require_no_declaration(value: &MaterialSurface<'_>, target: ProfileKind) -> Result<(), Error> {
     if value
         .declaration
         .as_ref()
         .is_some_and(|declaration| declaration != &MaterialDeclaration::default())
     {
-        return Err(incompatible(
-            "surface carries Warcraft III material declarations",
+        return Err(Error::at(
+            Location::new().field("declaration"),
+            ProfileError::new(target, ProfileViolation::MaterialDeclaration),
         ));
     }
     Ok(())

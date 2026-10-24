@@ -1,20 +1,22 @@
 //! Authoring limits inherent to Warcraft III rather than a particular native dialect.
 use super::{Mdlx, Node};
+use crate::model::error::{Location, ProfileError, ProfileKind, ProfileViolation};
+use crate::model::AnimationId;
 use crate::model::{Billboard, DynamicTrack, Error, Interpolation, Model, TimeSource, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     value.validate_animation_consumers()?;
-    for (_, feature) in value.features() {
+    for (id, feature) in value.features() {
         if let Node::Camera(camera) = &feature.payload {
             if !camera.is_mdlx() {
-                return Err(Error::new(
-                    "camera.projection",
-                    "Warcraft III cameras use vertical field of view without an application role",
+                return Err(Error::at(
+                    Location::for_owner(id).field("projection"),
+                    ProfileError::new(ProfileKind::Mdlx, ProfileViolation::CameraProjection),
                 ));
             }
         }
     }
-    let mut ordinary_selection = None;
-    for (_, clip) in value.clips() {
+    let mut ordinary_selection: Option<Vec<AnimationId>> = None;
+    for (id, clip) in value.clips() {
         if clip.animations.iter().any(|id| {
             let animation = value.animation(*id).expect("validated selection");
             animation
@@ -31,9 +33,9 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
                     )
                 })
         }) {
-            return Err(Error::new(
-                "clips.animations",
-                "Warcraft III shared-clock animations must be selected at model level",
+            return Err(Error::at(
+                Location::for_owner(id).field("animations"),
+                ProfileError::new(ProfileKind::Mdlx, ProfileViolation::SharedClockSelection),
             ));
         }
 
@@ -60,14 +62,26 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
             .as_ref()
             .is_some_and(|first| *first != selection)
         {
-            return Err(Error::new("clips.animations", "Warcraft III clips must select the same ordered ordinary animations on their shared authoring timeline"));
+            return Err(Error::at(
+                Location::for_owner(id).field("animations"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::OrdinaryAnimationSelection {
+                        expected: ordinary_selection
+                            .as_ref()
+                            .expect("previous selection")
+                            .clone(),
+                        actual: selection,
+                    },
+                ),
+            ));
         }
         ordinary_selection = Some(selection);
     }
     for channel in value.tracks() {
         validate_channel(channel)?;
     }
-    for (_, instance) in value.instances() {
+    for (id, instance) in value.instances() {
         let mesh = value.mesh(instance.mesh).expect("validated geometry");
         if !mesh.influences().is_empty() {
             let anchor = value.node(instance.node).expect("validated placement");
@@ -80,18 +94,21 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
                 || anchor.camera_anchored
                 || animated
             {
-                return Err(Error::new(
-                    "instance.transform",
-                    "Warcraft III skinned geometry uses model-space joint transforms without an additional placed mesh transform",
+                return Err(Error::at(
+                    Location::for_owner(id).field("node"),
+                    ProfileError::new(
+                        ProfileKind::Mdlx,
+                        ProfileViolation::SkinnedPlacementTransform,
+                    ),
                 ));
             }
         }
     }
-    for (_, node) in value.nodes() {
+    for (id, node) in value.nodes() {
         if value.values().get(node.visible) != Some(&true) || value.is_animated(node.visible) {
-            return Err(Error::new(
-                "nodes.visible",
-                "Warcraft III hierarchy nodes have no static hidden state",
+            return Err(Error::at(
+                Location::for_owner(id).field("visible"),
+                ProfileError::new(ProfileKind::Mdlx, ProfileViolation::NodeVisibility),
             ));
         }
     }
@@ -106,9 +123,14 @@ fn validate_channel(channel: &DynamicTrack<'_>) -> Result<(), Error> {
         DynamicTrack::Texture(track) => track.curve.interpolation(),
         DynamicTrack::OptionalTexture(track) => track.curve.interpolation(),
         _ => {
-            return Err(Error::new(
-                "animation.value",
-                "Warcraft III tracks carry scalar floats, three-component vectors, quaternions, integer selectors, or texture selections",
+            return Err(Error::at(
+                Location::for_owner(channel.target()),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::TrackValue {
+                        target: channel.target(),
+                    },
+                ),
             ));
         }
     };
@@ -116,9 +138,12 @@ fn validate_channel(channel: &DynamicTrack<'_>) -> Result<(), Error> {
         mode,
         Interpolation::Tcb | Interpolation::Slerp | Interpolation::Nlerp
     ) {
-        return Err(Error::new(
-            "animation.interpolation",
-            "Warcraft III tracks do not encode explicit TCB, SLERP or NLERP interpolation directives",
+        return Err(Error::at(
+            Location::for_owner(channel.target()).field("interpolation"),
+            ProfileError::new(
+                ProfileKind::Mdlx,
+                ProfileViolation::Interpolation { actual: mode },
+            ),
         ));
     }
     Ok(())
@@ -128,17 +153,28 @@ pub(super) fn resources(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     use crate::model::{AddressMode, ColorSpace};
     for texture in value.sampled_images() {
         if texture.color_space != ColorSpace::Unspecified {
-            return Err(Error::new(
-                "textures.color_space",
-                "Warcraft III texture definitions do not declare a color transfer function",
+            return Err(Error::at(
+                Location::for_owner(texture.resource).field("color_space"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::ColorSpace {
+                        actual: texture.color_space,
+                    },
+                ),
             ));
         }
         if !matches!(texture.sampler.u, AddressMode::Repeat | AddressMode::Clamp)
             || !matches!(texture.sampler.v, AddressMode::Repeat | AddressMode::Clamp)
         {
-            return Err(Error::new(
-                "textures.sampler",
-                "Warcraft III texture definitions support repeat or clamp addressing",
+            return Err(Error::at(
+                Location::for_owner(texture.resource).field("sampler"),
+                ProfileError::new(
+                    ProfileKind::Mdlx,
+                    ProfileViolation::AddressMode {
+                        u: texture.sampler.u,
+                        v: texture.sampler.v,
+                    },
+                ),
             ));
         }
     }

@@ -1,4 +1,5 @@
 //! Built-in M2 authoring vocabulary and its lossless embeddings.
+use crate::model::error::{Location, ProfileError, ProfileKind, ProfileViolation};
 use crate::model::profiles::Unavailable;
 use crate::model::profiles::{m2, Extends, NoProperties, Profile, Universal};
 use crate::model::resources::{M2ImageResource, M2ModelResource};
@@ -41,20 +42,20 @@ impl Profile for M2 {
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
-        for (_, feature) in model.features() {
+        for (id, feature) in model.features() {
             match &feature.payload {
                 m2::ActorKind::Camera(camera) if !camera.is_m2() => {
-                    return Err(Error::new(
-                        "m2.camera.projection",
-                        "M2 cameras require diagonal field of view and a role, without visibility or lens parameters",
+                    return Err(Error::at(
+                        Location::for_owner(id).field("projection"),
+                        ProfileError::new(ProfileKind::M2, ProfileViolation::CameraProjection),
                     ));
                 }
                 m2::ActorKind::Light(light)
                     if light.shadows != LightShadows::default() || light.falloff.is_some() =>
                 {
-                    return Err(Error::new(
-                        "m2.light",
-                        "M2 lights have no independent shadow or falloff parameters",
+                    return Err(Error::at(
+                        Location::for_owner(id),
+                        ProfileError::new(ProfileKind::M2, ProfileViolation::LightParameters),
                     ));
                 }
                 _ => {}
@@ -77,61 +78,80 @@ impl Profile for M2 {
                 )
             })
         }) {
-            return Err(Error::new("m2.events.selection",
-                "ordinary M2 events require clip selection; shared-clock events require model-level selection"));
+            return Err(Error::at(
+                Location::new().field("events"),
+                ProfileError::new(ProfileKind::M2, ProfileViolation::EventSelection),
+            ));
         }
 
-        for (_, clip) in model.clips() {
+        for (id, clip) in model.clips() {
             if let Some(alias) = clip.properties.alias {
                 let target = model.clip(alias).expect("validated alias reference");
                 if clip.animations != target.animations {
-                    return Err(Error::new(
-                        "m2.clip.alias",
-                        "native aliases must select the same animation identities",
+                    return Err(Error::at(
+                        Location::for_owner(id).field("properties").field("alias"),
+                        ProfileError::new(
+                            ProfileKind::M2,
+                            ProfileViolation::AliasAnimationSelection {
+                                expected: target.animations.clone(),
+                                actual: clip.animations.clone(),
+                            },
+                        ),
                     ));
                 }
             }
         }
-        if model.clips().iter().any(|(_, clip)| !clip.is_looping()) {
-            return Err(Error::new(
-                "m2.clips.looping",
-                "nonlooping playback has no established native M2 mapping",
+        if let Some((id, _)) = model.clips().iter().find(|(_, clip)| !clip.is_looping()) {
+            return Err(Error::at(
+                Location::for_owner(id),
+                ProfileError::new(ProfileKind::M2, ProfileViolation::NonloopingClip),
             ));
         }
 
         let declared = |id| model.node(id).is_some_and(|node| node.properties.is_some());
-        if model
-            .metadata()
-            .key_bone_lookup
-            .iter()
-            .flatten()
-            .any(|id| !declared(*id))
-        {
-            return Err(Error::new(
-                "m2.key_bone_lookup",
-                "key-bone category must reference a declared bone",
-            ));
+        for (index, node) in model.metadata().key_bone_lookup.iter().enumerate() {
+            if let Some(node) = node.filter(|node| !declared(*node)) {
+                return Err(Error::at(
+                    Location::new()
+                        .field("metadata")
+                        .field("key_bone_lookup")
+                        .index(index)
+                        .with_owner(node),
+                    ProfileError::new(ProfileKind::M2, ProfileViolation::UndeclaredBone),
+                ));
+            }
         }
-        if model
-            .skins()
-            .iter()
-            .any(|(_, skin)| skin.joints.iter().any(|id| !declared(*id)))
-        {
-            return Err(Error::new(
-                "m2.skin.joints",
-                "joint palette must reference declared bones",
-            ));
+        for (id, skin) in model.skins() {
+            if let Some((index, node)) = skin
+                .joints
+                .iter()
+                .enumerate()
+                .find(|(_, node)| !declared(**node))
+            {
+                return Err(Error::at(
+                    Location::for_owner(id)
+                        .field("joints")
+                        .index(index)
+                        .with_owner(*node),
+                    ProfileError::new(ProfileKind::M2, ProfileViolation::UndeclaredBone),
+                ));
+            }
         }
-        if model.meshes().iter().any(|(_, mesh)| {
-            mesh.properties
+        for (id, mesh) in model.meshes() {
+            if let Some(node) = mesh
+                .properties
                 .as_ref()
                 .and_then(|controls| controls.center_bone)
-                .is_some_and(|id| !declared(id))
-        }) {
-            return Err(Error::new(
-                "m2.geometry.center_bone",
-                "sorting frame must reference a declared bone",
-            ));
+                .filter(|node| !declared(*node))
+            {
+                return Err(Error::at(
+                    Location::for_owner(id)
+                        .field("properties")
+                        .field("center_bone")
+                        .with_owner(node),
+                    ProfileError::new(ProfileKind::M2, ProfileViolation::UndeclaredBone),
+                ));
+            }
         }
         Ok(())
     }

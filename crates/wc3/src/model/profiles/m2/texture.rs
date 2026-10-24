@@ -1,36 +1,59 @@
 //! Resource admissibility for the built-in model profile.
+use crate::model::error::{Location, ProfileError, ProfileKind, ProfileViolation};
 use crate::model::profiles::M2;
 use crate::model::{Error, Model};
 pub(super) fn resources(resources: &Model<'_, M2>) -> Result<(), Error> {
     use crate::model::{AddressMode, ColorSpace, Sampler};
     for texture in resources.sampled_images() {
         if texture.color_space != ColorSpace::Unspecified {
-            return Err(Error::new(
-                "m2.texture.color_space",
-                "texture definitions do not declare a color transfer function",
+            return Err(Error::at(
+                Location::for_owner(texture.resource).field("color_space"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::ColorSpace {
+                        actual: texture.color_space,
+                    },
+                ),
             ));
         }
         if !matches!(texture.sampler.u, AddressMode::Repeat | AddressMode::Clamp)
             || !matches!(texture.sampler.v, AddressMode::Repeat | AddressMode::Clamp)
         {
-            return Err(Error::new(
-                "m2.texture.sampler",
-                "texture definitions support repeat or clamp addressing",
+            return Err(Error::at(
+                Location::for_owner(texture.resource).field("sampler"),
+                ProfileError::new(
+                    ProfileKind::M2,
+                    ProfileViolation::AddressMode {
+                        u: texture.sampler.u,
+                        v: texture.sampler.v,
+                    },
+                ),
             ));
         }
     }
-    for (_, feature) in resources.features() {
+    for (id, feature) in resources.features() {
         if let super::ActorKind::Particle(particle) = &feature.payload {
-            if particle
+            if let Some((index, image)) = particle
                 .details
                 .rendering
                 .textures
                 .iter()
-                .any(|image| image.sampler != Sampler::default())
+                .enumerate()
+                .find(|(_, image)| image.sampler != Sampler::default())
             {
-                return Err(Error::new(
-                    "m2.particle.sampler",
-                    "native age-driven particles repeat both texture axes",
+                return Err(Error::at(
+                    Location::for_owner(id)
+                        .field("details")
+                        .field("rendering")
+                        .field("textures")
+                        .index(index)
+                        .field("sampler"),
+                    ProfileError::new(
+                        ProfileKind::M2,
+                        ProfileViolation::ParticleSampler {
+                            actual: image.sampler,
+                        },
+                    ),
                 ));
             }
         }

@@ -1,6 +1,9 @@
 //! Exact projection constraints imposed by a built-in authoring vocabulary.
 use super::geometry::{AttributeValueKind, InfluenceKind, TopologyKind};
-use crate::model::{AttributeDomain, AttributeSemantic, GeometryKind, Interpolation};
+use crate::model::{
+    AddressMode, AnimationId, AttributeDomain, AttributeSemantic, ColorSpace, GeometryKind,
+    Interpolation, Sampler, ValueSlot,
+};
 use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
 
@@ -124,6 +127,22 @@ pub enum FeatureFamily {
     /// PointLight representation.
     PointLight,
 }
+/// A timeline or skeleton collection unavailable in a static world model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StaticModelComponent {
+    /// Clip-level animation selection.
+    Clips,
+    /// Shared animation clocks.
+    Clocks,
+    /// Joint palettes and skin bindings.
+    Skins,
+    /// Ordinary model-level animation tracks.
+    OrdinaryTracks,
+    /// Shared-clock model-level animation tracks.
+    SharedTracks,
+    /// Authored event occurrences.
+    Events,
+}
 /// A concrete authoring rule that cannot be projected exactly.
 #[derive(Clone, Debug)]
 pub enum ProfileViolation {
@@ -217,11 +236,21 @@ pub enum ProfileViolation {
     /// A shared-clock animation is selected at clip level.
     SharedClockSelection,
     /// Clips do not select the same ordered ordinary animations.
-    OrdinaryAnimationSelection,
+    OrdinaryAnimationSelection {
+        /// Ordered ordinary animation identities selected by the first clip.
+        expected: Vec<AnimationId>,
+        /// Ordered ordinary animation identities selected by the rejected clip.
+        actual: Vec<AnimationId>,
+    },
     /// An event is selected at a level incompatible with its clock.
     EventSelection,
     /// An alias selects different animation identities from its target.
-    AliasAnimationSelection,
+    AliasAnimationSelection {
+        /// Animation identities selected by the alias target.
+        expected: Vec<AnimationId>,
+        /// Animation identities selected by the alias.
+        actual: Vec<AnimationId>,
+    },
     /// Nonlooping playback has no established native mapping.
     NonloopingClip,
     /// A bone reference selects a node without a bone declaration.
@@ -231,22 +260,51 @@ pub enum ProfileViolation {
     /// A node visibility state cannot be retained.
     NodeVisibility,
     /// The animation value type has no exact native representation.
-    TrackValue,
+    TrackValue {
+        /// Typed property slot targeted by the unsupported channel.
+        target: ValueSlot,
+    },
     /// The target cannot retain this interpolation mode.
     Interpolation {
         /// Observed value or representation.
         actual: Interpolation,
     },
     /// The target image declaration has no transfer-function field.
-    ColorSpace,
+    ColorSpace {
+        /// Authored color transfer function.
+        actual: ColorSpace,
+    },
     /// The target supports only repeat and clamp addressing.
-    AddressMode,
+    AddressMode {
+        /// Authored horizontal addressing mode.
+        u: AddressMode,
+        /// Authored vertical addressing mode.
+        v: AddressMode,
+    },
     /// The native particle program requires the default sampler.
-    ParticleSampler,
+    ParticleSampler {
+        /// Authored sampler that differs from the native repeat sampler.
+        actual: Sampler,
+    },
     /// The image declaration cannot retain sampler or transfer-function settings.
-    ImageSampling,
+    ImageSampling {
+        /// Authored transfer function.
+        color_space: ColorSpace,
+        /// Authored sampler.
+        sampler: Sampler,
+    },
     /// A static world model contains skeleton, timeline or event data.
-    StaticAnimation,
+    StaticAnimation {
+        /// Unsupported timeline or skeleton collection.
+        component: StaticModelComponent,
+        /// Number of entries in that collection.
+        actual: usize,
+    },
+    /// A plane-bounded environmental volume has a negative fade distance.
+    NegativeVolumeFade {
+        /// Authored boundary fade distance.
+        actual: f32,
+    },
     /// A world model does not contain exactly one world system.
     WorldSystemCount {
         /// Required value or correspondence count.
@@ -319,20 +377,21 @@ impl Display for ProfileError {
             ProfileViolation::AnimatedField => f.write_str("field must be constant"),
             ProfileViolation::LightParameters => f.write_str("independent shadow and falloff parameters cannot be retained"),
             ProfileViolation::SharedClockSelection => f.write_str("shared-clock animations must be selected at model level"),
-            ProfileViolation::OrdinaryAnimationSelection => f.write_str("clips must select the same ordered ordinary animations"),
+            ProfileViolation::OrdinaryAnimationSelection { expected, actual } => write!(f, "expected ordinary animation selection {expected:?}, found {actual:?}"),
             ProfileViolation::EventSelection => f.write_str("ordinary events require clip selection and shared-clock events require model-level selection"),
-            ProfileViolation::AliasAnimationSelection => f.write_str("alias must select the target's animation identities"),
+            ProfileViolation::AliasAnimationSelection { expected, actual } => write!(f, "alias must select {expected:?}, found {actual:?}"),
             ProfileViolation::NonloopingClip => f.write_str("nonlooping playback has no native mapping"),
             ProfileViolation::UndeclaredBone => f.write_str("reference must select a declared bone"),
             ProfileViolation::SkinnedPlacementTransform => f.write_str("skinned geometry requires model-space joint transforms without a placed mesh transform"),
             ProfileViolation::NodeVisibility => f.write_str("hierarchy nodes cannot retain a hidden or animated visibility state"),
-            ProfileViolation::TrackValue => f.write_str("track value type has no exact native animation mapping"),
+            ProfileViolation::TrackValue { target } => write!(f, "track target {target:?} has no exact native animation mapping"),
             ProfileViolation::Interpolation { actual } => write!(f, "{actual:?} interpolation cannot be retained"),
-            ProfileViolation::ColorSpace => f.write_str("image declarations cannot retain a color transfer function"),
-            ProfileViolation::AddressMode => f.write_str("only repeat and clamp image addressing can be retained"),
-            ProfileViolation::ParticleSampler => f.write_str("age-driven particles require default repeat sampling"),
-            ProfileViolation::ImageSampling => f.write_str("image declarations cannot retain sampler or transfer-function settings"),
-            ProfileViolation::StaticAnimation => f.write_str("static world models cannot retain skeleton, timeline, or event programs"),
+            ProfileViolation::ColorSpace { actual } => write!(f, "image declarations cannot retain {actual:?} color space"),
+            ProfileViolation::AddressMode { u, v } => write!(f, "only repeat and clamp addressing can be retained, found {u:?}/{v:?}"),
+            ProfileViolation::ParticleSampler { actual } => write!(f, "age-driven particles require default repeat sampling, found {actual:?}"),
+            ProfileViolation::ImageSampling { color_space, sampler } => write!(f, "image declarations cannot retain {color_space:?} transfer and {sampler:?} sampling"),
+            ProfileViolation::StaticAnimation { component, actual } => write!(f, "static world models cannot retain {actual} {component:?} entries"),
+            ProfileViolation::NegativeVolumeFade { actual } => write!(f, "volume fade must be nonnegative, found {actual}"),
             ProfileViolation::WorldSystemCount { expected, actual } => write!(f, "expected {expected} world-system collection, found {actual}"),
             ProfileViolation::AbsoluteNodeTransform => f.write_str("static world actors require absolute transforms without hierarchy or visibility constraints"),
             ProfileViolation::RegionSelectionGroup { actual } => write!(f, "world regions cannot retain selection group {actual}"),

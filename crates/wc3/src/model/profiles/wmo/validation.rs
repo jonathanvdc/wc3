@@ -1,131 +1,196 @@
 //! Checks relationships between local world-profile objects.
 use super::{Volume, WorldSystem};
+use crate::model::error::{
+    GeometryError, Location, ProfileError, ProfileKind, ProfileViolation, StaticModelComponent,
+};
+use crate::model::geometry_schema::check_finite;
 use crate::model::Model;
 use crate::model::TimeSource;
 use crate::model::{Bounds, Error};
 use glam::Vec3;
 
 impl WorldSystem<'_> {
-    /// Checks portal, group, volume, set, and liquid relationships without a codec context.
+    /// Checks finite group and portal geometry and environmental volume boundaries.
     pub fn validate(&self) -> Result<(), Error> {
-        let volume_valid = |volume: &Volume| match volume {
-            Volume::Sphere { center, radii } => {
-                center
-                    .to_array()
-                    .iter()
-                    .chain(&radii.to_array())
-                    .all(|v| v.is_finite())
-                    && radii[0] >= 0.
-                    && radii[1] >= radii[0]
-            }
-            Volume::Planes { planes, fade } => {
-                planes.iter().all(|v| v.is_finite()) && fade.is_finite() && *fade >= 0.
-            }
-        };
-        for group in &self.groups {
-            if group.bounds.iter().any(|value| !value.is_finite())
-                || group.bounds[0]
-                    .to_array()
-                    .iter()
-                    .zip(group.bounds[1].to_array())
-                    .any(|(low, high)| *low > high)
+        for (index, group) in self.groups.iter().enumerate() {
+            check_finite(group.bounds.iter().map(|v| v.to_array()), || {
+                Location::new().field("groups").index(index).field("bounds")
+            })?;
+            for (component, (minimum, maximum)) in group.bounds[0]
+                .to_array()
+                .into_iter()
+                .zip(group.bounds[1].to_array())
+                .enumerate()
             {
-                return Err(Error::new(
-                    "world.groups.bounds",
-                    "catalog bounds must be finite and ordered",
-                ));
+                if minimum > maximum {
+                    return Err(Error::at(
+                        Location::new()
+                            .field("groups")
+                            .index(index)
+                            .field("bounds")
+                            .index(0)
+                            .index(component),
+                        GeometryError::InvertedBounds { minimum, maximum },
+                    ));
+                }
             }
         }
-        for portal in &self.portals {
-            if portal
-                .vertices
-                .iter()
-                .flat_map(|v| v.to_array())
-                .chain(portal.plane.to_array())
-                .any(|value| !value.is_finite())
-            {
-                return Err(Error::new(
-                    "world.portals",
-                    "portal vertices and plane must be finite",
-                ));
+        for (index, portal) in self.portals.iter().enumerate() {
+            check_finite(portal.vertices.iter().map(|v| v.to_array()), || {
+                Location::new()
+                    .field("portals")
+                    .index(index)
+                    .field("vertices")
+            })?;
+            check_finite([portal.plane.to_array()], || {
+                Location::new().field("portals").index(index).field("plane")
+            })?;
+        }
+        for (index, polygon) in self.visibility.iter().enumerate() {
+            check_finite(polygon.iter().map(|v| v.to_array()), || {
+                Location::new().field("visibility").index(index)
+            })?;
+        }
+        check_finite(self.occluders.iter().map(|v| v.to_array()), || {
+            Location::new().field("occluders")
+        })?;
+        for (index, fog) in self.fogs.iter().enumerate() {
+            volume(&fog.volume, || {
+                Location::new().field("fogs").index(index).field("volume")
+            })?;
+            for (field, parameters) in [
+                ("above_water", &fog.above_water),
+                ("underwater", &fog.underwater),
+            ] {
+                for (name, value) in [
+                    ("end", parameters.end),
+                    ("start_fraction", parameters.start_fraction),
+                ] {
+                    if !value.is_finite() {
+                        return Err(Error::at(
+                            Location::new()
+                                .field("fogs")
+                                .index(index)
+                                .field(field)
+                                .field(name),
+                            GeometryError::NonFinite { value },
+                        ));
+                    }
+                }
             }
         }
-        if self
-            .visibility
-            .iter()
-            .any(|polygon| polygon.iter().any(|value| !value.is_finite()))
-            || self.occluders.iter().any(|value| !value.is_finite())
-        {
-            return Err(Error::new(
-                "world.visibility",
-                "visibility geometry must be finite",
-            ));
-        }
-        for fog in &self.fogs {
-            if !volume_valid(&fog.volume)
-                || [
-                    fog.above_water.end,
-                    fog.above_water.start_fraction,
-                    fog.underwater.end,
-                    fog.underwater.start_fraction,
-                ]
-                .iter()
-                .any(|value| !value.is_finite())
-            {
-                return Err(Error::new(
-                    "profile.fogs",
-                    "fog boundary or doodad-set activation is invalid",
-                ));
-            }
-        }
-        for ambient in &self.ambient_volumes {
-            if !volume_valid(&ambient.volume) {
-                return Err(Error::new(
-                    "profile.ambient_volumes",
-                    "ambient boundary or doodad-set activation is invalid",
-                ));
-            }
+        for (index, ambient) in self.ambient_volumes.iter().enumerate() {
+            volume(&ambient.volume, || {
+                Location::new()
+                    .field("ambient_volumes")
+                    .index(index)
+                    .field("volume")
+            })?;
         }
         Ok(())
     }
 }
+fn volume(value: &Volume, location: impl Fn() -> Location) -> Result<(), Error> {
+    match value {
+        Volume::Sphere { center, radii } => {
+            check_finite([center.to_array()], || location().field("center"))?;
+            check_finite([radii.to_array()], || location().field("radii"))?;
+            if radii[0] < 0. {
+                return Err(Error::at(
+                    location().field("radii").index(0),
+                    GeometryError::NegativeRadius { radius: radii[0] },
+                ));
+            }
+            if radii[1] < radii[0] {
+                return Err(Error::at(
+                    location().field("radii").index(1),
+                    GeometryError::InvertedBounds {
+                        minimum: radii[0],
+                        maximum: radii[1],
+                    },
+                ));
+            }
+        }
+        Volume::Planes { planes, fade } => {
+            check_finite(planes.iter().map(|v| v.to_array()), || {
+                location().field("planes")
+            })?;
+            if !fade.is_finite() {
+                return Err(Error::at(
+                    location().field("fade"),
+                    GeometryError::NonFinite { value: *fade },
+                ));
+            }
+            if *fade < 0. {
+                return Err(Error::at(
+                    location().field("fade"),
+                    ProfileError::new(
+                        ProfileKind::Wmo,
+                        ProfileViolation::NegativeVolumeFade { actual: *fade },
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
     if let Some(bounds) = value.bounds() {
-        aabb_bounds(bounds, "world.bounds")?;
+        aabb_bounds(bounds, || Location::new().field("bounds"))?;
     }
-    for (_, mesh) in value.meshes() {
-        aabb_bounds(mesh.bounds, "world.geometry.bounds")?;
+    for (id, mesh) in value.meshes() {
+        aabb_bounds(mesh.bounds, || Location::for_owner(id).field("bounds"))?;
     }
     use crate::model::{Billboard, Inheritance, Transform};
-    if !value.clips().is_empty()
-        || !value.clocks().is_empty()
-        || !value.skins().is_empty()
-        || value
-            .global_tracks()
-            .find(|v| v.clock() == TimeSource::Animation)
-            .is_some()
-        || value
-            .global_tracks()
-            .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
-            .is_some()
-        || value
-            .animations()
-            .values()
-            .any(|animation| !animation.events.is_empty())
-    {
-        return Err(Error::new(
-            "world.animation",
-            "static world models have no skeleton, timeline, or event program",
-        ));
+    for (component, actual) in [
+        (StaticModelComponent::Clips, value.clips().len()),
+        (StaticModelComponent::Clocks, value.clocks().len()),
+        (StaticModelComponent::Skins, value.skins().len()),
+        (
+            StaticModelComponent::OrdinaryTracks,
+            value
+                .global_tracks()
+                .filter(|track| track.clock() == TimeSource::Animation)
+                .count(),
+        ),
+        (
+            StaticModelComponent::SharedTracks,
+            value
+                .global_tracks()
+                .filter(|track| matches!(track.clock(), TimeSource::Shared(_)))
+                .count(),
+        ),
+        (
+            StaticModelComponent::Events,
+            value
+                .animations()
+                .values()
+                .map(|animation| animation.events.len())
+                .sum(),
+        ),
+    ] {
+        if actual != 0 {
+            return Err(ProfileError::new(
+                ProfileKind::Wmo,
+                ProfileViolation::StaticAnimation { component, actual },
+            )
+            .into());
+        }
     }
     if value.systems().len() != 1 {
-        return Err(Error::new(
-            "world.systems",
-            "one static world model contains one world-system collection",
+        return Err(Error::at(
+            Location::new().field("systems"),
+            ProfileError::new(
+                ProfileKind::Wmo,
+                ProfileViolation::WorldSystemCount {
+                    expected: 1,
+                    actual: value.systems().len(),
+                },
+            ),
         ));
     }
-    for (_, node) in value.nodes() {
+    for (id, node) in value.nodes() {
         if node.parent.is_some()
             || node.inheritance != Inheritance::default()
             || node.billboard != Billboard::None
@@ -133,17 +198,22 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             || node.camera_anchored
             || node.transform.defaults(value.values()).pivot != Vec3::from_array([0.; 3])
         {
-            return Err(Error::new(
-                "world.nodes",
-                "static world actors use absolute transforms without inheritance, visibility, billboard or camera constraints",
+            return Err(Error::at(
+                Location::for_owner(id),
+                ProfileError::new(ProfileKind::Wmo, ProfileViolation::AbsoluteNodeTransform),
             ));
         }
     }
-    for (_, instance) in value.instances() {
+    for (id, instance) in value.instances() {
         if instance.selection_group != 0 {
-            return Err(Error::new(
-                "world.regions.selection_group",
-                "native world regions have no geometry selection-group field",
+            return Err(Error::at(
+                Location::for_owner(id).field("selection_group"),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::RegionSelectionGroup {
+                        actual: instance.selection_group,
+                    },
+                ),
             ));
         }
 
@@ -153,16 +223,23 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
                 .and_then(|world| world.ambient_volumes.get(ambient.index as usize))
                 .is_some_and(|ambient| ambient.global)
             {
-                return Err(Error::new(
-                    "world.regions.ambient",
-                    "globally active illumination cannot be selected by individual regions",
+                return Err(Error::at(
+                    Location::for_owner(id)
+                        .field("properties")
+                        .field("ambients")
+                        .with_owner(ambient.system),
+                    ProfileError::new(ProfileKind::Wmo, ProfileViolation::GlobalAmbientSelection),
                 ));
             }
         }
         for draw in &instance.draws {
             if let Some(controls) = &draw.properties {
                 if let Some(bounds) = controls.bounds {
-                    aabb_bounds(bounds, "world.draw.bounds")?;
+                    aabb_bounds(bounds, || {
+                        Location::for_owner(draw.id())
+                            .field("properties")
+                            .field("bounds")
+                    })?;
                 }
             }
         }
@@ -174,29 +251,31 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             .defaults(value.values())
             != Transform::default()
         {
-            return Err(Error::new(
-                "world.regions.transform",
-                "native world geometry is authored directly in world coordinates",
+            return Err(Error::at(
+                Location::for_owner(id).field("node"),
+                ProfileError::new(ProfileKind::Wmo, ProfileViolation::RegionTransform),
             ));
         }
     }
-    for (_, feature) in value.features() {
+    for (id, feature) in value.features() {
         let node = value.node(feature.node).expect("validated feature anchor");
         match &feature.payload {
             super::Node::Light(light) => {
                 if value.is_animated(light.color) || value.is_animated(light.intensity) {
-                    return Err(Error::new(
-                        "world.light.curves",
-                        "static world lights use constant properties or authored flicker programs",
+                    return Err(Error::at(
+                        Location::for_owner(id),
+                        ProfileError::new(ProfileKind::Wmo, ProfileViolation::LightAnimation),
                     ));
                 }
                 if node.transform.defaults(value.values()).scale != Vec3::from_array([1.; 3])
                     || (light.modern.is_some()
                         && node.transform.defaults(value.values()).rotation != Default::default())
                 {
-                    return Err(Error::new(
-                        "world.light.transform",
-                        "light shape scale and modern Euler orientation belong to the light definition",
+                    return Err(Error::at(
+                        Location::for_owner(id)
+                            .with_owner(feature.node)
+                            .field("transform"),
+                        ProfileError::new(ProfileKind::Wmo, ProfileViolation::LightTransform),
                     ));
                 }
             }
@@ -206,9 +285,12 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
                     || node.transform.defaults(value.values()).scale[1]
                         != node.transform.defaults(value.values()).scale[2]
                 {
-                    return Err(Error::new(
-                        "world.doodad.scale",
-                        "native world doodads have uniform scale",
+                    return Err(Error::at(
+                        Location::for_owner(id)
+                            .with_owner(feature.node)
+                            .field("transform")
+                            .field("scale"),
+                        ProfileError::new(ProfileKind::Wmo, ProfileViolation::DoodadScale),
                     ));
                 }
             }
@@ -216,9 +298,11 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
                 if node.transform.defaults(value.values()).rotation != Default::default()
                     || node.transform.defaults(value.values()).scale != Vec3::from_array([1.; 3])
                 {
-                    return Err(Error::new(
-                        "world.region.light.transform",
-                        "region lights use absolute translation; program Euler orientation belongs to the program definition",
+                    return Err(Error::at(
+                        Location::for_owner(id)
+                            .with_owner(feature.node)
+                            .field("transform"),
+                        ProfileError::new(ProfileKind::Wmo, ProfileViolation::RegionLightTransform),
                     ));
                 }
             }
@@ -238,27 +322,45 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
 
 pub(super) fn resources(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
     use crate::model::{AddressMode, ColorSpace, Sampler};
-    for (_, material) in value.materials() {
-        for input in material.surface.inputs() {
+    for (id, material) in value.materials() {
+        for (index, input) in material.surface.inputs().iter().enumerate() {
             if !matches!(input.sampling.u, AddressMode::Repeat | AddressMode::Clamp)
                 || !matches!(input.sampling.v, AddressMode::Repeat | AddressMode::Clamp)
             {
-                return Err(Error::new(
-                    "world.material.sampler",
-                    "WMO image inputs support repeat and clamp addressing",
+                return Err(Error::at(
+                    Location::for_owner(id)
+                        .field("surface")
+                        .index(index)
+                        .field("sampling"),
+                    ProfileError::new(
+                        ProfileKind::Wmo,
+                        ProfileViolation::AddressMode {
+                            u: input.sampling.u,
+                            v: input.sampling.v,
+                        },
+                    ),
                 ));
             }
         }
     }
     for texture in value.sampled_images() {
         if texture.color_space != ColorSpace::Unspecified || texture.sampler != Sampler::default() {
-            return Err(Error::new("world.images.sampling", "lightmap and light-cookie declarations have no native sampler or transfer-function fields"));
+            return Err(Error::at(
+                Location::for_owner(texture.resource),
+                ProfileError::new(
+                    ProfileKind::Wmo,
+                    ProfileViolation::ImageSampling {
+                        color_space: texture.color_space,
+                        sampler: texture.sampler,
+                    },
+                ),
+            ));
         }
     }
     Ok(())
 }
 
-fn aabb_bounds(bounds: Bounds, path: &str) -> Result<(), Error> {
+fn aabb_bounds(bounds: Bounds, location: impl Fn() -> Location) -> Result<(), Error> {
     let radius = bounds
         .minimum
         .to_array()
@@ -268,9 +370,15 @@ fn aabb_bounds(bounds: Bounds, path: &str) -> Result<(), Error> {
         .sum::<f32>()
         .sqrt();
     if bounds.sphere_radius != radius {
-        return Err(Error::new(
-            path,
-            "world bounds store an axis-aligned box; the sphere radius must equal its derived half-diagonal",
+        return Err(Error::at(
+            location().field("sphere_radius"),
+            ProfileError::new(
+                ProfileKind::Wmo,
+                ProfileViolation::BoundsRadius {
+                    expected: radius,
+                    actual: bounds.sphere_radius,
+                },
+            ),
         ));
     }
     Ok(())

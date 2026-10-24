@@ -1,6 +1,8 @@
 //! Interpreted M2 shader definitions. Native selector encodings are confined to conversion.
 use super::{GuildPalette, ModelRasterization, ShaderInput, TextureUnit};
 use crate::model::common::IntoOwned;
+use crate::model::error::Location;
+use crate::model::geometry_schema::check_finite;
 use crate::model::materials::state::PassState;
 use crate::model::profiles::SurfacePayload;
 use crate::model::values::model::{BatchFlags, BlendMode};
@@ -898,11 +900,21 @@ impl<'a> MaterialStep<'a> {
             Self::Unresolved(v) => Some(v.guild_palette),
             _ => self.guild_palette(),
         };
-        if palette.is_some_and(|v| !v.is_finite()) {
-            return Err(Error::new(
-                "m2.material.guild_palette",
-                "guild colours must be finite",
-            ));
+        if let Some(palette) = palette {
+            let field = if matches!(self, Self::Unresolved(_)) {
+                "guild_palette"
+            } else {
+                "palette"
+            };
+            for (name, value) in [
+                ("background", palette.background),
+                ("emblem", palette.emblem),
+                ("border", palette.border),
+            ] {
+                check_finite([value.to_array()], || {
+                    Location::new().field(field).field(name)
+                })?;
+            }
         }
         self.inputs().iter().try_for_each(|input| input.validate())
     }
