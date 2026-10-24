@@ -7,7 +7,7 @@ use crate::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 use crate::model_compilation::node_order;
 use crate::pose::local_transform;
 use crate::pose::{evaluate_pose, EvaluatedPose};
-use crate::{ModelError, PartBinding::*};
+use crate::{ModelError, PartBinding::*, PreparationContext};
 use bevy::camera::primitives::Aabb;
 use bevy::math::Vec4;
 use bevy::mesh::VertexAttributeValues;
@@ -196,13 +196,21 @@ impl CompiledModel {
         &self,
         parts: impl IntoIterator<Item = ModelPart<'a>>,
     ) -> Result<Self, ModelError> {
+        self.compose_with_context(parts, &|_| None)
+    }
+
+    pub(crate) fn compose_with_context<'a>(
+        &self,
+        parts: impl IntoIterator<Item = ModelPart<'a>>,
+        context: &dyn Fn(usize) -> Option<PreparationContext>,
+    ) -> Result<Self, ModelError> {
         let parts = parts.into_iter().collect::<Vec<_>>();
         let template = if self.image_template.is_some()
             || parts.iter().any(|part| part.model.image_template.is_some())
         {
             let source = self.image_template.as_deref().unwrap_or(self);
             Some(Arc::new(
-                source.compose(
+                source.compose_with_context(
                     parts
                         .iter()
                         .map(|part| ModelPart {
@@ -211,6 +219,7 @@ impl CompiledModel {
                             clips: part.clips.clone(),
                         })
                         .collect::<Vec<_>>(),
+                    context,
                 )?,
             ))
         } else {
@@ -219,335 +228,349 @@ impl CompiledModel {
         let mut output = self.clone();
         output.image_template = template;
         let mut identities = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
-        for part in parts {
-            let source = part.model;
-            let source_indices: HashMap<_, _> = source
-                .nodes
-                .iter()
-                .enumerate()
-                .map(|(i, node)| (node.id, i))
-                .collect();
-            let host_indices: HashMap<_, _> = output
-                .nodes
-                .iter()
-                .enumerate()
-                .map(|(i, node)| (node.id, i))
-                .collect();
-            let rigid = match &part.binding {
-                Mounted(placement) => {
-                    let (parent, point) = match placement.target {
-                        MountTarget::Node(parent) => (parent, None),
-                        MountTarget::Socket(point) => {
-                            let parent = output
-                                .features
-                                .attachment_node(point)
-                                .ok_or_else(|| ModelError::new("attachment point is absent"))?;
-                            (parent, Some(point))
-                        }
-                    };
-                    Some((parent, point, *placement))
-                }
-                Skinned { .. } => None,
-            };
-            if let Some((parent, point, placement)) = rigid {
-                let parent = *host_indices
-                    .get(&parent)
-                    .ok_or_else(|| ModelError::new("rigid mount node is absent"))?;
-                placement
-                    .validate_transform()
-                    .map_err(ModelError::from_source)?;
-                let conversion = ChildCoordinates {
-                    coordinates: placement.coordinates,
-                    parent_basis: output.basis,
-                }
-                .basis(source.basis)
-                .to_matrix();
-                let placement =
-                    transform(local_transform(placement.transform).to_matrix() * conversion)?;
-                for (&host, &child) in &part.clips {
-                    if !output.clips.iter().any(|(id, _)| *id == host)
-                        || !source.clips.iter().any(|(id, _)| *id == child)
-                    {
-                        return Err(ModelError::new(
-                            "rigid clip mapping references an absent clip",
-                        ));
+        for (index, part) in parts.into_iter().enumerate() {
+            let result = (|| -> Result<(), ModelError> {
+                let source = part.model;
+                let source_indices: HashMap<_, _> = source
+                    .nodes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, node)| (node.id, i))
+                    .collect();
+                let host_indices: HashMap<_, _> = output
+                    .nodes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, node)| (node.id, i))
+                    .collect();
+                let rigid = match &part.binding {
+                    Mounted(placement) => {
+                        let (parent, point) = match placement.target {
+                            MountTarget::Node(parent) => (parent, None),
+                            MountTarget::Socket(point) => {
+                                let parent = output
+                                    .features
+                                    .attachment_node(point)
+                                    .ok_or_else(|| ModelError::new("attachment point is absent"))?;
+                                (parent, Some(point))
+                            }
+                        };
+                        Some((parent, point, *placement))
                     }
+                    Skinned { .. } => None,
+                };
+                if let Some((parent, point, placement)) = rigid {
+                    let parent = *host_indices
+                        .get(&parent)
+                        .ok_or_else(|| ModelError::new("rigid mount node is absent"))?;
+                    placement
+                        .validate_transform()
+                        .map_err(ModelError::from_source)?;
+                    let conversion = ChildCoordinates {
+                        coordinates: placement.coordinates,
+                        parent_basis: output.basis,
+                    }
+                    .basis(source.basis)
+                    .to_matrix();
+                    let placement =
+                        transform(local_transform(placement.transform).to_matrix() * conversion)?;
+                    for (&host, &child) in &part.clips {
+                        if !output.clips.iter().any(|(id, _)| *id == host)
+                            || !source.clips.iter().any(|(id, _)| *id == child)
+                        {
+                            return Err(ModelError::new(
+                                "rigid clip mapping references an absent clip",
+                            ));
+                        }
+                    }
+                    output.mounts.push(RuntimeMount {
+                        parent,
+                        socket: point,
+                        transform: local_transform(placement),
+                        model: Arc::new(source.clone()),
+                        clips: part.clips,
+                    });
+                    let mut diagnostics = output.diagnostics.to_vec();
+                    diagnostics.extend(source.diagnostics.iter().cloned());
+                    output.diagnostics = diagnostics.into();
+                    return Ok(());
                 }
-                output.mounts.push(RuntimeMount {
-                    parent,
-                    socket: point,
-                    transform: local_transform(placement),
-                    model: Arc::new(source.clone()),
-                    clips: part.clips,
-                });
-                let mut diagnostics = output.diagnostics.to_vec();
-                diagnostics.extend(source.diagnostics.iter().cloned());
-                output.diagnostics = diagnostics.into();
-                continue;
-            }
-            let mut bindings = output.image_bindings.to_vec();
-            bindings.extend(source.image_bindings.iter().cloned());
-            output.image_bindings = bindings.into();
-            if source_indices
-                .keys()
-                .any(|id| host_indices.contains_key(id))
-            {
-                return Err(ModelError::new(
-                    "composition requires independently scoped model nodes",
-                ));
-            }
-            if !source.world.groups.is_empty() || !source.world.environments.is_empty() {
-                return Err(ModelError::new(
+                let mut bindings = output.image_bindings.to_vec();
+                bindings.extend(source.image_bindings.iter().cloned());
+                output.image_bindings = bindings.into();
+                if source_indices
+                    .keys()
+                    .any(|id| host_indices.contains_key(id))
+                {
+                    return Err(ModelError::new(
+                        "composition requires independently scoped model nodes",
+                    ));
+                }
+                if !source.world.groups.is_empty() || !source.world.environments.is_empty() {
+                    return Err(ModelError::new(
                     "static-world parts require a rigid mount to retain their regional selection",
                 ));
-            }
-            let source_rest = rest_poses(source);
-            let host_rest = rest_poses(&output);
-            let mut mapped = HashMap::new();
-            let (frame, parent) = match &part.binding {
-                Mounted(_) => unreachable!("rigid parts were handled above"),
-                Skinned { joints, transform } => {
-                    if joints.0.is_empty() {
-                        return Err(ModelError::new(
-                            "skinned part requires explicit joint bindings",
-                        ));
-                    }
-                    for (source, destination) in joints.iter() {
-                        let source = *source_indices
-                            .get(&source)
-                            .ok_or_else(|| ModelError::new("source binding joint is absent"))?;
-                        let destination = *host_indices
-                            .get(&destination)
-                            .ok_or_else(|| ModelError::new("host binding joint is absent"))?;
-                        mapped.insert(source, destination);
-                    }
-                    for joint in used_joints(source) {
-                        let mut ancestor = Some(joint);
-                        while let Some(index) = ancestor {
-                            if mapped.contains_key(&index) {
-                                break;
-                            }
-                            ancestor = source.nodes[index].parent;
+                }
+                let source_rest = rest_poses(source);
+                let host_rest = rest_poses(&output);
+                let mut mapped = HashMap::new();
+                let (frame, parent) = match &part.binding {
+                    Mounted(_) => unreachable!("rigid parts were handled above"),
+                    Skinned { joints, transform } => {
+                        if joints.0.is_empty() {
+                            return Err(ModelError::new(
+                                "skinned part requires explicit joint bindings",
+                            ));
                         }
-                        if ancestor.is_none() {
-                            return Err(ModelError::new(format!(
+                        for (source, destination) in joints.iter() {
+                            let source = *source_indices
+                                .get(&source)
+                                .ok_or_else(|| ModelError::new("source binding joint is absent"))?;
+                            let destination = *host_indices
+                                .get(&destination)
+                                .ok_or_else(|| ModelError::new("host binding joint is absent"))?;
+                            mapped.insert(source, destination);
+                        }
+                        for joint in used_joints(source) {
+                            let mut ancestor = Some(joint);
+                            while let Some(index) = ancestor {
+                                if mapped.contains_key(&index) {
+                                    break;
+                                }
+                                ancestor = source.nodes[index].parent;
+                            }
+                            if ancestor.is_none() {
+                                return Err(ModelError::new(format!(
                                 "weighted equipment joint {:?} has no host binding or bound ancestor",
                                 source.nodes[joint].id
                             )));
+                            }
+                        }
+                        (*transform, None)
+                    }
+                };
+                finite_frame(frame)?;
+                let mut nodes = output.nodes.to_vec();
+                let frame_index = nodes.len();
+                let rest = transform(frame)?;
+                let definition = identities
+                    .new_node("part coordinate frame")
+                    .with_transform(rest, identities.values_mut())
+                    .map_err(ModelError::from_source)?;
+                let slots = definition.transform;
+                let visibility = definition.visible;
+                let frame_id = identities
+                    .add_node(definition)
+                    .map_err(ModelError::from_source)?;
+                nodes.push(RuntimeNode {
+                    id: frame_id,
+                    name: "part coordinate frame".into(),
+                    parent,
+                    rest,
+                    transform: slots,
+                    visibility,
+                    channels: Default::default(),
+                    inheritance: Inheritance::default(),
+                    billboard: Billboard::None,
+                    transform_semantics: Default::default(),
+                    visible: true,
+                    camera_anchored: false,
+                    correction: None,
+                });
+                let mut node_map = vec![usize::MAX; source.nodes.len()];
+                for (index, node) in source.nodes.iter().enumerate() {
+                    if let Some(&host) = mapped.get(&index) {
+                        node_map[index] = host;
+                    } else {
+                        node_map[index] = nodes.len();
+                        nodes.push(node.clone());
+                    }
+                }
+                // Only frames used by extra bones, geometry, or features are created.
+                // Their identities remain source-local; the actual skin uses host joints.
+                let mut anchors = HashMap::new();
+                let mut anchor = |index: usize,
+                                  nodes: &mut Vec<RuntimeNode>|
+                 -> Result<usize, ModelError> {
+                    if let Some(&existing) = anchors.get(&index) {
+                        return Ok(existing);
+                    }
+                    let host = mapped[&index];
+                    finite_frame(host_rest[host])?;
+                    let mut node = source.nodes[index].clone();
+                    node.parent = Some(host);
+                    node.rest = transform(host_rest[host].inverse() * frame * source_rest[index])?;
+                    let pivot = source.nodes[index].rest.pivot;
+                    let rotation = Quat::from_array(node.rest.rotation.to_array());
+                    let scale = node.rest.scale;
+                    node.rest.translation =
+                        node.rest.translation - pivot + rotation * (scale * pivot);
+                    node.rest.pivot = pivot;
+                    node.transform = AnimatedTransform::new(node.rest, identities.values_mut());
+                    node.visibility = identities.add_value(node.visible);
+                    node.channels = Default::default();
+                    node.billboard = Billboard::None;
+                    node.camera_anchored = false;
+                    node.inheritance = Inheritance::default();
+                    let output = nodes.len();
+                    nodes.push(node);
+                    anchors.insert(index, output);
+                    Ok(output)
+                };
+                for (index, node) in source.nodes.iter().enumerate() {
+                    if mapped.contains_key(&index) {
+                        continue;
+                    }
+                    let parent = match node.parent {
+                        Some(parent) if mapped.contains_key(&parent) => anchor(parent, &mut nodes)?,
+                        Some(parent) => node_map[parent],
+                        None => frame_index,
+                    };
+                    nodes[node_map[index]].parent = Some(parent);
+                }
+                let mut frame_map = node_map.clone();
+                // Definition interpreters retain source node identities, including
+                // mapped feature anchors with a different rest-frame offset.
+                let required: HashSet<_> = source
+                    .features
+                    .hooks()
+                    .iter()
+                    .map(|(feature, _)| feature.node)
+                    .chain(
+                        source
+                            .draws
+                            .iter()
+                            .filter(|draw| draw.skin.is_none())
+                            .map(|draw| source.nodes[draw.node].id),
+                    )
+                    .chain(
+                        source
+                            .events
+                            .definitions
+                            .iter()
+                            .filter_map(|event| event.node),
+                    )
+                    .chain(
+                        source
+                            .mounts
+                            .iter()
+                            .map(|mount| source.nodes[mount.parent].id),
+                    )
+                    .collect();
+                for id in required {
+                    let index = source_indices[&id];
+                    if mapped.contains_key(&index) {
+                        frame_map[index] = anchor(index, &mut nodes)?;
+                    }
+                }
+                let id_map: HashMap<_, _> = source
+                    .nodes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, node)| (node.id, nodes[frame_map[i]].id))
+                    .collect();
+                let bound_ids: HashSet<_> = mapped.keys().map(|&i| source.nodes[i].id).collect();
+                let bound_slots: HashSet<_> = source
+                    .nodes
+                    .iter()
+                    .filter(|node| bound_ids.contains(&node.id))
+                    .flat_map(|node| {
+                        [
+                            node.transform.translation.slot(),
+                            node.transform.rotation.slot(),
+                            node.transform.scale.slot(),
+                            node.visibility.slot(),
+                        ]
+                    })
+                    .collect();
+                let clip_pairs: Vec<_> = part
+                    .clips
+                    .iter()
+                    .map(|(&host, &part)| (host, part))
+                    .collect();
+                output.animation = Arc::new(
+                    output
+                        .animation
+                        .compose(&source.animation, &clip_pairs, |channel| {
+                            !bound_slots.contains(&channel.target())
+                        })
+                        .map_err(ModelError::from_source)?,
+                );
+                for mount in &source.mounts {
+                    output.mounts.push(RuntimeMount {
+                        parent: frame_map[mount.parent],
+                        socket: mount.socket,
+                        transform: mount.transform,
+                        model: mount.model.clone(),
+                        clips: part
+                            .clips
+                            .iter()
+                            .filter_map(|(&host, &source)| {
+                                mount.clips.get(&source).map(|&child| (host, child))
+                            })
+                            .collect(),
+                    });
+                }
+                let skin_offset = output.skins.len();
+                for skin in &source.skins {
+                    let mut binds = skin.binds.to_vec();
+                    for (slot, &joint) in skin.joints.iter().enumerate() {
+                        if let Some(&host) = mapped.get(&joint) {
+                            finite_frame(host_rest[host])?;
+                            binds[slot] = host_rest[host].inverse()
+                                * frame
+                                * source_rest[joint]
+                                * binds[slot];
                         }
                     }
-                    (*transform, None)
+                    output.skins.push(RuntimeSkin {
+                        joints: skin.joints.iter().map(|&i| node_map[i]).collect(),
+                        binds: binds.into(),
+                    });
                 }
-            };
-            finite_frame(frame)?;
-            let mut nodes = output.nodes.to_vec();
-            let frame_index = nodes.len();
-            let rest = transform(frame)?;
-            let definition = identities
-                .new_node("part coordinate frame")
-                .with_transform(rest, identities.values_mut())
-                .map_err(ModelError::from_source)?;
-            let slots = definition.transform;
-            let visibility = definition.visible;
-            let frame_id = identities
-                .add_node(definition)
-                .map_err(ModelError::from_source)?;
-            nodes.push(RuntimeNode {
-                id: frame_id,
-                name: "part coordinate frame".into(),
-                parent,
-                rest,
-                transform: slots,
-                visibility,
-                channels: Default::default(),
-                inheritance: Inheritance::default(),
-                billboard: Billboard::None,
-                transform_semantics: Default::default(),
-                visible: true,
-                camera_anchored: false,
-                correction: None,
-            });
-            let mut node_map = vec![usize::MAX; source.nodes.len()];
-            for (index, node) in source.nodes.iter().enumerate() {
-                if let Some(&host) = mapped.get(&index) {
-                    node_map[index] = host;
-                } else {
-                    node_map[index] = nodes.len();
-                    nodes.push(node.clone());
+                for draw in &source.draws {
+                    let mut draw = draw.clone();
+                    draw.node = frame_map[draw.node];
+                    draw.skin = draw.skin.map(|i| i + skin_offset);
+                    output.draws.push(draw);
                 }
-            }
-            // Only frames used by extra bones, geometry, or features are created.
-            // Their identities remain source-local; the actual skin uses host joints.
-            let mut anchors = HashMap::new();
-            let mut anchor = |index: usize,
-                              nodes: &mut Vec<RuntimeNode>|
-             -> Result<usize, ModelError> {
-                if let Some(&existing) = anchors.get(&index) {
-                    return Ok(existing);
+                for liquid in &source.liquids {
+                    let mut liquid = liquid.clone();
+                    liquid.node = frame_map[liquid.node];
+                    output.liquids.push(liquid);
                 }
-                let host = mapped[&index];
-                finite_frame(host_rest[host])?;
-                let mut node = source.nodes[index].clone();
-                node.parent = Some(host);
-                node.rest = transform(host_rest[host].inverse() * frame * source_rest[index])?;
-                let pivot = source.nodes[index].rest.pivot;
-                let rotation = Quat::from_array(node.rest.rotation.to_array());
-                let scale = node.rest.scale;
-                node.rest.translation = node.rest.translation - pivot + rotation * (scale * pivot);
-                node.rest.pivot = pivot;
-                node.transform = AnimatedTransform::new(node.rest, identities.values_mut());
-                node.visibility = identities.add_value(node.visible);
-                node.channels = Default::default();
-                node.billboard = Billboard::None;
-                node.camera_anchored = false;
-                node.inheritance = Inheritance::default();
-                let output = nodes.len();
-                nodes.push(node);
-                anchors.insert(index, output);
-                Ok(output)
-            };
-            for (index, node) in source.nodes.iter().enumerate() {
-                if mapped.contains_key(&index) {
-                    continue;
-                }
-                let parent = match node.parent {
-                    Some(parent) if mapped.contains_key(&parent) => anchor(parent, &mut nodes)?,
-                    Some(parent) => node_map[parent],
-                    None => frame_index,
-                };
-                nodes[node_map[index]].parent = Some(parent);
-            }
-            let mut frame_map = node_map.clone();
-            // Definition interpreters retain source node identities, including
-            // mapped feature anchors with a different rest-frame offset.
-            let required: HashSet<_> = source
-                .features
-                .hooks()
-                .iter()
-                .map(|(feature, _)| feature.node)
-                .chain(
-                    source
-                        .draws
-                        .iter()
-                        .filter(|draw| draw.skin.is_none())
-                        .map(|draw| source.nodes[draw.node].id),
-                )
-                .chain(
-                    source
-                        .events
-                        .definitions
-                        .iter()
-                        .filter_map(|event| event.node),
-                )
-                .chain(
-                    source
-                        .mounts
-                        .iter()
-                        .map(|mount| source.nodes[mount.parent].id),
-                )
-                .collect();
-            for id in required {
-                let index = source_indices[&id];
-                if mapped.contains_key(&index) {
-                    frame_map[index] = anchor(index, &mut nodes)?;
-                }
-            }
-            let id_map: HashMap<_, _> = source
-                .nodes
-                .iter()
-                .enumerate()
-                .map(|(i, node)| (node.id, nodes[frame_map[i]].id))
-                .collect();
-            let bound_ids: HashSet<_> = mapped.keys().map(|&i| source.nodes[i].id).collect();
-            let bound_slots: HashSet<_> = source
-                .nodes
-                .iter()
-                .filter(|node| bound_ids.contains(&node.id))
-                .flat_map(|node| {
-                    [
-                        node.transform.translation.slot(),
-                        node.transform.rotation.slot(),
-                        node.transform.scale.slot(),
-                        node.visibility.slot(),
-                    ]
-                })
-                .collect();
-            let clip_pairs: Vec<_> = part
-                .clips
-                .iter()
-                .map(|(&host, &part)| (host, part))
-                .collect();
-            output.animation = Arc::new(
-                output
-                    .animation
-                    .compose(&source.animation, &clip_pairs, |channel| {
-                        !bound_slots.contains(&channel.target())
-                    })
-                    .map_err(ModelError::from_source)?,
-            );
-            for mount in &source.mounts {
-                output.mounts.push(RuntimeMount {
-                    parent: frame_map[mount.parent],
-                    socket: mount.socket,
-                    transform: mount.transform,
-                    model: mount.model.clone(),
-                    clips: part
-                        .clips
-                        .iter()
-                        .filter_map(|(&host, &source)| {
-                            mount.clips.get(&source).map(|&child| (host, child))
-                        })
-                        .collect(),
-                });
-            }
-            let skin_offset = output.skins.len();
-            for skin in &source.skins {
-                let mut binds = skin.binds.to_vec();
-                for (slot, &joint) in skin.joints.iter().enumerate() {
-                    if let Some(&host) = mapped.get(&joint) {
-                        finite_frame(host_rest[host])?;
-                        binds[slot] =
-                            host_rest[host].inverse() * frame * source_rest[joint] * binds[slot];
-                    }
-                }
-                output.skins.push(RuntimeSkin {
-                    joints: skin.joints.iter().map(|&i| node_map[i]).collect(),
-                    binds: binds.into(),
-                });
-            }
-            for draw in &source.draws {
-                let mut draw = draw.clone();
-                draw.node = frame_map[draw.node];
-                draw.skin = draw.skin.map(|i| i + skin_offset);
-                output.draws.push(draw);
-            }
-            for liquid in &source.liquids {
-                let mut liquid = liquid.clone();
-                liquid.node = frame_map[liquid.node];
-                output.liquids.push(liquid);
-            }
-            Arc::make_mut(&mut output.features).append_remapped(&source.features, &id_map);
-            Arc::make_mut(&mut output.particles).append_remapped(
-                &source.particles,
-                &frame_map,
-                &id_map,
-                &part.clips,
-            );
-            Arc::make_mut(&mut output.events).append_remapped(
-                &source.events,
-                &frame_map,
-                &id_map,
-                &part.clips,
-            );
-            Arc::make_mut(&mut output.physics).append_remapped(&source.physics, &node_map, &nodes);
-            let mut diagnostics = output.diagnostics.to_vec();
-            diagnostics.extend(source.diagnostics.iter().cloned());
-            output.diagnostics = diagnostics.into();
-            output.has_animation |= source.has_animation;
-            output.pose_animated |= source.pose_animated;
-            output.camera_sensitive |= source.camera_sensitive;
-            output.order = node_order(&nodes)?.into();
-            output.nodes = nodes.into();
+                Arc::make_mut(&mut output.features).append_remapped(&source.features, &id_map);
+                Arc::make_mut(&mut output.particles).append_remapped(
+                    &source.particles,
+                    &frame_map,
+                    &id_map,
+                    &part.clips,
+                );
+                Arc::make_mut(&mut output.events).append_remapped(
+                    &source.events,
+                    &frame_map,
+                    &id_map,
+                    &part.clips,
+                );
+                Arc::make_mut(&mut output.physics).append_remapped(
+                    &source.physics,
+                    &node_map,
+                    &nodes,
+                );
+                let mut diagnostics = output.diagnostics.to_vec();
+                diagnostics.extend(source.diagnostics.iter().cloned());
+                output.diagnostics = diagnostics.into();
+                output.has_animation |= source.has_animation;
+                output.pose_animated |= source.pose_animated;
+                output.camera_sensitive |= source.camera_sensitive;
+                output.order = node_order(&nodes)?.into();
+                output.nodes = nodes.into();
+                Ok(())
+            })();
+            result.map_err(|error| match context(index) {
+                Some(context) => error.with_context(context),
+                None => error,
+            })?;
         }
         output.lod = Arc::new(LodDefinition::compile(
             &output.draws,

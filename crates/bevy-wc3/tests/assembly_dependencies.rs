@@ -7,7 +7,7 @@ use bevy_wc3::assembly::{
     SelectionError, Source, SourceDependencies,
 };
 use bevy_wc3::{
-    spawn_model, ChildModelBinding, ChildModelKey, ModelError, ModelMaterial, ModelRig,
+    spawn_model, ChildModelBinding, ChildModelKey, JointMap, ModelError, ModelMaterial, ModelRig,
     PartBinding, ParticleEffect, ParticleProgramControls, PreparationContext, PreparationOperation,
     RenderDiagnosticKind,
 };
@@ -397,4 +397,39 @@ fn resolution_is_stable_and_uses_resource_identity_not_model_equivalence() {
     )
     .unwrap();
     assert_eq!(calls, [resource("root"), resource("other")]);
+}
+
+#[test]
+fn public_composition_failure_retains_original_part_after_coalescing() {
+    let (root, root_node, _, _, _) = source();
+    let (armor, armor_node, _, _, _) = source();
+    let (mounted, foreign_node, _, _, _) = source();
+    let models: Models<'_, '_> = [
+        (resource("root"), &root),
+        (resource("armor"), &armor),
+        (resource("mounted"), &mounted),
+    ]
+    .into();
+    let mut plan = Assembly::new(Source::new(resource("root")));
+    let armor = Part::new(
+        Source::new(resource("armor")),
+        PartBinding::Skinned {
+            joints: JointMap::new([(armor_node, root_node)]).unwrap(),
+            transform: Mat4::IDENTITY,
+        },
+    );
+    plan.parts.extend([armor.clone(), armor]);
+    plan.parts
+        .push(part(Source::new(resource("mounted")), foreign_node));
+    let error = compile_assembly(&plan, &models, &mut Assets::default(), pixels)
+        .err()
+        .unwrap();
+    assert!(error.contexts().iter().any(|context| matches!(context, PreparationContext::Part { index: 2, model } if *model == resource("mounted"))), "{error}");
+    assert!(error.contexts().contains(&PreparationContext::Operation(
+        PreparationOperation::Compose
+    )));
+    assert!(
+        error.to_string().contains("rigid mount node is absent"),
+        "{error}"
+    );
 }

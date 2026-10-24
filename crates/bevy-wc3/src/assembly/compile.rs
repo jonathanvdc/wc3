@@ -226,7 +226,7 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
         compiled_parts.push(compiled);
     }
     compiled_root
-        .compose(
+        .compose_with_context(
             compiled_parts
                 .iter()
                 .zip(bindings)
@@ -236,6 +236,12 @@ fn compile_with_dependencies<B: Clone + PartialEq>(
                     binding,
                     clips: part.part.clips.iter().map(|(&a, &b)| (a, b)).collect(),
                 }),
+            &|index| {
+                Some(PreparationContext::Part {
+                    index: parts[index].index,
+                    model: parts[index].part.source.model.clone(),
+                })
+            },
         )
         .map_err(|error| {
             error
