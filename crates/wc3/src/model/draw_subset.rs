@@ -196,7 +196,10 @@ impl DrawSubsets {
             if let Some(strip) = subset.strip {
                 if !matches!(strip.selection.range, PrimitiveRange::StripIndices { .. }) {
                     return Err(Error::at(
-                        Location::for_owner(id).field("strip").field("range"),
+                        Location::for_owner(id)
+                            .field("strip")
+                            .field("selection")
+                            .field("range"),
                         GeometryError::SelectionDomain {
                             topology: TopologyKind::TriangleStrip,
                             range: strip.selection.range,

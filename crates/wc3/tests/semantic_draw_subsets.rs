@@ -2,12 +2,14 @@ use glam::Vec3;
 use wc3::model::common::IntoZeroVec;
 use wc3::model::common::PackedArray;
 use wc3::model::conversion::{Context, ExportOptions};
-use wc3::model::error::{ErrorKind, GeometryError, GeometryOperation, Owner, Segment};
+use wc3::model::error::{
+    ErrorKind, GeometryError, GeometryOperation, Location, Owner, Segment, TopologyKind,
+};
 use wc3::model::io::geometry;
 use wc3::model::ModelMetadata;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
-    Mesh, MeshInstance, ModelBuilder, PrimitiveRange, PrimitiveSelection, Topology,
+    Mesh, MeshInstance, ModelBuilder, PrimitiveRange, PrimitiveSelection, StripSelection, Topology,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
@@ -219,6 +221,37 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
         builder.finish()
     }
     .is_err());
+}
+
+#[test]
+fn supplemental_strip_failure_identifies_the_actual_selection_range() {
+    let mut source = mesh();
+    let selection = PrimitiveSelection {
+        connectivity: source.subsets.primary(),
+        range: PrimitiveRange::Primitives { first: 0, count: 1 },
+    };
+    let mut definition = DrawSubset::new(selection);
+    definition.strip = Some(StripSelection {
+        selection,
+        control: 0,
+    });
+    let subset = source.add_subset(definition);
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let mesh = builder.add_mesh(source).unwrap();
+    let error = builder.finish().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Geometry(GeometryError::SelectionDomain {
+        topology: TopologyKind::TriangleStrip, range
+    }) if *range == selection.range)
+    );
+    assert_eq!(
+        error.location(),
+        &Location::for_owner(subset)
+            .field("strip")
+            .field("selection")
+            .field("range")
+            .with_owner(mesh)
+    );
 }
 
 #[test]
