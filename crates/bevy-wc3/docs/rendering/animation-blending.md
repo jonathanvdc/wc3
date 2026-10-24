@@ -20,7 +20,13 @@ it using the model's default blend duration.
 `play_with_blend` accepts a `Duration`, and `play_immediately` requests no fade.
 Repeated play calls restart the clock, so
 issue them when the desired animation changes. Invalid selections become
-`PlaybackError` during evaluation.
+`PlaybackError` during evaluation. It stores the original checked model error;
+unknown clips retain the requested `ClipId`, and invalid clocks retain their
+numeric input and distinguish local from shared time through structured context.
+Repeated failures of those inputs leave the component unchanged when their
+context and evidence match. Nonfinite time comparison uses the original floating
+point bits, including NaN payloads. Other causes are retained without equating
+formatted messages. A successful evaluation clears the stored failure.
 
 M2 incoming/outgoing duration pairs are retained by the semantic clips, but native
 arbitration between source and destination timing is not interpreted. Nonzero
