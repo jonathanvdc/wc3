@@ -1,9 +1,13 @@
 use std::error::Error as _;
-use wc3::model::error::{AnimationError, ErrorKind, Owner, Segment, TransformError};
+use wc3::model::error::{AnimationError, ErrorKind, Owner, PhysicsError, Segment, TransformError};
 use wc3::model::profiles::Universal;
+use wc3::model::systems::model_physics::{
+    Body, Constraint, Frame, Joint, Motor, Physics, Shape, ShapeGeometry, Spring,
+};
 use wc3::model::{
     AnimationProgram, AnimationSample, Axis, Basis, Clip, Curve, Handedness, LengthUnit, Mat4,
-    Model, ModelMetadata, PoseLayout, SharedClock, Time, TransformSemantics, Vec3,
+    Model, ModelMetadata, NodeId, PoseLayout, SharedClock, Time, TransformSemantics, ValueGroups,
+    Vec3, Vec4,
 };
 
 fn time(seconds: f64) -> Time {
@@ -211,4 +215,192 @@ fn correction_failures_retain_the_actual_matrix_and_node() {
         error.kind(),
         ErrorKind::Transform(TransformError::NonFiniteVector { vector }) if vector.x == f32::INFINITY
     ));
+}
+
+fn body(node: NodeId) -> Body<'static> {
+    Body {
+        node,
+        kind: Default::default(),
+        gravity_scale: 1.,
+        inertia_scale: 1.,
+        linear_damping: 0.,
+        angular_damping: 0.,
+        follow_factor: 0.,
+        parent_body: None,
+        attachment_host: false,
+        ragdoll_root: false,
+        shapes: Vec::new(),
+    }
+}
+
+fn shape(geometry: ShapeGeometry<'static>) -> Shape<'static> {
+    Shape {
+        transform: Mat4::IDENTITY,
+        geometry,
+        friction: 0.,
+        restitution: 0.,
+        density: 1.,
+        mass_properties: None,
+        game_flags: Default::default(),
+        collision_mask: Default::default(),
+    }
+}
+
+fn physics() -> (Physics<'static>, NodeId, NodeId) {
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let first = draft.add_named_node("first").unwrap();
+    let second = draft.add_named_node("second").unwrap();
+    (
+        Physics {
+            kind: Default::default(),
+            resource: None,
+            bodies: vec![body(first)],
+            joints: Vec::new(),
+            collision_pairs: Vec::new(),
+            wind_coefficients: None,
+            follow_allow_list: Default::default(),
+            vegetation: Vec::new(),
+        },
+        first,
+        second,
+    )
+}
+
+#[test]
+fn physics_failures_retain_body_identity_coefficient_and_missing_parent() {
+    let (mut physics, first, second) = physics();
+    physics.bodies[0].angular_damping = f32::INFINITY;
+    let error = physics.validate().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Physics(PhysicsError::NonFiniteValue { value }) if *value == f64::INFINITY)
+    );
+    assert_eq!(
+        error.location().segments().first(),
+        Some(&Segment::Owner(Owner::Node(first)))
+    );
+    assert!(
+        matches!(error.location().segments().last(), Some(Segment::Field(field)) if field == "angular_damping")
+    );
+    physics.bodies[0].angular_damping = 0.;
+    physics.bodies[0].parent_body = Some(second);
+    let error = physics.validate().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Physics(PhysicsError::MissingBody { body }) if *body == second)
+    );
+}
+
+#[test]
+fn physics_contact_failures_distinguish_negative_coefficients_and_projective_matrices() {
+    let (mut physics, _, _) = physics();
+    physics.bodies[0]
+        .shapes
+        .push(shape(ShapeGeometry::Sphere(-2.)));
+    let error = physics.validate().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Physics(PhysicsError::NegativeValue { value: -2. })
+    ));
+    assert_eq!(error.location().segments().last(), Some(&Segment::Index(0)));
+    physics.bodies[0].shapes[0].geometry = ShapeGeometry::Sphere(1.);
+    physics.bodies[0].shapes[0].transform.x_axis.w = 0.5;
+    let error = physics.validate().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Physics(PhysicsError::NonAffineMatrix { last_row }) if last_row.x == 0.5)
+    );
+}
+
+#[test]
+fn convex_boundary_failures_retain_lengths_face_component_and_edge() {
+    let (mut physics, _, _) = physics();
+    physics.bodies[0]
+        .shapes
+        .push(shape(ShapeGeometry::ConvexHull {
+            vertices: [Vec3::ZERO, Vec3::X, Vec3::Y].into_iter().collect(),
+            planes: Default::default(),
+            faces: ValueGroups::from_rows([[0, 1, 9]]),
+        }));
+    let error = physics.validate().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Physics(PhysicsError::HullPlaneCount {
+            faces: 1,
+            planes: 0
+        })
+    ));
+    let ShapeGeometry::ConvexHull { planes, .. } = &mut physics.bodies[0].shapes[0].geometry else {
+        unreachable!()
+    };
+    *planes = [Vec4::Z].into_iter().collect();
+    let error = physics.validate().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Physics(PhysicsError::HullVertexOutOfBounds {
+            vertex: 9,
+            vertices: 3
+        })
+    ));
+    assert_eq!(error.location().segments().last(), Some(&Segment::Index(2)));
+    let ShapeGeometry::ConvexHull { faces, .. } = &mut physics.bodies[0].shapes[0].geometry else {
+        unreachable!()
+    };
+    *faces = ValueGroups::from_rows([[0, 1, 2]]);
+    let error = physics.validate().unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Physics(PhysicsError::HullOpenEdge { from: 0, to: 1 })
+    ));
+}
+
+#[test]
+fn nested_constraint_locations_preserve_finite_only_acceptance_rules() {
+    let (mut physics, first, second) = physics();
+    physics.bodies.push(body(second));
+    let frame = Frame {
+        axis_x: Vec3::X,
+        axis_y: Vec3::Y,
+        axis_z: Vec3::Z,
+        origin: Vec3::ZERO,
+    };
+    physics.joints.push(Joint {
+        body_a: first,
+        body_b: second,
+        frame_a: frame,
+        frame_b: frame,
+        constraint: Constraint::Shoulder {
+            twist: [0., 1.],
+            cone: 1.,
+            motor: Motor {
+                spring: Spring {
+                    frequency_hz: f32::NAN,
+                    damping_ratio: 0.,
+                },
+                ..Default::default()
+            },
+        },
+    });
+    let error = physics.validate().unwrap_err();
+    assert!(
+        matches!(error.kind(), ErrorKind::Physics(PhysicsError::NonFiniteValue { value }) if value.is_nan())
+    );
+    let fields: Vec<_> = error
+        .location()
+        .segments()
+        .iter()
+        .filter_map(|segment| match segment {
+            Segment::Field(field) => Some(field.as_ref()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        fields,
+        ["joints", "constraint", "motor", "spring", "frequency_hz"]
+    );
+    let Constraint::Shoulder { motor, .. } = &mut physics.joints[0].constraint else {
+        unreachable!()
+    };
+    motor.spring.frequency_hz = -1.;
+    assert!(
+        physics.validate().is_ok(),
+        "this constraint previously required finite values without a positivity constraint"
+    );
 }
