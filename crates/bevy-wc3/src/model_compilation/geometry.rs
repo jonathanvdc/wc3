@@ -142,7 +142,7 @@ pub(super) fn compile_draw_geometry(
                             };
                             part.mesh
                                 .merge_duplicate_vertices()
-                                .map_err(|e| ModelError::from_source(e))?;
+                                .map_err(ModelError::from_source)?;
                             Ok((mesh_interner.intern(part.mesh), compact_skin))
                         })
                         .collect::<Result<Vec<_>, ModelError>>()?;

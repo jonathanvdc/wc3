@@ -34,7 +34,18 @@ unsupported rendering behavior remain in asset and compiled diagnostics.
 companions, failed source reads, and compilation. Missing companions retain the
 typed request and candidate paths; failed companion reads retain the request and
 failing path. Native errors retain their root context and typed codec or
-conversion cause through standard error sources.
+conversion cause through standard error sources. Compilation and image failures
+use `ModelError`, whose `contexts()` identifies preparation operations, model or
+part resources, and resolved asset paths. Its error source retains the concrete
+validation, image, atlas or provider error. Construct callback failures with
+`ModelError::from_source(error)`; reserve `ModelError::new(message)` for application
+contract failures without an underlying error value. Use typed context and error
+sources for policy, since displayed explanations can change.
+
+Direct image failures retain Bevy's original load wrapper in `ImageLoadError`.
+Its standard error source exposes BLP and Bevy image-loader causes. If an
+application registers another image loader, inspect `ImageLoadError::load` and
+Bevy's `AssetLoaderError::error()` downcast API for that loader's opaque error.
 
 Rendering diagnostics carry a `kind`, `severity`, and typed semantic `source`.
 Use those fields to select application policy; messages explain the limitation
