@@ -7,7 +7,7 @@ pub use location::{Location, Owner, Segment};
 mod reference;
 pub use reference::ReferenceError;
 mod geometry;
-pub use geometry::GeometryError;
+pub use geometry::*;
 mod animation;
 pub use animation::AnimationError;
 mod transform;
@@ -15,7 +15,7 @@ pub use transform::TransformError;
 mod physics;
 pub use physics::PhysicsError;
 mod profile;
-pub use profile::ProfileError;
+pub use profile::*;
 
 /// The semantic domain and actual violated constraint.
 #[derive(Clone, Debug)]

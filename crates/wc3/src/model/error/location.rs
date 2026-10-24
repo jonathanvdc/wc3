@@ -106,7 +106,8 @@ owners! {
 pub enum Segment {
     /// A scoped owner or nested definition.
     Owner(Owner),
-    /// An actual field name or custom-schema data label.
+    /// One local field identifier or actual custom-schema data label.
+    /// Nesting, owners and indices occupy separate segments.
     Field(Cow<'static, str>),
     /// An element within an ordered field.
     Index(usize),
@@ -132,7 +133,9 @@ impl Location {
     pub fn for_owner(owner: impl Into<Owner>) -> Self {
         Self::new().with_owner(owner)
     }
-    /// Appends a literal field name, without interpreting punctuation.
+    /// Appends one local identifier, with nesting and indices in separate segments.
+    /// Punctuation is literal only when it belongs to an actual authored or
+    /// custom-schema field label; this does not accept an encoded field path.
     pub fn field(mut self, field: impl Into<Cow<'static, str>>) -> Self {
         self.segments.push(Segment::Field(field.into()));
         self
