@@ -42,6 +42,8 @@ scope; its benchmark IDs distinguish the individual operations and input sizes.
 | --- | --- |
 | `wc3/model` | MDX read/write and typed traversal, MDL parse/write, version conversion, geometry access, and resource discovery in 800 and 1800 layouts. |
 | `wc3/animation` | Scalar, vector, and quaternion sampling across interpolation modes, key counts, and access patterns; sequence/global clock boundaries and event traversal. |
+| `wc3/packed_storage` | Borrowed and owned packed reads, transforms, clone/edit costs, and component controls for interval sampling. |
+| `wc3/packed_interval` | Compiled interval-animation replay across generated clip and property distributions, isolated from sampler method-pointer controls. |
 | `wc3/evaluation` | Prepared pose evaluation, node transforms, and projection of 1,024 triangles. |
 | `wc3/blp` | Container read/write, base-level and full-chain pixel decoding, caller-provided output buffers, and encoding with generated or supplied mipmaps. Indexed alpha, JPEG, BGRA, and DXT1/3/5 are covered. |
 | `wc3/mpq` | Archive creation/opening, lookup, serial/shared extraction, compression, encryption, sector framing, and all four header versions. Synthetic streams cover decode-only codecs and chains. |
@@ -55,6 +57,8 @@ measurements with Criterion's normal sampling settings:
 ```sh
 cargo bench -p wc3 --bench model
 cargo bench -p wc3 --bench animation
+cargo bench -p wc3 --bench packed_storage
+cargo bench -p wc3 --bench packed_interval
 cargo bench -p wc3 --bench evaluation
 cargo bench -p wc3 --features blp-decode,blp-encode --bench blp
 cargo bench -p wc3 --features mpq-decode,mpq-encode --bench mpq
@@ -107,6 +111,29 @@ keeps the remaining instances at that pose. PREM
 loads its checked-in child model and texture before measurement. Synthetic
 geometry preparation resolves no images, and headless runtime updates have no
 GPU renderer. Use the capture measurements below to investigate rendering costs.
+
+Packed interval replay includes clip and property lookup, interval searches, and
+interpolation. It excludes pose evaluation, ECS updates, and GPU work; property
+throughput does not imply rendered frames per second. Use the separate
+`packed_interval` executable for aggregate comparisons. The `sampling_diagnostic`
+group in `packed_storage` takes the sampler's method pointer to constrain its
+calling convention. This can also change direct-call code generation in that
+executable, so component timings are neither additive nor an isolated measure of
+storage overhead.
+
+`packed_interval` defaults to generated 128- and 256-property workloads. Set
+`SAMPLING_PROFILES` to select other generated distributions. Each semicolon-separated
+profile has six comma-separated fields: label, clip count, Vec3 count, scalar
+count, rotation count, and key pattern. A pattern such as `16` applies to all
+types; `8+16/1S/16` alternates eight and sixteen keys for Vec3, uses one-key Step
+scalar curves, and uses sixteen-key linear rotations. `+` cycles key counts,
+`/` separates Vec3/scalar/rotation patterns, and `S` selects Step interpolation
+instead of linear. For example:
+
+```sh
+SAMPLING_PROFILES='example,400,48,32,48,8+16/1S/16' \
+  cargo bench -p wc3 --bench packed_interval
+```
 
 The [fixture design guide](fixtures.md) describes how the synthetic inputs preserve
 useful asset characteristics and how to revise them without introducing an
