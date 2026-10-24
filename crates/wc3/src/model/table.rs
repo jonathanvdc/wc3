@@ -1,5 +1,6 @@
 //! Typed collections of independently identified graph objects.
 use super::common::Detached;
+use super::error::{Location, Owner, ReferenceError};
 use super::ids::Scope;
 use super::{Error, Id};
 use std::collections::{btree_map, BTreeMap};
@@ -82,11 +83,16 @@ impl<K, V> Table<K, V> {
         self.entries.insert(id, value);
         id
     }
-    pub(crate) fn replace(&mut self, id: Id<K>, value: V, context: &str) -> Result<(), Error> {
-        let slot = self
-            .entries
-            .get_mut(&id)
-            .ok_or_else(|| Error::new(context, "unknown identity"))?;
+    pub(crate) fn replace(&mut self, id: Id<K>, value: V) -> Result<(), Error>
+    where
+        Id<K>: Into<Owner>,
+    {
+        let slot = self.entries.get_mut(&id).ok_or_else(|| {
+            Error::at(
+                Location::for_owner(id),
+                ReferenceError::Unknown { target: id.into() },
+            )
+        })?;
         *slot = value;
         Ok(())
     }

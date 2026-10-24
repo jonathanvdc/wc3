@@ -4,6 +4,7 @@ mod resolution;
 pub use resolution::MaterialSelection;
 
 use crate::model::common::IntoOwned;
+use crate::model::error::{Location, ReferenceError};
 use crate::model::profiles::Either;
 use crate::model::{Error, Link, Look, LookId, Scope, ValidateLinks};
 use std::collections::BTreeMap;
@@ -72,16 +73,19 @@ impl<'data> DrawAppearanceSchema<'data> for SingleLook<'data> {
         (id == self.id).then_some(&mut self.look)
     }
     fn add_look(&mut self, _id: LookId, _look: Look<'data>) -> Result<(), Error> {
-        Err(Error::new(
-            "appearance",
-            "this profile always has exactly one material assignment",
+        Err(Error::at(
+            Location::for_owner(_id),
+            ReferenceError::SingleLookRequired,
         ))
     }
     fn set_default_look(&mut self, id: Option<LookId>) -> Result<(), Error> {
         if id != Some(self.id) {
-            return Err(Error::new(
-                "appearance.default",
-                "the sole look is always the default",
+            return Err(Error::at(
+                Location::new().field("appearance").field("default"),
+                ReferenceError::SoleLookDefault {
+                    expected: self.id,
+                    actual: id,
+                },
             ));
         }
         Ok(())
@@ -115,10 +119,10 @@ impl<'data> AppearanceSchema<'data> for DrawLooks<'data> {
         self.default
     }
     fn validate(&self) -> Result<(), Error> {
-        if self.default.is_some_and(|id| self.look(id).is_none()) {
-            Err(Error::new(
-                "appearance.default",
-                "default appearance is absent",
+        if let Some(id) = self.default.filter(|&id| self.look(id).is_none()) {
+            Err(Error::at(
+                Location::new().field("appearance").field("default"),
+                ReferenceError::Unknown { target: id.into() },
             ))
         } else {
             Ok(())

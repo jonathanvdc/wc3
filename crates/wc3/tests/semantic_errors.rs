@@ -2,7 +2,7 @@
 use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
 use std::io;
-use wc3::model::error::{ErrorKind, Location, Owner, ReferenceError, Segment};
+use wc3::model::error::{EditError, ErrorKind, Location, Owner, ReferenceError, Segment};
 use wc3::model::profiles::Mdlx;
 use wc3::model::{AttributeDomain, AttributeSemantic, Error, Model};
 
@@ -78,4 +78,55 @@ fn cloned_extension_errors_share_original_typed_cause_and_preserve_its_chain() {
         if profile == "profile" && custom == "custom")
     );
     assert!(matches!(cloned.kind(), ErrorKind::Extension(_)));
+}
+
+#[test]
+fn application_edit_failure_preserves_its_type_and_rolls_back_the_draft() {
+    let mut builder = Model::<Mdlx>::builder("Example");
+    let node = builder.add_named_node("Original").unwrap();
+    let mut model = builder.finish().unwrap();
+    let result = model.try_edit(|draft| {
+        let mut definition = draft.model().node(node).unwrap().clone();
+        definition.name = "Changed".into();
+        draft.set_node(node, definition).unwrap();
+        Err::<(), _>(ApplicationConstraint {
+            code: 7,
+            source: io::Error::new(io::ErrorKind::Interrupted, "cancelled"),
+        })
+    });
+    assert_eq!(model.node(node).unwrap().name, "Original");
+    let EditError::Operation(cause) = result.unwrap_err() else {
+        panic!("application cancellation must retain its own phase")
+    };
+    assert_eq!(cause.code, 7);
+}
+
+#[test]
+fn publication_failure_retains_semantic_cause_and_rolls_back_the_draft() {
+    let mut builder = Model::<Mdlx>::builder("Example");
+    let node = builder.add_named_node("Original").unwrap();
+    let mut model = builder.finish().unwrap();
+    let result = model.try_edit(|draft| {
+        draft.set_node_parent(node, Some(node))?;
+        Ok::<_, Error>(42)
+    });
+    assert_eq!(model.node(node).unwrap().parent, None);
+    let EditError::Validation(error) = result.unwrap_err() else {
+        panic!("completed invalid edits must fail publication")
+    };
+    assert!(
+        matches!(error.kind(),ErrorKind::Reference(ReferenceError::Cycle {target:Owner::Node(id)}) if *id==node)
+    );
+    assert!(
+        matches!(error.location().segments(),[Segment::Owner(Owner::Node(id)),Segment::Field(field)] if *id==node && field=="parent")
+    );
+}
+
+#[test]
+fn successful_try_edit_returns_the_operation_result_after_publication() {
+    let mut model = Model::<Mdlx>::builder("Example").finish().unwrap();
+    let result = model
+        .try_edit(|draft| draft.add_named_node("Published"))
+        .unwrap();
+    assert_eq!(model.node(result).unwrap().name, "Published");
 }

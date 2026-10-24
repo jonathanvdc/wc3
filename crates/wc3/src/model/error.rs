@@ -2,10 +2,12 @@
 use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
+mod edit;
+pub use edit::EditError;
 mod location;
 pub use location::{Location, Owner, Segment};
 mod reference;
-pub use reference::ReferenceError;
+pub use reference::{ConstantValue, ReferenceError};
 mod geometry;
 pub use geometry::*;
 mod animation;
@@ -58,14 +60,14 @@ impl Display for ErrorKind {
 #[derive(Clone, Debug)]
 pub struct Error {
     location: Location,
-    kind: ErrorKind,
+    kind: Box<ErrorKind>,
 }
 impl Error {
     /// Associates an actual semantic failure with a structured location.
     pub fn at(location: Location, kind: impl Into<ErrorKind>) -> Self {
         Self {
             location,
-            kind: kind.into(),
+            kind: Box::new(kind.into()),
         }
     }
     /// Retains a custom semantic validator's original typed error and source chain.
@@ -117,7 +119,7 @@ impl Display for Error {
 }
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match &self.kind {
+        match self.kind.as_ref() {
             ErrorKind::Reference(cause) => Some(cause),
             ErrorKind::Geometry(cause) => Some(cause),
             ErrorKind::Animation(cause) => Some(cause),
