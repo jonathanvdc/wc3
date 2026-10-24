@@ -89,10 +89,13 @@ pub struct PackedArray<'a, T: PackedValue> {
     storage: Storage<'a, T::Storage>,
 }
 
+// These names describe placement of the ZeroVec descriptor, not byte ownership.
+// Constructors normalize nonempty owned buffers into shared owned storage and
+// leave borrowed or empty buffers inline; a static lifetime alone proves neither.
 #[derive(Clone)]
 enum Storage<'a, T: AsULE> {
-    Borrowed(ZeroVec<'a, T>),
-    Owned(Arc<ZeroVec<'static, T>>),
+    Inline(ZeroVec<'a, T>),
+    Shared(Arc<ZeroVec<'static, T>>),
 }
 impl<T: PackedValue> Default for PackedArray<'_, T> {
     fn default() -> Self {
@@ -113,7 +116,7 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     /// Empty borrowed storage.
     pub const fn new() -> Self {
         Self {
-            storage: Storage::Borrowed(ZeroVec::new()),
+            storage: Storage::Inline(ZeroVec::new()),
         }
     }
     /// Adopts compatible packed storage without copying or decoding it.
@@ -123,11 +126,11 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
             Self::new()
         } else if storage.is_owned() {
             Self {
-                storage: Storage::Owned(Arc::new(storage.into_owned())),
+                storage: Storage::Shared(Arc::new(storage.into_owned())),
             }
         } else {
             Self {
-                storage: Storage::Borrowed(storage),
+                storage: Storage::Inline(storage),
             }
         }
     }
@@ -135,8 +138,8 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     #[inline]
     pub fn storage(&self) -> &ZeroVec<'a, T::Storage> {
         match &self.storage {
-            Storage::Borrowed(storage) => storage,
-            Storage::Owned(storage) => storage,
+            Storage::Inline(storage) => storage,
+            Storage::Shared(storage) => storage,
         }
     }
     /// Moves the encoded representation out at a native format boundary.
@@ -144,8 +147,8 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     #[inline]
     pub fn into_storage(self) -> ZeroVec<'a, T::Storage> {
         match self.storage {
-            Storage::Borrowed(storage) => storage,
-            Storage::Owned(storage) => Arc::unwrap_or_clone(storage),
+            Storage::Inline(storage) => storage,
+            Storage::Shared(storage) => Arc::unwrap_or_clone(storage),
         }
     }
     /// Borrows a validated little-endian byte buffer.
@@ -163,7 +166,7 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     }
     /// Whether the encoded buffer is owned.
     pub fn is_owned(&self) -> bool {
-        matches!(self.storage, Storage::Owned(_))
+        matches!(self.storage, Storage::Shared(_))
     }
     /// Whether no elements exist.
     #[inline]
@@ -226,20 +229,20 @@ impl<'a, T: PackedValue> PackedArray<'a, T> {
     /// Copies borrowed storage and retains already owned buffers without copying.
     pub fn into_owned(self) -> PackedArray<'static, T> {
         match self.storage {
-            Storage::Borrowed(storage) => PackedArray::from_storage(storage.into_owned()),
-            Storage::Owned(storage) => PackedArray {
-                storage: Storage::Owned(storage),
+            Storage::Inline(storage) => PackedArray::from_storage(storage.into_owned()),
+            Storage::Shared(storage) => PackedArray {
+                storage: Storage::Shared(storage),
             },
         }
     }
 
     fn mutable_storage(&mut self) -> &mut ZeroVec<'static, T::Storage> {
-        if let Storage::Borrowed(storage) = &self.storage {
-            self.storage = Storage::Owned(Arc::new(storage.clone().into_owned()));
+        if let Storage::Inline(storage) = &self.storage {
+            self.storage = Storage::Shared(Arc::new(storage.clone().into_owned()));
         }
         match &mut self.storage {
-            Storage::Owned(storage) => Arc::make_mut(storage),
-            Storage::Borrowed(_) => unreachable!("borrowed storage was made owned"),
+            Storage::Shared(storage) => Arc::make_mut(storage),
+            Storage::Inline(_) => unreachable!("borrowed storage was made owned"),
         }
     }
 }
@@ -301,6 +304,25 @@ impl<'a, T: PackedValue> IntoPackedArray<'a, T> for ZeroVec<'a, T::Storage> {
 mod tests {
     use super::*;
     use crate::model::common::IntoOwned;
+
+    #[test]
+    fn constructors_distinguish_static_borrows_from_owned_native_storage() {
+        static BYTES: [u8; 4] = [3, 0, 5, 0];
+        let borrowed = PackedArray::<u16>::parse_bytes(&BYTES).unwrap();
+        assert!(!borrowed.is_owned());
+        assert!(matches!(&borrowed.storage, Storage::Inline(value) if !value.is_owned()));
+        assert_eq!(borrowed.as_bytes().as_ptr(), BYTES.as_ptr());
+
+        let native = ZeroVec::<u16>::alloc_from_slice(&[3, 5]);
+        let pointer = native.as_bytes().as_ptr();
+        let owned = PackedArray::<u16>::from_storage(native);
+        assert!(matches!(&owned.storage, Storage::Shared(value) if value.is_owned()));
+        assert_eq!(owned.as_bytes().as_ptr(), pointer);
+
+        let detached = borrowed.into_owned();
+        assert!(matches!(&detached.storage, Storage::Shared(value) if value.is_owned()));
+        assert_ne!(detached.as_bytes().as_ptr(), BYTES.as_ptr());
+    }
 
     #[test]
     fn unaligned_vectors_borrow_and_detach_without_layout_assumptions() {
@@ -471,14 +493,14 @@ mod tests {
     fn empty_storage_stays_borrowed_through_clone_ownership_and_edits() {
         const EMPTY: PackedArray<'static, u32> = PackedArray::new();
         let mut empty = EMPTY.clone().into_owned();
-        assert!(matches!(empty.storage, Storage::Borrowed(_)));
+        assert!(matches!(empty.storage, Storage::Inline(_)));
         assert_eq!(empty.set(0, 1), None);
         empty.for_each_mut(|_| panic!("empty arrays have no values"));
-        assert!(matches!(empty.storage, Storage::Borrowed(_)));
+        assert!(matches!(empty.storage, Storage::Inline(_)));
         assert!(!empty.into_storage().is_owned());
         let native = ZeroVec::<u32>::new_owned(Vec::with_capacity(4));
         let empty = PackedArray::<u32>::from_storage(native);
-        assert!(matches!(empty.storage, Storage::Borrowed(_)));
+        assert!(matches!(empty.storage, Storage::Inline(_)));
         assert!(empty.is_empty());
     }
 

@@ -95,6 +95,14 @@ alive while using the graph. `from_storage` and `into_storage` bridge native
 unique buffer moves without rebuilding it. Parsing checks the packed
 representation, while model publication checks semantic validity.
 
+The private `Inline` and `Shared` variants describe where the `ZeroVec`
+descriptor lives: directly in the array, or behind an `Arc`. A `ZeroVec` can
+itself borrow or own bytes, including borrowing static bytes. Constructors
+normalize nonempty owned buffers into shared owned storage and keep borrowed
+or empty buffers inline. These are constructor invariants, rather than ownership
+guarantees supplied by the variant field types. Shared storage can have one or
+several owners.
+
 `IntoPackedArray` accepts existing packed arrays, arrays, vectors, and slices of
 semantic values. Cloning retains borrowed buffers and shares owned packed buffers.
 `into_owned` copies borrowed buffers and retains already owned storage without
