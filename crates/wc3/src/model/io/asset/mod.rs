@@ -79,6 +79,39 @@ pub struct Request {
     pub kind: CompanionKind,
 }
 
+// Accepted companion buffers remain present until completion, so the fulfilled
+// prefix never needs to be visited again. Aliased native identities share bytes.
+#[derive(Debug)]
+struct CompanionPlan {
+    requests: Vec<Request>,
+    next: usize,
+    #[cfg(test)]
+    examined: usize,
+}
+impl CompanionPlan {
+    fn new(requests: Vec<Request>) -> Self {
+        Self {
+            requests,
+            next: 0,
+            #[cfg(test)]
+            examined: 0,
+        }
+    }
+    fn next_missing(&mut self, buffers: &BTreeMap<FileKey, Vec<u8>>) -> Option<Request> {
+        while let Some(request) = self.requests.get(self.next) {
+            #[cfg(test)]
+            {
+                self.examined += 1;
+            }
+            if !buffers.contains_key(&request.key) {
+                return Some(request.clone());
+            }
+            self.next += 1;
+        }
+        None
+    }
+}
+
 /// One loading step, requiring resource access or returning checked semantics.
 #[derive(Debug)]
 pub enum Progress {
@@ -101,6 +134,7 @@ pub struct Reader {
     options: ImportOptions,
     buffers: BTreeMap<FileKey, Vec<u8>>,
     m2: Option<m2::Preparation>,
+    world: Option<CompanionPlan>,
     pending: Option<Request>,
     finished: bool,
 }
@@ -119,6 +153,7 @@ impl Reader {
             options,
             buffers: BTreeMap::new(),
             m2: None,
+            world: None,
             pending: None,
             finished: false,
         }
@@ -166,7 +201,7 @@ impl Reader {
                     );
                 }
                 m2::decode(
-                    self.m2.as_ref().unwrap(),
+                    self.m2.as_mut().unwrap(),
                     &self.bytes,
                     &self.key,
                     &self.buffers,
@@ -174,14 +209,20 @@ impl Reader {
                     &self.options,
                 )?
             }
-            Format::Wmo(profile) => world::decode(
-                &self.bytes,
-                &self.key,
-                profile,
-                &self.buffers,
-                &mut missing,
-                &self.options,
-            )?,
+            Format::Wmo(profile) => {
+                if self.world.is_none() {
+                    self.world = Some(world::prepare(&self.bytes, &self.key, profile)?);
+                }
+                world::decode(
+                    self.world.as_mut().unwrap(),
+                    &self.bytes,
+                    &self.key,
+                    profile,
+                    &self.buffers,
+                    &mut missing,
+                    &self.options,
+                )?
+            }
         };
         if let Some(request) = missing {
             self.pending = Some(request.clone());
@@ -193,6 +234,7 @@ impl Reader {
         self.bytes = Vec::new();
         self.buffers.clear();
         self.m2 = None;
+        self.world = None;
         Ok(Progress::Ready(Box::new(converted)))
     }
     /// Supplies bytes for the current request. Stale or unrelated requests fail
@@ -241,5 +283,41 @@ pub fn load<E>(
             }
             Progress::Ready(converted) => return Ok(*converted),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supplied_prefix_and_aliases_are_examined_only_once() {
+        let count = 1_024;
+        let requests = (0..count)
+            .map(|index| Request {
+                owner: FileKey::Root,
+                key: FileKey::FileId((index / 2) as u32),
+                kind: CompanionKind::Skin { index, lod: false },
+            })
+            .collect();
+        let mut plan = CompanionPlan::new(requests);
+        let mut buffers = BTreeMap::new();
+        for index in 0..count / 2 {
+            let request = plan.next_missing(&buffers).unwrap();
+            assert_eq!(request.key, FileKey::FileId(index as u32));
+            assert_eq!(
+                request.kind,
+                CompanionKind::Skin {
+                    index: index * 2,
+                    lod: false
+                }
+            );
+            buffers.insert(request.key, Vec::new());
+        }
+        assert!(plan.next_missing(&buffers).is_none());
+        assert_eq!(plan.examined, count + count / 2);
+        assert_eq!(plan.next, count);
+        assert!(plan.next_missing(&buffers).is_none());
+        assert_eq!(plan.examined, count + count / 2);
     }
 }

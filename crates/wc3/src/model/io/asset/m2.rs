@@ -1,5 +1,5 @@
 //! Runtime M2 dialect dispatch; native bundles remain responsible for the closure.
-use super::{CompanionKind, DecodeError, Error, Request};
+use super::{CompanionKind, CompanionPlan, DecodeError, Error, Request};
 use crate::model::common::FileKey;
 use crate::model::conversion::{Conversion, ImportOptions};
 use crate::model::formats::m2::{self as native, DependencyKind};
@@ -52,7 +52,7 @@ fn decode_typed<'a, D: native::Dialect>(
 #[derive(Debug)]
 pub(super) struct Preparation {
     layout: Layout,
-    dependencies: Vec<Request>,
+    companions: CompanionPlan,
 }
 
 macro_rules! bundles {
@@ -65,10 +65,10 @@ macro_rules! bundles {
                 .filter(|dependency| !matches!(dependency.kind, DependencyKind::Texture))
                 .map(request).collect();
             let layout = match document { $(native::DynamicDocument::$variant(_) => Layout::$variant,)* };
-            Ok(Preparation { layout, dependencies })
+            Ok(Preparation { layout, companions: CompanionPlan::new(dependencies) })
         }
         pub(super) fn decode(
-            prepared: &Preparation,
+            prepared: &mut Preparation,
             bytes: &[u8],
             key: &FileKey,
             buffers: &BTreeMap<FileKey, Vec<u8>>,
@@ -77,8 +77,8 @@ macro_rules! bundles {
         ) -> Result<Option<Conversion<Model<'static>>>, Error> {
             // Prefetch directly declared companions before decoding the full bundle.
             // Recursive companion requirements remain native bundle decisions.
-            if let Some(request) = prepared.dependencies.iter().find(|request| !buffers.contains_key(&request.key)) {
-                *missing = Some(request.clone());
+            if let Some(request) = prepared.companions.next_missing(buffers) {
+                *missing = Some(request);
                 return Ok(None);
             }
             match prepared.layout {
