@@ -15,7 +15,7 @@
 //! let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
 //! let imported = io::mdlx::decode_mdl(source, &ImportOptions::default())?;
 //! assert_eq!(imported.value.name(), "Example");
-//! # Ok::<(), wc3::model::conversion::Error>(())
+//! # Ok::<(), wc3::model::io::mdlx::ReadError>(())
 //! ```
 //!
 //! [`model::Model::edit`] validates changes together before publishing them.

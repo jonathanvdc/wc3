@@ -23,6 +23,8 @@ mod extents;
 mod geometry;
 mod import;
 mod materials;
+mod read_error;
+pub use read_error::ReadError;
 #[cfg(test)]
 #[path = "ribbon_axis_tests.rs"]
 mod ribbon_axis_tests;
@@ -33,23 +35,26 @@ mod storage;
 mod text;
 /// Decodes MDX directly into an independent semantic model.
 /// Files without a `VERS` chunk use format version 800.
+/// Native codec failures retain their structured kind, offset, and chunk context.
+/// Checked import failures are distinguished by [`ReadError::Import`].
 pub fn decode_mdx(
     bytes: &[u8],
     options: &ImportOptions,
-) -> Result<Conversion<Model<'static, Mdlx>>, Error> {
-    let document = DynamicDocument::<NoExtensions>::decode_mdx(bytes, 800)
-        .map_err(|error| Error::new("mdx", error.to_string()))?;
-    import_dynamic_owned(&document, options)
+) -> Result<Conversion<Model<'static, Mdlx>>, ReadError> {
+    let document =
+        DynamicDocument::<NoExtensions>::decode_mdx(bytes, 800).map_err(ReadError::Mdx)?;
+    import_dynamic_owned(&document, options).map_err(ReadError::Import)
 }
 /// Decodes MDL directly into an independent semantic model.
 /// The native text codec selects the declared format version.
+/// Native codec failures retain their structured kind and source span.
+/// Checked import failures are distinguished by [`ReadError::Import`].
 pub fn decode_mdl(
     text: &str,
     options: &ImportOptions,
-) -> Result<Conversion<Model<'static, Mdlx>>, Error> {
-    let document = DynamicDocument::<NoExtensions>::decode_mdl(text)
-        .map_err(|error| Error::new("mdl", error.to_string()))?;
-    import_dynamic_owned(&document, options)
+) -> Result<Conversion<Model<'static, Mdlx>>, ReadError> {
+    let document = DynamicDocument::<NoExtensions>::decode_mdl(text).map_err(ReadError::Mdl)?;
+    import_dynamic_owned(&document, options).map_err(ReadError::Import)
 }
 /// Imports a decoded document in its original dialect into an independent model.
 /// Consumers can inspect native metadata before importing without dispatching
