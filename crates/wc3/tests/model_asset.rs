@@ -1299,16 +1299,12 @@ fn synchronous_source_errors_retain_the_request_and_distinguish_missing_from_unr
 
 #[test]
 fn synchronous_native_failures_do_not_invoke_the_storage_resolver() {
-    let result = load(
+    let result = load::<io::Error, _>(
         Format::M2,
         FileKey::FileId(1),
-        b"MD20".to_vec(),
+        b"MD20",
         ImportOptions::default(),
-        |_| {
-            panic!("a malformed root cannot request companions");
-            #[allow(unreachable_code)]
-            Ok::<_, io::Error>(Vec::new())
-        },
+        |_| panic!("a malformed root cannot request companions"),
     );
     assert!(matches!(
         result,
