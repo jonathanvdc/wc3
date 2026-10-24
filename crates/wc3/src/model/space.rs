@@ -1,4 +1,5 @@
 //! Explicit coordinate conventions for logical spatial values.
+use crate::model::error::{Location, TransformError};
 use crate::model::{Error, Model};
 use glam::{Mat3, Mat4, Vec3};
 /// Direction along a coordinate axis.
@@ -45,9 +46,9 @@ impl Basis {
     /// Constructs a basis with independent up and forward axes.
     pub fn new(up: Axis, forward: Axis, handedness: Handedness) -> Result<Self, Error> {
         if up.dimension() == forward.dimension() {
-            return Err(Error::new(
-                "basis",
-                "up and forward must be independent axes",
+            return Err(Error::at(
+                Location::new().field("basis"),
+                TransformError::DependentBasisAxes { up, forward },
             ));
         }
         Ok(Self {
@@ -90,9 +91,9 @@ pub enum LengthUnit {
 impl LengthUnit {
     pub(crate) fn validate(self) -> Result<(), Error> {
         match self {
-            Self::MetersPerUnit(v) if !v.is_finite() || v <= 0. => Err(Error::new(
-                "units",
-                "meters per unit must be finite and positive",
+            Self::MetersPerUnit(value) if !value.is_finite() || value <= 0. => Err(Error::at(
+                Location::new().field("units"),
+                TransformError::InvalidMetersPerUnit { value },
             )),
             _ => Ok(()),
         }
@@ -137,13 +138,18 @@ impl Model<'_> {
             LengthUnit::MetersPerUnit(value) => value,
         };
         units.validate()?;
-        let scale = (meters(self.units()) / meters(units)) as f32;
-        if !scale.is_finite() || scale <= 0. {
-            return Err(Error::new(
-                "units",
-                "physical scale cannot be represented by f32 transforms",
+        let scale = meters(self.units()) / meters(units);
+        let represented = scale as f32;
+        if !represented.is_finite() || represented <= 0. {
+            return Err(Error::at(
+                Location::new().field("units"),
+                TransformError::UnrepresentableScale {
+                    source: self.units(),
+                    target: units,
+                    scale,
+                },
             ));
         }
-        Ok(self.basis().conversion_to(target) * Mat4::from_scale(Vec3::splat(scale)))
+        Ok(self.basis().conversion_to(target) * Mat4::from_scale(Vec3::splat(represented)))
     }
 }

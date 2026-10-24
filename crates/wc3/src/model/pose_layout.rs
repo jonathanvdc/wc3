@@ -1,9 +1,10 @@
 //! Reusable hierarchy indexing and allocation-free pose output.
+use crate::model::error::{Location, TransformError};
 use crate::model::{
     AnimatedTransform, Billboard, Error, EvaluatedPose, Inheritance, Model, NodeId, PoseBehavior,
     Property, Skin, Transform as ModelTransform, TransformSemantics, ValueSample,
 };
-use glam::{Affine3A, Mat4};
+use glam::{Affine3A, Mat4, Vec4};
 use std::collections::{HashMap, HashSet};
 /// Authored node properties with a channel in any playback programme.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -151,18 +152,26 @@ impl PoseLayout {
             .map(|(index, node)| (node.id, index))
             .collect();
         if indices.len() != nodes.len() {
-            return Err(Error::new(
-                "pose.nodes",
-                "prepared node identities must be unique",
+            let mut seen = HashSet::new();
+            let duplicate = nodes.iter().find(|node| !seen.insert(node.id)).unwrap().id;
+            return Err(Error::at(
+                Location::for_owner(duplicate),
+                TransformError::DuplicatePoseNode { node: duplicate },
             ));
         }
         let mut order = Vec::with_capacity(nodes.len());
         let mut children = vec![Vec::new(); nodes.len()];
         for (index, node) in nodes.iter().enumerate() {
             if let Some(parent) = node.parent {
-                let target = children
-                    .get_mut(parent)
-                    .ok_or_else(|| Error::new("pose.parent", "parent index is absent"))?;
+                let target = children.get_mut(parent).ok_or_else(|| {
+                    Error::at(
+                        Location::for_owner(node.id).field("parent"),
+                        TransformError::ParentIndexOutOfBounds {
+                            parent,
+                            nodes: nodes.len(),
+                        },
+                    )
+                })?;
                 target.push(index);
             } else {
                 order.push(index);
@@ -174,7 +183,18 @@ impl PoseLayout {
             cursor += 1;
         }
         if order.len() != nodes.len() {
-            return Err(Error::new("pose", "model hierarchy contains a cycle"));
+            let visited: HashSet<_> = order.iter().copied().collect();
+            let blocked = nodes
+                .iter()
+                .enumerate()
+                .find(|(index, _)| !visited.contains(index))
+                .unwrap()
+                .1
+                .id;
+            return Err(Error::at(
+                Location::for_owner(blocked).field("parent"),
+                TransformError::PoseHierarchyCycle { blocked },
+            ));
         }
         let mut corrected = vec![false; nodes.len()];
         for &index in &order {
@@ -185,19 +205,32 @@ impl PoseLayout {
                 && (!node.behavior().hierarchical()
                     || node.transform_semantics != TransformSemantics::Affine)
             {
-                return Err(Error::new("pose.correction", "corrected hierarchies require ordinary affine inheritance without billboards or camera anchoring"));
-            }
-            if node.correction.is_some_and(|matrix| {
-                !matrix.is_finite()
-                    || matrix.x_axis.w != 0.
-                    || matrix.y_axis.w != 0.
-                    || matrix.z_axis.w != 0.
-                    || matrix.w_axis.w != 1.
-            }) {
-                return Err(Error::new(
-                    "pose.correction",
-                    "correction must be a finite affine matrix",
+                return Err(Error::at(
+                    Location::for_owner(node.id).field("correction"),
+                    TransformError::UnsupportedCorrectionBehavior {
+                        behavior: node.behavior(),
+                    },
                 ));
+            }
+            if let Some(matrix) = node.correction {
+                if !matrix.is_finite() {
+                    return Err(Error::at(
+                        Location::for_owner(node.id).field("correction"),
+                        TransformError::NonFiniteMatrix { matrix },
+                    ));
+                }
+                let last_row = Vec4::new(
+                    matrix.x_axis.w,
+                    matrix.y_axis.w,
+                    matrix.z_axis.w,
+                    matrix.w_axis.w,
+                );
+                if last_row != Vec4::W {
+                    return Err(Error::at(
+                        Location::for_owner(node.id).field("correction"),
+                        TransformError::NonAffineMatrix { last_row },
+                    ));
+                }
             }
         }
         Ok(Self {
@@ -224,13 +257,22 @@ impl PoseLayout {
         inputs: PoseInputs<'_>,
         output: &mut ModelPose,
     ) -> Result<(), Error> {
-        if inputs.camera.is_some_and(|camera| {
-            !camera.is_finite() || camera.matrix3.determinant().abs() <= 1e-12
-        }) {
-            return Err(Error::new(
-                "pose.camera",
-                "camera must be finite and nonsingular",
-            ));
+        if let Some(camera) = inputs.camera {
+            if !camera.is_finite() {
+                return Err(Error::at(
+                    Location::new().field("camera"),
+                    TransformError::NonFiniteMatrix {
+                        matrix: Mat4::from(camera),
+                    },
+                ));
+            }
+            let determinant = camera.matrix3.determinant();
+            if determinant.abs() <= 1e-12 {
+                return Err(Error::at(
+                    Location::new().field("camera"),
+                    TransformError::SingularCamera { determinant },
+                ));
+            }
         }
         output
             .nodes
@@ -303,25 +345,48 @@ impl PoseLayout {
         frame: Mat4,
         output: &mut Vec<Mat4>,
     ) -> Result<(), Error> {
-        if pose.nodes.len() != self.nodes.len() || !frame.is_finite() {
-            return Err(Error::new(
-                "pose.skin",
-                "inconsistent pose or nonfinite output frame",
+        if pose.nodes.len() != self.nodes.len() {
+            return Err(Error::at(
+                Location::new().field("pose").field("nodes"),
+                TransformError::PoseNodeCount {
+                    expected: self.nodes.len(),
+                    actual: pose.nodes.len(),
+                },
+            ));
+        }
+        if !frame.is_finite() {
+            return Err(Error::at(
+                Location::new().field("frame"),
+                TransformError::NonFiniteMatrix { matrix: frame },
             ));
         }
         output.clear();
         let binds = skin.inverse_bind();
         for &index in palette {
-            let joint = skin
-                .joints
-                .get(index)
-                .ok_or_else(|| Error::new("pose.skin", "joint palette index is absent"))?;
-            let node = self
-                .index(*joint)
-                .ok_or_else(|| Error::new("pose.skin", "joint belongs to another hierarchy"))?;
-            let bind = binds
-                .get(index)
-                .ok_or_else(|| Error::new("pose.skin", "inverse bind is absent"))?;
+            let joint = skin.joints.get(index).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("joints").index(index),
+                    TransformError::JointPaletteOutOfBounds {
+                        index,
+                        joints: skin.joints.len(),
+                    },
+                )
+            })?;
+            let node = self.index(*joint).ok_or_else(|| {
+                Error::at(
+                    Location::for_owner(*joint),
+                    TransformError::JointOutsideHierarchy { joint: *joint },
+                )
+            })?;
+            let bind = binds.get(index).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("inverse_bind").index(index),
+                    TransformError::MissingInverseBind {
+                        index,
+                        matrices: binds.len(),
+                    },
+                )
+            })?;
             output.push(frame * pose.nodes[node].matrix * bind);
         }
         Ok(())

@@ -1,4 +1,5 @@
 //! Hierarchy and authored transform behavior.
+use crate::model::error::{Location, ReferenceError, TransformError};
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{
     Construct, CurveValue as _, Error, NodeId, Property, PropertyValues, Quat, ValueSample,
@@ -140,18 +141,31 @@ impl Default for Transform {
 }
 impl Transform {
     pub(crate) fn validate(&self) -> Result<(), Error> {
-        if self.translation.is_finite()
-            && self.rotation.is_valid()
-            && self.scale.is_finite()
-            && self.pivot.is_finite()
-        {
-            Ok(())
-        } else {
-            Err(Error::new(
-                "transform",
-                "transform must be finite and have a nonzero rotation",
-            ))
+        if !self.translation.is_finite() {
+            return Err(Error::at(
+                Location::new().field("translation"),
+                TransformError::NonFiniteVector {
+                    vector: self.translation,
+                },
+            ));
         }
+        if !self.rotation.is_valid() {
+            return Err(Error::at(
+                Location::new().field("rotation"),
+                TransformError::InvalidRotation {
+                    rotation: self.rotation,
+                },
+            ));
+        }
+        for (field, vector) in [("scale", self.scale), ("pivot", self.pivot)] {
+            if !vector.is_finite() {
+                return Err(Error::at(
+                    Location::new().field(field),
+                    TransformError::NonFiniteVector { vector },
+                ));
+            }
+        }
+        Ok(())
     }
 }
 /// Slot-backed authored transform. Pivot placement is static.
@@ -178,15 +192,30 @@ impl AnimatedTransform {
     }
     pub(crate) fn validate(&self, values: &PropertyValues) -> Result<(), Error> {
         let transform = Transform {
-            translation: *values
-                .get(self.translation)
-                .ok_or_else(|| Error::new("transform.translation", "slot is absent"))?,
-            rotation: *values
-                .get(self.rotation)
-                .ok_or_else(|| Error::new("transform.rotation", "slot is absent"))?,
-            scale: *values
-                .get(self.scale)
-                .ok_or_else(|| Error::new("transform.scale", "slot is absent"))?,
+            translation: *values.get(self.translation).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("translation"),
+                    ReferenceError::Unknown {
+                        target: self.translation.slot().into(),
+                    },
+                )
+            })?,
+            rotation: *values.get(self.rotation).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("rotation"),
+                    ReferenceError::Unknown {
+                        target: self.rotation.slot().into(),
+                    },
+                )
+            })?,
+            scale: *values.get(self.scale).ok_or_else(|| {
+                Error::at(
+                    Location::new().field("scale"),
+                    ReferenceError::Unknown {
+                        target: self.scale.slot().into(),
+                    },
+                )
+            })?,
             pivot: self.pivot,
         };
         transform.validate()

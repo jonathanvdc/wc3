@@ -1,5 +1,6 @@
 //! Checked curve shapes retain canonical packed arrays.
 use crate::model::common::PackedArray;
+use crate::model::error::{AnimationError, Location};
 mod sampling;
 pub use sampling::SampleValue;
 mod value;
@@ -123,9 +124,12 @@ impl<'a, T: CurveValue> Curve<'a, T> {
             && (!T::Domain::SUPPORTS_ROTATION
                 || !matches!(self.shape, CurveShape::Hermite(_) | CurveShape::Bezier(_)))
         {
-            return Err(Error::new(
-                "curve.controls",
-                "spherical controls require a quaternion spline",
+            return Err(Error::at(
+                Location::new().field("spherical_controls"),
+                AnimationError::SphericalControlsRequireQuaternionSpline {
+                    interpolation: self.interpolation(),
+                    supports_rotation: T::Domain::SUPPORTS_ROTATION,
+                },
             ));
         }
         self.spherical_controls = spherical;
@@ -251,9 +255,14 @@ impl<'a, T: CurveValue> Curve<'a, T> {
             Interpolation::Slerp if T::Domain::SUPPORTS_ROTATION => CurveShape::Slerp,
             Interpolation::Nlerp if T::Domain::SUPPORTS_ROTATION => CurveShape::Nlerp,
             _ => {
-                return Err(Error::new(
-                    "curve.interpolation",
-                    "sampling directive is unsupported by this value domain or requires controls",
+                return Err(Error::at(
+                    Location::new().field("interpolation"),
+                    AnimationError::UnsupportedInterpolation {
+                        interpolation: mode,
+                        supports_linear: T::Domain::SUPPORTS_LINEAR,
+                        supports_spline: T::Domain::SUPPORTS_SPLINE,
+                        supports_rotation: T::Domain::SUPPORTS_ROTATION,
+                    },
                 ));
             }
         };
@@ -267,9 +276,14 @@ impl<'a, T: CurveValue> Curve<'a, T> {
         mode: Interpolation,
     ) -> Result<Self, Error> {
         if !T::Domain::SUPPORTS_SPLINE {
-            return Err(Error::new(
-                "curve.interpolation",
-                "this value domain does not support splines",
+            return Err(Error::at(
+                Location::new().field("interpolation"),
+                AnimationError::UnsupportedInterpolation {
+                    interpolation: mode,
+                    supports_linear: T::Domain::SUPPORTS_LINEAR,
+                    supports_spline: T::Domain::SUPPORTS_SPLINE,
+                    supports_rotation: T::Domain::SUPPORTS_ROTATION,
+                },
             ));
         }
         let incoming = incoming.into_packed_array();
@@ -296,9 +310,11 @@ impl<'a, T: CurveValue> Curve<'a, T> {
                     .collect::<PackedArray<_>>(),
             }),
             _ => {
-                return Err(Error::new(
-                    "curve.interpolation",
-                    "spline controls require Hermite or Bezier interpolation",
+                return Err(Error::at(
+                    Location::new().field("interpolation"),
+                    AnimationError::SplineControlsInterpolation {
+                        interpolation: mode,
+                    },
                 ));
             }
         };
@@ -306,49 +322,94 @@ impl<'a, T: CurveValue> Curve<'a, T> {
     }
     fn validate(&self) -> Result<(), Error> {
         if self.times.len() != self.values.len() {
-            return Err(Error::new("curve", "key and value cardinalities differ"));
+            return Err(Error::from(AnimationError::KeyValueCount {
+                keys: self.times.len(),
+                values: self.values.len(),
+            }));
         }
         let mut previous = None;
-        for time in self.times.iter() {
-            if !time.as_seconds().is_finite() || previous.is_some_and(|p| time < p) {
-                return Err(Error::new("curve.times", "keys must be nondecreasing"));
+        for (index, time) in self.times.iter().enumerate() {
+            if !time.as_seconds().is_finite() {
+                return Err(Error::at(
+                    Location::new().field("times").index(index),
+                    AnimationError::NonFiniteTime {
+                        value: time.as_seconds(),
+                    },
+                ));
+            }
+            if let Some(previous) = previous.filter(|previous| time < *previous) {
+                return Err(Error::at(
+                    Location::new().field("times").index(index),
+                    AnimationError::UnorderedKeys {
+                        previous,
+                        current: time,
+                    },
+                ));
             }
             previous = Some(time);
         }
-        if self.values.iter().any(|v| !v.is_valid()) {
-            return Err(Error::new("curve.values", "invalid key value"));
+        if let Some(index) = self.values.iter().position(|value| !value.is_valid()) {
+            return Err(Error::at(
+                Location::new().field("values").index(index),
+                AnimationError::InvalidKeyValue,
+            ));
         }
         match &self.shape {
             CurveShape::Hermite(v) => {
-                self.validate_controls(&v.incoming)?;
-                self.validate_controls(&v.outgoing)?;
+                self.validate_controls(&v.incoming, "incoming")?;
+                self.validate_controls(&v.outgoing, "outgoing")?;
             }
             CurveShape::Bezier(v) => {
-                self.validate_controls(&v.incoming)?;
-                self.validate_controls(&v.outgoing)?;
+                self.validate_controls(&v.incoming, "incoming")?;
+                self.validate_controls(&v.outgoing, "outgoing")?;
             }
-            CurveShape::Tcb(v)
-                if v.len() != self.times.len()
-                    || v.iter().any(|p| {
-                        ![p.tension, p.continuity, p.bias]
-                            .iter()
-                            .all(|v| v.is_finite())
-                    }) =>
-            {
-                return Err(Error::new(
-                    "curve.tcb",
-                    "expected finite TCB parameters for every key",
-                ));
+            CurveShape::Tcb(parameters) => {
+                if parameters.len() != self.times.len() {
+                    return Err(Error::at(
+                        Location::new().field("shape"),
+                        AnimationError::TcbControlCount {
+                            keys: self.times.len(),
+                            controls: parameters.len(),
+                        },
+                    ));
+                }
+                for (index, parameter) in parameters.iter().enumerate() {
+                    for (field, value) in [
+                        ("tension", parameter.tension),
+                        ("continuity", parameter.continuity),
+                        ("bias", parameter.bias),
+                    ] {
+                        if !value.is_finite() {
+                            return Err(Error::at(
+                                Location::new().field("shape").index(index).field(field),
+                                AnimationError::NonFiniteTcbParameter { value },
+                            ));
+                        }
+                    }
+                }
             }
             _ => {}
         }
         Ok(())
     }
-    fn validate_controls<U: CurveValue>(&self, values: &PackedArray<'_, U>) -> Result<(), Error> {
-        if values.len() != self.times.len() || values.iter().any(|v| !v.is_valid()) {
-            return Err(Error::new(
-                "curve.controls",
-                "invalid spline control or cardinality",
+    fn validate_controls<U: CurveValue>(
+        &self,
+        values: &PackedArray<'_, U>,
+        side: &'static str,
+    ) -> Result<(), Error> {
+        if values.len() != self.times.len() {
+            return Err(Error::at(
+                Location::new().field("shape").field(side),
+                AnimationError::ControlCount {
+                    keys: self.times.len(),
+                    controls: values.len(),
+                },
+            ));
+        }
+        if let Some(index) = values.iter().position(|value| !value.is_valid()) {
+            return Err(Error::at(
+                Location::new().field("shape").field(side).index(index),
+                AnimationError::InvalidControlValue,
             ));
         }
         Ok(())
