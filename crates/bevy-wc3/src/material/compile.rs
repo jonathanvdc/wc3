@@ -49,7 +49,7 @@ fn compile_material(
 ) -> Result<Vec<SurfacePass>, ModelError> {
     let material = model
         .material(id)
-        .ok_or_else(|| ModelError(format!("missing semantic material {id:?}")))?;
+        .ok_or_else(|| ModelError::new(format!("missing semantic material {id:?}")))?;
     let stack = &material.surface;
     let mut passes = Vec::new();
     for (step_index, step) in stack.steps.iter().enumerate() {

@@ -520,7 +520,7 @@ async fn compile_loaded(
                     continue;
                 }
                 Err(error) => {
-                    return Err(ModelError(format!(
+                    return Err(ModelError::new(format!(
                         "cannot read optional child {resource:?}: {error}"
                     )));
                 }

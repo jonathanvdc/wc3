@@ -46,16 +46,14 @@ fn compile_character_impl(
     images: &mut dyn ImageSink,
     resolve_image: &mut dyn FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
-    definition
-        .validate()
-        .map_err(|error| ModelError(error.to_string()))?;
+    definition.validate().map_err(ModelError::from_source)?;
     let root_node_count = models
         .get(&definition.model)
         .map_or(0, |model| model.nodes().len());
     let corrections = bone_corrections(
         models
             .get(&definition.model)
-            .ok_or_else(|| ModelError("missing character model".into()))?,
+            .ok_or_else(|| ModelError::new("missing character model"))?,
         &definition.bone_sets,
     )?;
     let assembly = PendingAssembly {
@@ -114,7 +112,7 @@ fn apply_root_corrections(
         node.correction = corrections.get(&node.id).copied();
     }
     // Validate every descendant, including composed equipment, before publishing a model.
-    PoseLayout::new(compiled.nodes.to_vec()).map_err(|error| ModelError(error.to_string()))?;
+    PoseLayout::new(compiled.nodes.to_vec()).map_err(ModelError::from_source)?;
     compiled.rest_bounds = rest_bounds(compiled, None);
     Ok(())
 }
@@ -138,7 +136,7 @@ fn bone_corrections(
                 continue;
             }
             if !remaining.remove(resource) {
-                return Err(ModelError(format!(
+                return Err(ModelError::new(format!(
                     "ambiguous native bone correction resource {resource:?}"
                 )));
             }
@@ -146,9 +144,9 @@ fn bone_corrections(
                 let matrix = set
                     .transforms
                     .get(index)
-                    .ok_or_else(|| ModelError("native bone correction matrix is missing".into()))?;
+                    .ok_or_else(|| ModelError::new("native bone correction matrix is missing"))?;
                 if corrections.insert(*node, matrix).is_some() {
-                    return Err(ModelError(format!(
+                    return Err(ModelError::new(format!(
                         "selected native bone sets overlap at {node:?}"
                     )));
                 }
@@ -156,7 +154,7 @@ fn bone_corrections(
         }
     }
     if let Some(resource) = remaining.iter().next() {
-        return Err(ModelError(format!(
+        return Err(ModelError::new(format!(
             "selected native bone correction resource is absent: {resource:?}"
         )));
     }
@@ -171,14 +169,14 @@ fn source(
 ) -> Result<Source, ModelError> {
     let model = models
         .get(resource)
-        .ok_or_else(|| ModelError(format!("missing assembly model {resource:?}")))?;
+        .ok_or_else(|| ModelError::new(format!("missing assembly model {resource:?}")))?;
     let catalog = CharacterCatalog::inspect(model);
     let draws = geosets
         .map(|selection| {
             selection
                 .draws(&catalog)
                 .map(|draws| draws.into_iter().map(|draw| draw.draw).collect())
-                .map_err(|error| ModelError(error.to_string()))
+                .map_err(ModelError::from_source)
         })
         .transpose()?;
     let images = model
@@ -228,12 +226,12 @@ fn bind_part(
             let (point, parent) = match points.as_slice() {
                 [point] => *point,
                 [] => {
-                    return Err(ModelError(format!(
+                    return Err(ModelError::new(format!(
                         "character attachment {identity:?} is absent"
                     )))
                 }
                 _ => {
-                    return Err(ModelError(format!(
+                    return Err(ModelError::new(format!(
                         "character attachment {identity:?} is ambiguous"
                     )))
                 }
@@ -242,7 +240,7 @@ fn bind_part(
             // bone matrices themselves map authored model coordinates.
             let pivot = body
                 .node(parent)
-                .ok_or_else(|| ModelError("attachment node is absent".into()))?
+                .ok_or_else(|| ModelError::new("attachment node is absent"))?
                 .transform
                 .pivot;
             PartBinding::Mounted(ModelMount {
@@ -272,14 +270,14 @@ fn bind_part(
                     match body_catalog.match_joints(&catalog, &[node]) {
                         Ok(matches) => joints.extend(matches),
                         Err(JointMatchError::Unmatched(_)) => {}
-                        Err(error) => return Err(ModelError(error.to_string())),
+                        Err(error) => return Err(ModelError::from_source(error)),
                     }
                 }
             } else {
                 joints.extend(
                     body_catalog
                         .match_joints(&catalog, &required)
-                        .map_err(|error| ModelError(error.to_string()))?,
+                        .map_err(ModelError::from_source)?,
                 );
             }
             // Bind other unambiguous native bones opportunistically so a

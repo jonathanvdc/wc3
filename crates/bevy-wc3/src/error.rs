@@ -1,28 +1,143 @@
 //! Errors from semantic compilation and native asset loading.
+use crate::TextureInput;
 use bevy::asset::{AssetPath, ReadAssetBytesError};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io;
 use wc3::model::io::asset::{Error as NativeAssetError, Request};
+use wc3::model::{ImageResource, ImageResourceId, ResourceLocator};
 
-/// A model decoding, strict conversion, or geometry preparation failure.
+/// The preparation operation that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PreparationOperation {
+    /// Check authored model data or application selections.
+    Validate,
+    /// Compile a semantic model into renderer definitions.
+    Compile,
+    /// Project selected geometry into renderer meshes.
+    Geometry,
+    /// Resolve prepared child models or particle programmes.
+    Dependencies,
+    /// Read encoded image bytes.
+    ImageRead,
+    /// Decode an image or interpret its pixel format.
+    ImageDecode,
+    /// Compose decoded images into an atlas.
+    Atlas,
+    /// Bind compiled model components into an assembly.
+    Compose,
+}
+
+/// An inspectable location or operation attached to a preparation failure.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PreparationContext {
+    /// Preparation operation.
+    Operation(PreparationOperation),
+    /// Root or directly compiled assembly model.
+    Model(ResourceLocator<'static>),
+    /// Zero-based part position in the application assembly plan.
+    Part {
+        /// Position in the original ordered part list.
+        index: usize,
+        /// Resource identifying the component model.
+        model: ResourceLocator<'static>,
+    },
+    /// Semantic image selected by the application or native adapter.
+    Image(ImageResource<'static>),
+    /// Resolved Bevy asset path, including its named source.
+    Asset(AssetPath<'static>),
+    /// Source-model image dependency selected for replacement.
+    ImageDependency(ImageResourceId),
+    /// Structural material or emitter input selected for replacement.
+    ImageInput(TextureInput),
+}
+
+impl Display for PreparationContext {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Operation(operation) => f.write_str(match operation {
+                PreparationOperation::Validate => "validate model selections",
+                PreparationOperation::Compile => "compile model",
+                PreparationOperation::Geometry => "compile geometry",
+                PreparationOperation::Dependencies => "resolve model dependencies",
+                PreparationOperation::ImageRead => "read image",
+                PreparationOperation::ImageDecode => "decode image",
+                PreparationOperation::Atlas => "compose atlas",
+                PreparationOperation::Compose => "compose assembly",
+            }),
+            Self::Model(model) => write!(f, "model {model:?}"),
+            Self::Part { index, model } => write!(f, "assembly part {index} ({model:?})"),
+            Self::Image(image) => write!(f, "image {image:?}"),
+            Self::Asset(path) => write!(f, "asset {path}"),
+            Self::ImageDependency(id) => write!(f, "image dependency {id:?}"),
+            Self::ImageInput(input) => write!(f, "image input {input:?}"),
+        }
+    }
+}
+
+/// A renderer preparation failure retaining its typed cause and context.
+///
+/// Inspect [`Self::contexts`] for operations and source identities, then follow
+/// [`Error::source`] to the original validation, image, atlas or provider error.
+/// Display text is explanatory and is not a stable classification interface.
 #[derive(Debug)]
-pub struct ModelError(pub(crate) String);
+pub struct ModelError {
+    context: Vec<PreparationContext>,
+    source: Box<dyn Error + Send + Sync>,
+}
 
 impl ModelError {
-    /// Construct a model error from an application resource provider or compiler.
+    /// Describe an authored contract failure that has no underlying error value.
+    /// Use [`Self::from_source`] when an operation already returned an error.
     pub fn new(message: impl Into<String>) -> Self {
-        Self(message.into())
+        Self::from_source(MessageError(message.into()))
+    }
+
+    /// Retain an existing error without formatting or replacing its typed cause.
+    pub fn from_source(source: impl Error + Send + Sync + 'static) -> Self {
+        Self {
+            context: Vec::new(),
+            source: Box::new(source),
+        }
+    }
+
+    /// Add an outer preparation location or operation without changing the cause.
+    pub fn with_context(mut self, context: PreparationContext) -> Self {
+        self.context.push(context);
+        self
+    }
+
+    /// Attached context, from the innermost operation to the outermost caller.
+    pub fn contexts(&self) -> &[PreparationContext] {
+        &self.context
     }
 }
 
 impl Display for ModelError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        f.write_str(&self.0)
+        for context in self.context.iter().rev() {
+            write!(f, "{context}: ")?;
+        }
+        Display::fmt(&self.source, f)
     }
 }
 
-impl Error for ModelError {}
+impl Error for ModelError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
+#[derive(Debug)]
+struct MessageError(String);
+impl Display for MessageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(&self.0)
+    }
+}
+impl Error for MessageError {}
 
 /// A native asset load failure retaining document identities and source errors.
 #[derive(Debug)]
@@ -121,5 +236,44 @@ impl Error for ModelLoadError {
             | Self::MissingWmoProfile { .. }
             | Self::UnsupportedExtension { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assembly::AtlasError;
+
+    #[test]
+    fn asset_failure_retains_preparation_context_and_typed_cause() {
+        let error = ModelLoadError::Compile {
+            owner: AssetPath::from("source://body.m2"),
+            source: ModelError::from_source(AtlasError::PixelCount)
+                .with_context(PreparationContext::Operation(PreparationOperation::Atlas))
+                .with_context(PreparationContext::Part {
+                    index: 3,
+                    model: ResourceLocator::FileDataId(17),
+                }),
+        };
+        let preparation = error
+            .source()
+            .unwrap()
+            .downcast_ref::<ModelError>()
+            .unwrap();
+        assert!(matches!(
+            preparation.contexts(),
+            [
+                PreparationContext::Operation(PreparationOperation::Atlas),
+                PreparationContext::Part {
+                    index: 3,
+                    model: ResourceLocator::FileDataId(17)
+                }
+            ]
+        ));
+        assert_eq!(
+            preparation.source().unwrap().downcast_ref::<AtlasError>(),
+            Some(&AtlasError::PixelCount)
+        );
+        assert!(error.to_string().contains("source://body.m2"));
     }
 }

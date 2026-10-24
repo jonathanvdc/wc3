@@ -392,7 +392,9 @@ fn third_texture_route_preserves_corner_domain_and_omits_unused_streams() {
     let error = compile_geometry_with_uvs(&source, subset, 0, Some(1), Some(3))
         .err()
         .unwrap();
-    assert!(error.0.contains("texture coordinate set 3 is absent"));
+    assert!(error
+        .to_string()
+        .contains("texture coordinate set 3 is absent"));
 }
 
 #[test]

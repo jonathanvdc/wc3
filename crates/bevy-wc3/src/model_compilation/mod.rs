@@ -60,7 +60,7 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
 pub(crate) fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
     PoseLayout::new(nodes.to_vec())
         .map(|layout| layout.into_parts().1)
-        .map_err(|error| ModelError(error.to_string()))
+        .map_err(ModelError::from_source)
 }
 
 /// Compile geometry, skin bindings, default appearances, surfaces, and animation
@@ -95,7 +95,7 @@ pub(crate) fn compile_with_geometry(
     mut resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
     mesh_interner: &mut MeshInterner,
 ) -> Result<CompiledModel, ModelError> {
-    model.validate().map_err(|e| ModelError(e.to_string()))?;
+    model.validate().map_err(ModelError::from_source)?;
     validate_dependencies(model, &options.child_models, &options.particle_effects)?;
     let targets = AnimationTargets::new(model);
     let node_map: HashMap<_, _> = model
@@ -104,9 +104,7 @@ pub(crate) fn compile_with_geometry(
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
-    let layout = model
-        .prepare_pose()
-        .map_err(|error| ModelError(error.to_string()))?;
+    let layout = model.prepare_pose().map_err(ModelError::from_source)?;
     let (nodes, order) = layout.into_parts();
     let mut diagnostics = Vec::new();
     for (id, clip) in model.clips() {

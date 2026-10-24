@@ -61,9 +61,7 @@ impl JointMap {
             .get(&source)
             .is_some_and(|value| *value != destination)
         {
-            return Err(ModelError(
-                "source joint has conflicting destinations".into(),
-            ));
+            return Err(ModelError::new("source joint has conflicting destinations"));
         }
         self.0.insert(source, destination);
         Ok(())
@@ -117,8 +115,8 @@ fn finite_frame(matrix: Mat4) -> Result<(), ModelError> {
         || matrix.determinant().abs() < 1e-10
         || !matrix.row(3).abs_diff_eq(Vec4::W, 1e-6)
     {
-        return Err(ModelError(
-            "composition requires a finite invertible affine frame".into(),
+        return Err(ModelError::new(
+            "composition requires a finite invertible affine frame",
         ));
     }
     Ok(())
@@ -129,8 +127,8 @@ fn transform(matrix: Mat4) -> Result<ModelTransform, ModelError> {
     if !Mat4::from_scale_rotation_translation(scale, rotation, translation)
         .abs_diff_eq(matrix, 1e-4)
     {
-        return Err(ModelError(
-            "composition frame contains shear that a hierarchy node cannot represent".into(),
+        return Err(ModelError::new(
+            "composition frame contains shear that a hierarchy node cannot represent",
         ));
     }
     Ok(ModelTransform {
@@ -243,7 +241,7 @@ impl CompiledModel {
                             let parent = output
                                 .features
                                 .attachment_node(point)
-                                .ok_or_else(|| ModelError("attachment point is absent".into()))?;
+                                .ok_or_else(|| ModelError::new("attachment point is absent"))?;
                             (parent, Some(point))
                         }
                     };
@@ -254,10 +252,10 @@ impl CompiledModel {
             if let Some((parent, point, placement)) = rigid {
                 let parent = *host_indices
                     .get(&parent)
-                    .ok_or_else(|| ModelError("rigid mount node is absent".into()))?;
+                    .ok_or_else(|| ModelError::new("rigid mount node is absent"))?;
                 placement
                     .validate_transform()
-                    .map_err(|error| ModelError(error.to_string()))?;
+                    .map_err(ModelError::from_source)?;
                 let conversion = ChildCoordinates {
                     coordinates: placement.coordinates,
                     parent_basis: output.basis,
@@ -270,8 +268,8 @@ impl CompiledModel {
                     if !output.clips.iter().any(|(id, _)| *id == host)
                         || !source.clips.iter().any(|(id, _)| *id == child)
                     {
-                        return Err(ModelError(
-                            "rigid clip mapping references an absent clip".into(),
+                        return Err(ModelError::new(
+                            "rigid clip mapping references an absent clip",
                         ));
                     }
                 }
@@ -294,14 +292,13 @@ impl CompiledModel {
                 .keys()
                 .any(|id| host_indices.contains_key(id))
             {
-                return Err(ModelError(
-                    "composition requires independently scoped model nodes".into(),
+                return Err(ModelError::new(
+                    "composition requires independently scoped model nodes",
                 ));
             }
             if !source.world.groups.is_empty() || !source.world.environments.is_empty() {
-                return Err(ModelError(
-                    "static-world parts require a rigid mount to retain their regional selection"
-                        .into(),
+                return Err(ModelError::new(
+                    "static-world parts require a rigid mount to retain their regional selection",
                 ));
             }
             let source_rest = rest_poses(source);
@@ -311,17 +308,17 @@ impl CompiledModel {
                 Mounted(_) => unreachable!("rigid parts were handled above"),
                 Skinned { joints, transform } => {
                     if joints.0.is_empty() {
-                        return Err(ModelError(
-                            "skinned part requires explicit joint bindings".into(),
+                        return Err(ModelError::new(
+                            "skinned part requires explicit joint bindings",
                         ));
                     }
                     for (source, destination) in joints.iter() {
                         let source = *source_indices
                             .get(&source)
-                            .ok_or_else(|| ModelError("source binding joint is absent".into()))?;
+                            .ok_or_else(|| ModelError::new("source binding joint is absent"))?;
                         let destination = *host_indices
                             .get(&destination)
-                            .ok_or_else(|| ModelError("host binding joint is absent".into()))?;
+                            .ok_or_else(|| ModelError::new("host binding joint is absent"))?;
                         mapped.insert(source, destination);
                     }
                     for joint in used_joints(source) {
@@ -333,7 +330,7 @@ impl CompiledModel {
                             ancestor = source.nodes[index].parent;
                         }
                         if ancestor.is_none() {
-                            return Err(ModelError(format!(
+                            return Err(ModelError::new(format!(
                                 "weighted equipment joint {:?} has no host binding or bound ancestor",
                                 source.nodes[joint].id
                             )));
@@ -349,12 +346,12 @@ impl CompiledModel {
             let definition = identities
                 .new_node("part coordinate frame")
                 .with_transform(rest, identities.values_mut())
-                .map_err(|e| ModelError(e.to_string()))?;
+                .map_err(ModelError::from_source)?;
             let slots = definition.transform;
             let visibility = definition.visible;
             let frame_id = identities
                 .add_node(definition)
-                .map_err(|e| ModelError(e.to_string()))?;
+                .map_err(ModelError::from_source)?;
             nodes.push(RuntimeNode {
                 id: frame_id,
                 name: "part coordinate frame".into(),
@@ -486,7 +483,7 @@ impl CompiledModel {
                     .compose(&source.animation, &clip_pairs, |channel| {
                         !bound_slots.contains(&channel.target())
                     })
-                    .map_err(|e| ModelError(e.to_string()))?,
+                    .map_err(ModelError::from_source)?,
             );
             for mount in &source.mounts {
                 output.mounts.push(RuntimeMount {
@@ -576,12 +573,12 @@ impl CompiledModel {
                 }
             }
         }
-        let frames = identities.finish().map_err(|e| ModelError(e.to_string()))?;
+        let frames = identities.finish().map_err(ModelError::from_source)?;
         output.animation = Arc::new(
             output
                 .animation
                 .compose(&AnimationProgram::compile(&frames), &[], |_| true)
-                .map_err(|e| ModelError(e.to_string()))?,
+                .map_err(ModelError::from_source)?,
         );
         Ok(output)
     }

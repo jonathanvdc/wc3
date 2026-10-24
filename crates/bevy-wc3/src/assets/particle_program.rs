@@ -43,7 +43,7 @@ pub(super) async fn resolve_programmes(
                     continue;
                 }
                 Err(error) => {
-                    return Err(ModelError(format!(
+                    return Err(ModelError::new(format!(
                         "cannot read external particle programme at {path}: {error}"
                     )));
                 }

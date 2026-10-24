@@ -18,7 +18,7 @@ pub(super) fn compile_skin_bounds(mesh: &mut Mesh) -> Result<(), ModelError> {
     let positions = mesh
         .attribute(Mesh::ATTRIBUTE_POSITION)
         .and_then(VertexAttributeValues::as_float3)
-        .ok_or_else(|| ModelError("skin bounds require positions".into()))?;
+        .ok_or_else(|| ModelError::new("skin bounds require positions"))?;
     let mut ranges: Vec<Option<(Vec3, Vec3)>> = Vec::new();
     let mut sums = vec![0f32; positions.len()];
     for (index_attribute, weight_attribute) in [
@@ -36,18 +36,18 @@ pub(super) fn compile_skin_bounds(mesh: &mut Mesh) -> Result<(), ModelError> {
             ) if indices.len() == positions.len() && weights.len() == positions.len() => {
                 (indices, weights)
             }
-            _ => return Err(ModelError("malformed skin bounds streams".into())),
+            _ => return Err(ModelError::new("malformed skin bounds streams")),
         };
         for (vertex, ((position, indices), weights)) in
             positions.iter().zip(indices).zip(weights).enumerate()
         {
             let point = Vec3::from_array(*position);
             if !point.is_finite() {
-                return Err(ModelError("nonfinite skin bounds positions".into()));
+                return Err(ModelError::new("nonfinite skin bounds positions"));
             }
             for (&index, &weight) in indices.iter().zip(weights) {
                 if !weight.is_finite() || weight < 0. {
-                    return Err(ModelError("invalid skin bounds weights".into()));
+                    return Err(ModelError::new("invalid skin bounds weights"));
                 }
                 sums[vertex] += weight;
                 if weight <= 0. {
@@ -63,8 +63,8 @@ pub(super) fn compile_skin_bounds(mesh: &mut Mesh) -> Result<(), ModelError> {
         }
     }
     if sums.iter().any(|sum| (*sum - 1.).abs() > 1e-4) {
-        return Err(ModelError(
-            "skin bounds require normalized positive weights".into(),
+        return Err(ModelError::new(
+            "skin bounds require normalized positive weights",
         ));
     }
     let mut bounds = SkinnedMeshBounds::default();

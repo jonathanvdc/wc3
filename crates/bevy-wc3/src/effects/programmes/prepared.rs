@@ -286,10 +286,10 @@ impl ParticleEffect {
             .iter()
             .enumerate()
             .find(|(_, attribute)| attribute.name.as_ref() == name.as_bytes())
-            .ok_or_else(|| ModelError(format!("unknown particle attribute {name:?}")))?;
+            .ok_or_else(|| ModelError::new(format!("unknown particle attribute {name:?}")))?;
         let value = value.into();
         if value.kind() != declaration.default.kind() {
-            return Err(ModelError(format!(
+            return Err(ModelError::new(format!(
                 "particle attribute {name:?} requires {:?}, received {:?}",
                 declaration.default.kind(),
                 value.kind()
