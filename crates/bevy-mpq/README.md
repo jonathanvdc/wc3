@@ -56,6 +56,14 @@ I/O, checksum, and decoding failures stop the search and identify the archive
 and entry. Metadata comes from the selected asset mount, so a lower-priority
 mount cannot supply settings for an overridden file.
 
+Extraction failures retain an `MpqReadError` inside `AssetReaderError::Io`. Inspect
+the I/O error's `get_ref()` for its archive label, normalized entry name and
+original `wc3::mpq::Error`; standard error sources retain the backing I/O cause.
+Backing-source failures preserve their I/O kind, while archive decoding failures
+use `InvalidData`. Missing entries remain `AssetReaderError::NotFound`, so only
+that case permits overlay fallback. Display text is for reporting rather than
+classifying failures.
+
 MPQ mounts do not supply Bevy metadata. `OverlayMount::mpq` uses the archive
 index to select the mount during metadata lookup, without extracting the asset.
 Generic mounts created with `OverlayMount::reader` select metadata by reading

@@ -1,9 +1,10 @@
 use bevy_asset::io::{AssetReader, AssetReaderError, Reader};
-use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
+use bevy_mpq::{MpqAssetReader, MpqReadError, OverlayAssetReader, OverlayMount};
 use futures_lite::future::block_on;
-use std::io::Cursor;
+use std::error::Error as _;
+use std::io::{self, Cursor};
 use std::path::Path;
-use wc3::mpq::{Archive, ArchiveWriter, Compression, FileOptions, SeekSource, WriteOptions};
+use wc3::mpq::{self, Archive, ArchiveWriter, Compression, FileOptions, SeekSource, WriteOptions};
 
 fn archive(entries: &[(&str, &[u8], u16)]) -> Vec<u8> {
     let mut writer = ArchiveWriter::new(
@@ -106,8 +107,27 @@ fn payload_errors_do_not_fall_through() {
         OverlayMount::mpq(mount(archive(&[("broken", b"good", 0)]))),
     ]);
     let error = read(&overlay, "broken").unwrap_err();
-    assert!(!matches!(error, AssetReaderError::NotFound(_)));
-    assert!(error.to_string().contains("broken.mpq"));
+    let AssetReaderError::Io(error) = error else {
+        panic!("payload error was hidden: {error}")
+    };
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    let context = error
+        .get_ref()
+        .unwrap()
+        .downcast_ref::<MpqReadError>()
+        .unwrap();
+    assert_eq!(&*context.archive, "broken.mpq");
+    assert_eq!(context.entry, "broken");
+    let source = context
+        .source()
+        .unwrap()
+        .downcast_ref::<mpq::Error>()
+        .unwrap();
+    let mpq::Error::Io(source) = source else {
+        panic!("backing source error was replaced")
+    };
+    assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
+    assert_eq!(source.to_string(), "payload unavailable");
 }
 
 struct FailingPayload {
@@ -117,7 +137,10 @@ struct FailingPayload {
 impl std::io::Read for FailingPayload {
     fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
         if self.inner.position() == self.offset {
-            return Err(std::io::Error::other("payload unavailable"));
+            return Err(std::io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "payload unavailable",
+            ));
         }
         std::io::Read::read(&mut self.inner, bytes)
     }
