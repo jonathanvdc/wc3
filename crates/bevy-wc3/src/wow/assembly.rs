@@ -2,12 +2,15 @@ use super::{
     CharacterCatalog, CharacterDefinition, EquipmentBinding, GeosetSelection, JointMatchError,
 };
 use crate::assembly::{
-    compile_with_bindings, ImageSink, Models, PendingAssembly, PendingPart, RgbaImage, Source,
-    TextureReplacement,
+    compile_with_bindings, ImageSink, Models, PendingAssembly, PendingPart, RgbaImage,
+    SelectionError, Source, TextureReplacement,
 };
 use crate::bounds::rest_bounds;
 use crate::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
-use crate::{CompiledModel, DrawSelection, JointMap, ModelError, PartBinding};
+use crate::{
+    CompiledModel, DrawSelection, JointMap, ModelError, PartBinding, PreparationContext,
+    PreparationOperation,
+};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::{Mat4, Mesh};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -46,29 +49,51 @@ fn compile_character_impl(
     images: &mut dyn ImageSink,
     resolve_image: &mut dyn FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
-    definition.validate().map_err(ModelError::from_source)?;
+    let root_context = |error: ModelError| {
+        error
+            .with_context(PreparationContext::Operation(
+                PreparationOperation::Validate,
+            ))
+            .with_context(PreparationContext::Model(definition.model.clone()))
+    };
+    definition
+        .validate()
+        .map_err(|error| root_context(ModelError::from_source(error)))?;
     let root_node_count = models
         .get(&definition.model)
         .map_or(0, |model| model.nodes().len());
     let corrections = bone_corrections(
         models
             .get(&definition.model)
-            .ok_or_else(|| ModelError::new("missing character model"))?,
+            .ok_or_else(|| root_context(ModelError::from_source(SelectionError::MissingModel)))?,
         &definition.bone_sets,
-    )?;
+    )
+    .map_err(root_context)?;
     let assembly = PendingAssembly {
         root: source(
             &definition.model,
             Some(&definition.geosets),
             &definition.textures,
             models,
-        )?,
+        )
+        .map_err(root_context)?,
         parts: definition
             .parts
             .iter()
-            .map(|part| {
+            .enumerate()
+            .map(|(index, part)| {
                 Ok(PendingPart {
-                    source: source(&part.model, part.geosets.as_ref(), &part.textures, models)?,
+                    source: source(&part.model, part.geosets.as_ref(), &part.textures, models)
+                        .map_err(|error| {
+                            error
+                                .with_context(PreparationContext::Operation(
+                                    PreparationOperation::Validate,
+                                ))
+                                .with_context(PreparationContext::Part {
+                                    index,
+                                    model: part.model.clone(),
+                                })
+                        })?,
                     binding: NativeBinding {
                         binding: part.binding.clone(),
                         joints: part.joints.clone(),
@@ -169,7 +194,7 @@ fn source(
 ) -> Result<Source, ModelError> {
     let model = models
         .get(resource)
-        .ok_or_else(|| ModelError::new(format!("missing assembly model {resource:?}")))?;
+        .ok_or_else(|| ModelError::from_source(SelectionError::MissingModel))?;
     let catalog = CharacterCatalog::inspect(model);
     let draws = geosets
         .map(|selection| {

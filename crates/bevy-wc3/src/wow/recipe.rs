@@ -1,5 +1,6 @@
 use super::CharacterCatalog;
 use crate::assembly::TextureReplacement;
+use crate::ModelError;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -94,12 +95,12 @@ impl CharacterRecipe {
     pub fn resolve<D: CharacterDatabase>(
         &self,
         database: &D,
-    ) -> Result<CharacterDefinition, RecipeError> {
-        self.validate()?;
+    ) -> Result<CharacterDefinition, RecipeResolveError<D::Error>> {
+        self.validate().map_err(RecipeResolveError::Recipe)?;
         let definition = database
             .resolve(self)
-            .map_err(|error| RecipeError::Database(error.to_string()))?;
-        definition.validate()?;
+            .map_err(RecipeResolveError::Database)?;
+        definition.validate().map_err(RecipeResolveError::Recipe)?;
         Ok(definition)
     }
 }
@@ -199,20 +200,29 @@ pub struct CharacterDefinition {
 impl CharacterDefinition {
     /// Validates atlas layouts before loading models or mutating a live character.
     pub fn validate(&self) -> Result<(), RecipeError> {
-        for replacement in self
+        for (part, category, replacement) in self
             .textures
-            .values()
-            .chain(self.parts.iter().flat_map(|part| part.textures.values()))
+            .iter()
+            .map(|(&id, value)| (None, id, value))
+            .chain(self.parts.iter().enumerate().flat_map(|(index, part)| {
+                part.textures
+                    .iter()
+                    .map(move |(&id, value)| (Some(index), id, value))
+            }))
         {
             replacement
                 .validate()
-                .map_err(|_| RecipeError::InvalidAtlas)?;
+                .map_err(|source| RecipeError::InvalidAtlas {
+                    part,
+                    category,
+                    source,
+                })?;
         }
         Ok(())
     }
 }
 /// An invalid or unresolved character recipe.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum RecipeError {
     /// One customization option was selected several times.
     DuplicateCustomization(u32),
@@ -221,16 +231,66 @@ pub enum RecipeError {
     /// A selected geoset is absent from the imported model.
     UnknownGeoset(u16),
     /// Atlas dimensions or destination rectangles are invalid.
-    InvalidAtlas,
+    InvalidAtlas {
+        /// Original component index, or `None` for the root character.
+        part: Option<usize>,
+        /// Native replacement category selected by the definition.
+        category: u32,
+        /// Atlas validation failure.
+        source: ModelError,
+    },
     /// The application database could not resolve the complete appearance.
     Database(String),
 }
 impl Display for RecipeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "invalid WoW character recipe: {self:?}")
+        match self {
+            Self::InvalidAtlas {
+                part,
+                category,
+                source,
+            } => write!(
+                f,
+                "invalid character atlas in part {part:?}, category {category}: {source}"
+            ),
+            _ => write!(f, "invalid WoW character recipe: {self:?}"),
+        }
     }
 }
-impl Error for RecipeError {}
+impl Error for RecipeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::InvalidAtlas { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+/// A character recipe rejected locally or by its application database.
+/// Database failures retain the provider's concrete error type.
+#[derive(Debug)]
+pub enum RecipeResolveError<E> {
+    /// The requested or returned appearance is invalid.
+    Recipe(RecipeError),
+    /// The application could not resolve this recipe using its dataset.
+    Database(E),
+}
+impl<E: Display> Display for RecipeResolveError<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Recipe(error) => Display::fmt(error, f),
+            Self::Database(error) => write!(f, "cannot resolve character recipe: {error}"),
+        }
+    }
+}
+impl<E: Error + 'static> Error for RecipeResolveError<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Recipe(error) => Some(error),
+            Self::Database(error) => Some(error),
+        }
+    }
+}
 
 #[cfg(test)]
 #[path = "recipe_tests.rs"]

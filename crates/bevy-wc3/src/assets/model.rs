@@ -3,7 +3,7 @@ use super::images::ImageLoadCache;
 use super::particle_program::resolve_programmes;
 use crate::child_models::{requests as child_model_requests, ChildModelBinding, ChildModelRole};
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
-use crate::error::{ModelError, ModelLoadError};
+use crate::error::{ModelError, ModelLoadError, PreparationContext, PreparationOperation};
 use crate::textures::{texture_requests, TextureRequest, TextureRequestKey};
 use crate::{
     compile_model_with_options, CompileOptions, CompiledModel, ParticleTextureRequest,
@@ -520,9 +520,12 @@ async fn compile_loaded(
                     continue;
                 }
                 Err(error) => {
-                    return Err(ModelError::new(format!(
-                        "cannot read optional child {resource:?}: {error}"
-                    )));
+                    return Err(ModelError::from_source(error)
+                        .with_context(PreparationContext::Operation(
+                            PreparationOperation::Dependencies,
+                        ))
+                        .with_context(PreparationContext::Model(resource.clone()))
+                        .with_context(PreparationContext::Asset(path)));
                 }
             }
             if children.ancestry.contains(&path.to_string())

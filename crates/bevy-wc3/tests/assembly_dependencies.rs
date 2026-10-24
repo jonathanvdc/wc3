@@ -4,13 +4,17 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy_wc3::assembly::{
     compile_assembly, compile_assembly_with_dependencies, Assembly, Models, Part, RgbaImage,
-    Source, SourceDependencies,
+    SelectionError, Source, SourceDependencies,
 };
 use bevy_wc3::{
-    spawn_model, ChildModelBinding, ChildModelKey, ModelError, ModelMaterial, ModelRig,
-    PartBinding, ParticleEffect, ParticleProgramControls, RenderDiagnosticKind,
+    spawn_model, ChildModelBinding, ChildModelKey, JointMap, ModelError, ModelMaterial, ModelRig,
+    PartBinding, ParticleEffect, ParticleProgramControls, PreparationContext, PreparationOperation,
+    RenderDiagnosticKind,
 };
 use std::collections::HashMap;
+use std::error::Error as _;
+use std::io::Error as IoError;
+use std::io::ErrorKind;
 use wc3::model::conversion::ImportOptions;
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
 use wc3::model::io;
@@ -204,7 +208,7 @@ fn invalid_plan_and_failed_resolver_do_not_decode_images() {
     let missing = Assembly::new(Source::new(resource("missing")));
     let mut resolutions = 0;
     let mut images = Assets::default();
-    assert!(compile_assembly_with_dependencies(
+    let missing_error = compile_assembly_with_dependencies(
         &missing,
         &models,
         &mut images,
@@ -214,21 +218,48 @@ fn invalid_plan_and_failed_resolver_do_not_decode_images() {
         },
         |_| panic!("invalid plans cannot decode images"),
     )
-    .is_err());
+    .err()
+    .unwrap();
+    assert!(matches!(
+        missing_error
+            .source()
+            .unwrap()
+            .downcast_ref::<SelectionError>(),
+        Some(SelectionError::MissingModel)
+    ));
+    assert!(
+        matches!(missing_error.contexts().last(), Some(PreparationContext::Model(model)) if *model == resource("missing"))
+    );
     assert_eq!(resolutions, 0);
     let valid = Assembly::new(Source::new(resource("root")));
     let result = compile_assembly_with_dependencies(
         &valid,
         &models,
         &mut images,
-        |_, _| Err(ModelError::new("dependency preparation failed")),
+        |_, _| {
+            Err(ModelError::from_source(IoError::new(
+                ErrorKind::PermissionDenied,
+                "dependency preparation failed",
+            )))
+        },
         |_| panic!("failed preparation cannot decode images"),
     );
     let error = match result {
         Ok(_) => panic!("failed resolver compiled"),
         Err(error) => error,
     };
-    assert_eq!(error.to_string(), "dependency preparation failed");
+    assert_eq!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<IoError>()
+            .unwrap()
+            .kind(),
+        ErrorKind::PermissionDenied
+    );
+    assert!(
+        matches!(error.contexts(), [PreparationContext::Operation(PreparationOperation::Dependencies), PreparationContext::Model(model)] if *model == resource("root"))
+    );
     assert!(images.is_empty());
 }
 
@@ -366,4 +397,39 @@ fn resolution_is_stable_and_uses_resource_identity_not_model_equivalence() {
     )
     .unwrap();
     assert_eq!(calls, [resource("root"), resource("other")]);
+}
+
+#[test]
+fn public_composition_failure_retains_original_part_after_coalescing() {
+    let (root, root_node, _, _, _) = source();
+    let (armor, armor_node, _, _, _) = source();
+    let (mounted, foreign_node, _, _, _) = source();
+    let models: Models<'_, '_> = [
+        (resource("root"), &root),
+        (resource("armor"), &armor),
+        (resource("mounted"), &mounted),
+    ]
+    .into();
+    let mut plan = Assembly::new(Source::new(resource("root")));
+    let armor = Part::new(
+        Source::new(resource("armor")),
+        PartBinding::Skinned {
+            joints: JointMap::new([(armor_node, root_node)]).unwrap(),
+            transform: Mat4::IDENTITY,
+        },
+    );
+    plan.parts.extend([armor.clone(), armor]);
+    plan.parts
+        .push(part(Source::new(resource("mounted")), foreign_node));
+    let error = compile_assembly(&plan, &models, &mut Assets::default(), pixels)
+        .err()
+        .unwrap();
+    assert!(error.contexts().iter().any(|context| matches!(context, PreparationContext::Part { index: 2, model } if *model == resource("mounted"))), "{error}");
+    assert!(error.contexts().contains(&PreparationContext::Operation(
+        PreparationOperation::Compose
+    )));
+    assert!(
+        error.to_string().contains("rigid mount node is absent"),
+        "{error}"
+    );
 }

@@ -1,4 +1,4 @@
-use crate::error::ModelError;
+use crate::error::{ModelError, PreparationContext, PreparationOperation};
 use bevy::asset::{io::Reader, AssetLoader, AssetPath, LoadContext, RenderAssetUsages};
 use bevy::image::ImageLoaderSettings;
 use bevy::prelude::*;
@@ -28,12 +28,22 @@ impl AssetLoader for BlpImageLoader {
         settings: &ImageLoaderSettings,
         context: &mut LoadContext<'_>,
     ) -> Result<Image, ModelError> {
+        let owner = context.path().clone_owned();
         let mut bytes = Vec::new();
-        reader
-            .read_to_end(&mut bytes)
-            .await
-            .map_err(ModelError::from_source)?;
-        let mut blp = Blp::read(&bytes).map_err(ModelError::from_source)?;
+        reader.read_to_end(&mut bytes).await.map_err(|error| {
+            ModelError::from_source(error)
+                .with_context(PreparationContext::Operation(
+                    PreparationOperation::ImageRead,
+                ))
+                .with_context(PreparationContext::Asset(owner.clone()))
+        })?;
+        let mut blp = Blp::read(&bytes).map_err(|error| {
+            ModelError::from_source(error)
+                .with_context(PreparationContext::Operation(
+                    PreparationOperation::ImageDecode,
+                ))
+                .with_context(PreparationContext::Asset(owner.clone()))
+        })?;
         let external;
         if let Blp::Blp0(texture) = &mut blp {
             let path = AssetPath::from(context.path().path().with_extension("b00"))
@@ -41,10 +51,22 @@ impl AssetLoader for BlpImageLoader {
             external = context
                 .read_asset_bytes(path.clone())
                 .await
-                .map_err(|error| ModelError::new(format!("BLP0 mipmap 0 at {path}: {error}")))?;
+                .map_err(|error| {
+                    ModelError::from_source(error)
+                        .with_context(PreparationContext::Operation(
+                            PreparationOperation::ImageRead,
+                        ))
+                        .with_context(PreparationContext::Asset(path))
+                })?;
             texture.mipmaps[0] = Some(Cow::Borrowed(&external));
         }
-        decode_image(&blp, settings)
+        decode_image(&blp, settings).map_err(|error| {
+            error
+                .with_context(PreparationContext::Operation(
+                    PreparationOperation::ImageDecode,
+                ))
+                .with_context(PreparationContext::Asset(owner))
+        })
     }
 
     fn extensions(&self) -> &[&str] {

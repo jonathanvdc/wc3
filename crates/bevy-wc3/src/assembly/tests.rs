@@ -72,8 +72,8 @@ fn compatible_union_preserves_hidden_geometry_and_all_selection() {
     };
     let result = plan(&assembly, &models, |b| *b).unwrap();
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0].source.draws.draws.as_ref().unwrap().len(), 2);
-    assert!(result[0].source.draws.hidden_instances.is_empty());
+    assert_eq!(result[0].part.source.draws.draws.as_ref().unwrap().len(), 2);
+    assert!(result[0].part.source.draws.hidden_instances.is_empty());
 }
 #[test]
 fn incompatible_shared_textures_fail_before_image_provider() {
@@ -477,4 +477,61 @@ fn absent_input_is_rejected_before_resolving_images() {
         .unwrap()
         .to_string()
         .contains("absent image input"));
+}
+
+#[test]
+fn binding_failures_keep_original_part_index_after_coalescing() {
+    use crate::{JointMap, PreparationContext};
+    use bevy::math::Mat4;
+    use std::error::Error as _;
+    use std::io::{Error as IoError, ErrorKind};
+    let (model, _) = model();
+    let resource = ResourceLocator::FileDataId(1);
+    let models = [(resource.clone(), &model)].into_iter().collect();
+    let source = Source::new(resource.clone());
+    let pending = PendingAssembly {
+        root: source.clone(),
+        parts: vec![
+            PendingPart::new(source.clone(), true),
+            PendingPart::new(source.clone(), true),
+            PendingPart::new(source, false),
+        ],
+    };
+    let mut bindings = 0;
+    let error = compile_with_bindings(
+        &pending,
+        &models,
+        &mut Assets::default(),
+        |_| Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap()),
+        |skinned| *skinned,
+        |_, _, _, _| {
+            bindings += 1;
+            if bindings == 2 {
+                Err(ModelError::from_source(IoError::new(
+                    ErrorKind::InvalidInput,
+                    "binding rejected",
+                )))
+            } else {
+                Ok(PartBinding::Skinned {
+                    joints: JointMap::default(),
+                    transform: Mat4::IDENTITY,
+                })
+            }
+        },
+    )
+    .err()
+    .unwrap();
+    assert_eq!(bindings, 2);
+    assert!(
+        matches!(error.contexts().last(), Some(PreparationContext::Part { index: 2, model }) if *model == resource)
+    );
+    assert_eq!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<IoError>()
+            .unwrap()
+            .kind(),
+        ErrorKind::InvalidInput
+    );
 }

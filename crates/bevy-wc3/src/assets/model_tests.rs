@@ -1010,3 +1010,39 @@ fn native_popcorn_loader_prepares_the_baked_companion_and_external_image() {
         .any(|(_, image)| image.width() == 1 && image.height() == 1));
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn model_image_decode_failures_keep_image_path_and_blp_cause() {
+    let directory = directory("typed-image-error");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("unit.mdl"),
+        include_str!("../../tests/fixtures/light_capture.mdl")
+            .replace("capture_white.png", "invalid.blp"),
+    )
+    .unwrap();
+    fs::write(directory.join("invalid.blp"), b"invalid BLP header").unwrap();
+    let mut app = app(&directory);
+    let handle = app.world().resource::<AssetServer>().load("unit.mdl");
+    wait(&mut app, &handle).unwrap_err();
+    let LoadState::Failed(error) = app.world().resource::<AssetServer>().load_state(&handle) else {
+        panic!("load failure was not retained")
+    };
+    let AssetLoadError::AssetLoaderError(error) = error.as_ref() else {
+        panic!("expected native loader failure")
+    };
+    let ModelLoadError::Compile { source, .. } =
+        error.error().downcast_ref::<ModelLoadError>().unwrap()
+    else {
+        panic!("expected image preparation failure")
+    };
+    assert!(source.contexts().iter().any(|context| matches!(context, PreparationContext::Asset(path) if path.path().ends_with("invalid.blp"))));
+    let mut cause = source.source();
+    let mut blp = false;
+    while let Some(error) = cause {
+        blp |= error.is::<wc3::blp::ReadError>();
+        cause = error.source();
+    }
+    assert!(blp, "image decode cause was replaced: {source}");
+    fs::remove_dir_all(directory).unwrap();
+}

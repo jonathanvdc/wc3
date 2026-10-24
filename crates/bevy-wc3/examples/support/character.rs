@@ -248,16 +248,14 @@ pub fn load(
                     "character image must have a FileDataID: {resource:?}"
                 )));
             };
-            let result = || -> Result<RgbaImage> {
-                let bytes = read(directory.join(format!("{id}.blp")))?;
-                let image = Blp::read(&bytes)?.decode_mip(0)?;
-                Ok(RgbaImage::new(
-                    image.width(),
-                    image.height(),
-                    image.into_raw(),
-                )?)
-            };
-            result().map_err(|error| ModelError::new(format!("character image {id}: {error}")))
+            let bytes =
+                read(directory.join(format!("{id}.blp"))).map_err(ModelError::from_source)?;
+            let image = Blp::read(&bytes)
+                .map_err(ModelError::from_source)?
+                .decode_mip(0)
+                .map_err(ModelError::from_source)?;
+            RgbaImage::new(image.width(), image.height(), image.into_raw())
+                .map_err(ModelError::from_source)
         },
     )?)
 }

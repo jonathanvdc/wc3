@@ -58,7 +58,8 @@ impl RgbaImage {
         Arc::unwrap_or_clone(self.pixels)
     }
 }
-/// A checked rectangle uses top-left image coordinates.
+/// A rectangle in top-left image coordinates.
+/// [`compose_atlas`] checks its extent against the selected image before processing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PixelRect {
     /// Left edge in pixels.
@@ -95,7 +96,7 @@ pub struct AtlasLayer<'a> {
     pub image: &'a RgbaImage,
     /// Selected source image region.
     pub source: PixelRect,
-    /// Destination region, explicitly supplied by the client-build database.
+    /// Destination region in the output atlas.
     pub destination: PixelRect,
     /// Additional opacity, with 255 meaning unchanged source alpha.
     pub opacity: u8,

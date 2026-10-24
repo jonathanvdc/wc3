@@ -1,6 +1,7 @@
 //! Resource-driven assembly independent of native game appearance vocabularies.
 mod atlas;
 mod compile;
+mod error;
 mod image_sink;
 mod images;
 mod plan;
@@ -12,6 +13,7 @@ use crate::{
 pub use atlas::{compose_atlas, Atlas, AtlasBlend, AtlasError, AtlasLayer, PixelRect, RgbaImage};
 pub(crate) use compile::compile_with_bindings;
 pub use compile::{compile_assembly, compile_assembly_with_dependencies};
+pub use error::SelectionError;
 pub use image_sink::ImageSink;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;

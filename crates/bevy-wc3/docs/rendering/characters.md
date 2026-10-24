@@ -20,6 +20,11 @@ equipment patches by slot and display. `AppearancePatch` carries ordering,
 controlled geoset alternatives, texture replacements, atlas layers and model
 parts. Stable table keys resolve ordering ties. Missing exact rows are errors;
 DB2 decoding and item-to-display lookup remain application responsibilities.
+`CharacterRecipe::resolve` returns `RecipeResolveError<D::Error>`, distinguishing
+invalid requested or returned definitions from the database's concrete error.
+The adapter imposes no thread-safety bounds on that provider error. Invalid atlas
+errors retain the replacement category, original part index (or the root), and
+underlying `ModelError` and `AtlasError` through standard error sources.
 
 The resulting `CharacterDefinition` names model resources, native geosets,
 replacement categories and additional parts. Applications can construct it

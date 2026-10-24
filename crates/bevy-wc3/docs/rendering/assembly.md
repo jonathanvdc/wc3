@@ -188,6 +188,17 @@ renderer APIs. The compiled result owns its geometry and animation data, so the
 source model registry can be released after compilation. Failed setup returns no
 partial assembly; images already inserted remain available in the asset store.
 
+Failures return `ModelError` with inspectable `PreparationContext` frames and an
+original typed error source. Frames run from innermost to outermost and identify
+the operation, root resource or zero-based part position, image dependency or
+input, and resolved image where applicable. Part positions always refer to the
+original ordered plan, even after compatible skinned parts coalesce. Validation
+uses `assembly::SelectionError` to retain the offending look, draw, instance,
+image or clip identity. Atlas failures retain `AtlasError`; dependency and image
+callbacks retain errors supplied through `ModelError::from_source(error)`.
+Follow `std::error::Error::source` to inspect those causes. Display text includes
+context and the immediate cause for reporting and does not define a parsing API.
+
 For preparation on a worker, supply an `ImageSink` implementation or an
 `FnMut(Image) -> Handle<Image>` callback. It receives the same interpreted pixels,
 color format and sampler as immediate insertion. Reserve handles through a clone

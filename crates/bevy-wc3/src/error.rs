@@ -1,6 +1,7 @@
 //! Errors from semantic compilation and native asset loading.
 use crate::TextureInput;
-use bevy::asset::{AssetPath, ReadAssetBytesError};
+use bevy::asset::{AssetLoadError, AssetPath, LoadDirectError, ReadAssetBytesError};
+use bevy::image::ImageLoaderError;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io;
@@ -138,6 +139,39 @@ impl Display for MessageError {
     }
 }
 impl Error for MessageError {}
+
+/// A direct Bevy image load failure retaining the original loader error.
+///
+/// Bevy stores loader causes in an opaque `BevyError`. This wrapper exposes
+/// errors from the registered BLP and standard image loaders through
+/// [`Error::source`]. Other application loader errors remain available by
+/// inspecting [`Self::load`] and Bevy's `AssetLoaderError::error` downcast API.
+#[derive(Debug)]
+pub struct ImageLoadError {
+    /// Original direct-load failure, including the selected dependency and loader.
+    pub load: LoadDirectError,
+}
+impl Display for ImageLoadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.load, f)
+    }
+}
+impl Error for ImageLoadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        let LoadDirectError::LoadError { error, .. } = &self.load else {
+            return Some(&self.load);
+        };
+        if let AssetLoadError::AssetLoaderError(loader) = error {
+            if let Some(error) = loader.error().downcast_ref::<ModelError>() {
+                return Some(error);
+            }
+            if let Some(error) = loader.error().downcast_ref::<ImageLoaderError>() {
+                return Some(error);
+            }
+        }
+        Some(error)
+    }
+}
 
 /// A native asset load failure retaining document identities and source errors.
 #[derive(Debug)]

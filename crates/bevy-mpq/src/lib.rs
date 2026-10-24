@@ -50,11 +50,42 @@ use bevy_asset::io::{
     AssetReader, AssetReaderError, ErasedAssetReader, PathStream, Reader, VecReader,
 };
 use blocking::unblock;
+use std::error::Error as StdError;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::{self, Read};
 use std::num::NonZeroUsize;
 use std::path::{Component, Path};
 use std::sync::Arc;
 use wc3::mpq::{Error, ReadAt, SharedArchive};
+
+/// An extraction failure retaining archive and entry identity and its MPQ cause.
+///
+/// Non-missing read failures carry this value inside Bevy's I/O error. Use
+/// [`io::Error::get_ref`] to inspect it, then [`StdError::source`] to follow the
+/// original archive or backing-source failure.
+#[derive(Debug)]
+pub struct MpqReadError {
+    /// Application-supplied archive label.
+    pub archive: Arc<str>,
+    /// Normalized archive entry name.
+    pub entry: String,
+    /// Original decoding or backing-source error.
+    pub source: Error,
+}
+impl Display for MpqReadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(
+            f,
+            "MPQ {}, entry {}: {}",
+            self.archive, self.entry, self.source
+        )
+    }
+}
+impl StdError for MpqReadError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(&self.source)
+    }
+}
 
 /// An indexed archive with bounded concurrent extraction on blocking workers.
 /// Returned readers own their bytes and release extraction capacity.
@@ -153,7 +184,19 @@ impl<R: ReadAt + 'static> AssetReader for MpqAssetReader<R> {
                 Ok(bytes) => Ok(bytes),
                 Err(Error::FileNotFound) => Err(AssetReaderError::NotFound(path)),
                 Err(error) => {
-                    Err(io::Error::other(format!("MPQ {label}, entry {name}: {error}")).into())
+                    let kind = match &error {
+                        Error::Io(source) => source.kind(),
+                        _ => io::ErrorKind::InvalidData,
+                    };
+                    Err(io::Error::new(
+                        kind,
+                        MpqReadError {
+                            archive: label,
+                            entry: name,
+                            source: error,
+                        },
+                    )
+                    .into())
                 }
             }
         })

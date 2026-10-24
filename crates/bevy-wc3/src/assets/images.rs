@@ -1,5 +1,5 @@
 //! Per-load image sharing across model and external programme inputs.
-use crate::error::ModelError;
+use crate::error::{ImageLoadError, ModelError, PreparationContext, PreparationOperation};
 use crate::textures::{ImageKey, TextureColorSpace};
 use bevy::asset::{
     io::{AssetReaderError, SliceReader},
@@ -46,9 +46,11 @@ impl ImageLoadCache {
                         continue;
                     }
                     Err(error) => {
-                        return Err(ModelError::new(format!(
-                            "cannot load image at {path}: {error}"
-                        )));
+                        return Err(ModelError::from_source(error)
+                            .with_context(PreparationContext::Operation(
+                                PreparationOperation::ImageRead,
+                            ))
+                            .with_context(PreparationContext::Asset(path)));
                     }
                 }
             }
@@ -65,10 +67,18 @@ impl ImageLoadCache {
                 .load_untyped_value_from_reader(path.clone(), &mut reader)
                 .await
                 .map_err(|error| {
-                    ModelError::new(format!("cannot decode image at {path}: {error}"))
+                    ModelError::from_source(ImageLoadError { load: error })
+                        .with_context(PreparationContext::Operation(
+                            PreparationOperation::ImageDecode,
+                        ))
+                        .with_context(PreparationContext::Asset(path.clone()))
                 })?;
             let image = loaded.take::<Image>().ok_or_else(|| {
-                ModelError::new(format!("resource at {path} resolved to a non-image asset"))
+                ModelError::new("resource resolved to a non-image asset")
+                    .with_context(PreparationContext::Operation(
+                        PreparationOperation::ImageDecode,
+                    ))
+                    .with_context(PreparationContext::Asset(path.clone()))
             })?;
             let handle = context.add_labeled_asset(format!("Image{}", self.variants.len()), image);
             self.variants.insert(key, handle.clone());

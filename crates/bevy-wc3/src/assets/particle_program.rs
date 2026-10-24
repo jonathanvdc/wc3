@@ -2,7 +2,7 @@
 use super::images::ImageLoadCache;
 use super::model::ResourceResolver;
 use crate::diagnostics::{RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSource};
-use crate::{CompileOptions, ModelError, ParticleEffect};
+use crate::{CompileOptions, ModelError, ParticleEffect, PreparationContext, PreparationOperation};
 use bevy::asset::{io::AssetReaderError, AssetPath, LoadContext, ReadAssetBytesError};
 use std::collections::HashMap;
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
@@ -43,23 +43,25 @@ pub(super) async fn resolve_programmes(
                     continue;
                 }
                 Err(error) => {
-                    return Err(ModelError::new(format!(
-                        "cannot read external particle programme at {path}: {error}"
-                    )));
+                    return Err(ModelError::from_source(error)
+                        .with_context(PreparationContext::Operation(
+                            PreparationOperation::Dependencies,
+                        ))
+                        .with_context(PreparationContext::Asset(path.clone())));
                 }
             };
             attempted = true;
             let compiled = (|| {
-                let document = Document::read(&bytes).map_err(|error| error.to_string())?;
+                let document = Document::read(&bytes).map_err(ModelError::from_source)?;
                 let mut roots = document.effect_roots();
                 let (link, _) = roots
                     .next()
-                    .ok_or("baked effect has no effect root")?
-                    .map_err(|error| error.to_string())?;
+                    .ok_or_else(|| ModelError::new("baked effect has no effect root"))?
+                    .map_err(ModelError::from_source)?;
                 if roots.next().is_some() {
-                    return Err(
-                        "baked effect has multiple roots; select a programme explicitly".to_owned(),
-                    );
+                    return Err(ModelError::new(
+                        "baked effect has multiple roots; select a programme explicitly",
+                    ));
                 }
                 document
                     .compile_effect(
@@ -69,7 +71,7 @@ pub(super) async fn resolve_programmes(
                             ..Default::default()
                         },
                     )
-                    .map_err(|error| error.to_string())
+                    .map_err(ModelError::from_source)
                     .map(|program| program.with_execution(options.particle_execution))
             })();
             match compiled {
