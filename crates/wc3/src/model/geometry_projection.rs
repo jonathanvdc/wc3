@@ -1,4 +1,8 @@
 //! Draw projection with explicit source correspondence, independent of a renderer.
+use crate::model::error::{
+    AttributeValueKind, GeometryError, Location, TopologyKind, TriangulationFailure,
+};
+use crate::model::ConnectivityId;
 use crate::model::{
     AttributeDomain, AttributeSemantic, AttributeValues, DrawSubset, Error, GeometrySchema as _,
     Mesh, NodeId, PrimitiveRange, PrimitiveSelection, Topology, VertexInfluences,
@@ -6,9 +10,6 @@ use crate::model::{
 use glam::Vec4;
 use glam::{Vec2, Vec3};
 
-fn projection_error(message: String) -> Error {
-    Error::new("geometry.projection", message)
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Original correspondence of one projected vertex.
 pub struct SourceCorner {
@@ -26,14 +27,31 @@ struct Primitive {
 
 fn primitives(
     topology: &Topology<'_>,
+    connectivity: ConnectivityId,
     first: usize,
     count: usize,
 ) -> Result<Vec<Primitive>, Error> {
-    let end = first
-        .checked_add(count)
-        .ok_or_else(|| projection_error("primitive range overflow".into()))?;
+    let end = first.checked_add(count).ok_or_else(|| {
+        Error::at(
+            Location::new().field("range"),
+            GeometryError::RangeOverflow {
+                first: first as u32,
+                count: count as u32,
+            },
+        )
+    })?;
     if end > topology.primitive_count() {
-        return Err(projection_error("draw range exceeds connectivity".into()));
+        return Err(Error::at(
+            Location::new().field("range"),
+            GeometryError::SelectionRange {
+                connectivity,
+                range: PrimitiveRange::Primitives {
+                    first: first as u32,
+                    count: count as u32,
+                },
+                capacity: topology.primitive_count(),
+            },
+        ));
     }
     fn visit(
         topology: &Topology<'_>,
@@ -154,8 +172,12 @@ fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCo
         .map(|i| projected[i].perp_dot(projected[(i + 1) % projected.len()]))
         .sum();
     if area == 0. {
-        return Err(projection_error(
-            "degenerate polygon has no triangulation".into(),
+        return Err(Error::at(
+            Location::new().field("topology").index(polygon[0].face),
+            GeometryError::Triangulation {
+                reason: TriangulationFailure::ZeroArea,
+                corners: polygon.len(),
+            },
         ));
     }
     let sign = area.signum();
@@ -179,7 +201,15 @@ fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCo
                         && cross(projected[c], projected[a], projected[p]) * sign >= 0.
                 })
             })
-            .ok_or_else(|| projection_error("polygon is degenerate or self-intersecting".into()))?;
+            .ok_or_else(|| {
+                Error::at(
+                    Location::new().field("topology").index(polygon[0].face),
+                    GeometryError::Triangulation {
+                        reason: TriangulationFailure::NoEar,
+                        corners: polygon.len(),
+                    },
+                )
+            })?;
         result.extend([
             polygon[remaining[(ear + remaining.len() - 1) % remaining.len()]],
             polygon[remaining[ear]],
@@ -222,9 +252,15 @@ fn attribute<'m, 'a>(
                 continue;
             }
             if index >= value.values.len() {
-                return Err(projection_error(format!(
-                    "{semantic:?} correspondence exceeds attribute values"
-                )));
+                return Err(Error::at(
+                    Location::new()
+                        .attribute(semantic.clone(), domain)
+                        .index(index),
+                    GeometryError::IndexOutOfBounds {
+                        index,
+                        len: value.values.len(),
+                    },
+                ));
             }
             return Ok(Some((&value.values, index)));
         }
@@ -235,9 +271,10 @@ fn attribute<'m, 'a>(
         .get(semantic, AttributeDomain::Pool)
         .is_some()
     {
-        return Err(projection_error(format!(
-            "{semantic:?} requires an explicit attribute-pool binding"
-        )));
+        return Err(Error::at(
+            Location::new().attribute(semantic.clone(), AttributeDomain::Pool),
+            GeometryError::MissingPoolBinding,
+        ));
     }
     Ok(None)
 }
@@ -300,11 +337,21 @@ pub struct SkinWeights {
 /// Select the full primary topology without inventing a draw or subset identity.
 fn whole_geometry(mesh: &Mesh<'_>) -> Result<DrawSubset, Error> {
     let connectivity = mesh.subsets.primary();
-    let topology = mesh
-        .connectivity(connectivity)
-        .ok_or_else(|| projection_error("primary connectivity is absent".into()))?;
-    let count = u32::try_from(topology.primitive_count())
-        .map_err(|_| projection_error("whole geometry exceeds u32 primitive range".into()))?;
+    let topology = mesh.connectivity(connectivity).ok_or_else(|| {
+        Error::at(
+            Location::new().field("connectivity"),
+            GeometryError::MissingConnectivity { connectivity },
+        )
+    })?;
+    let count = u32::try_from(topology.primitive_count()).map_err(|_| {
+        Error::at(
+            Location::new().field("topology"),
+            GeometryError::VertexCountOverflow {
+                actual: topology.primitive_count(),
+                maximum: u32::MAX as usize,
+            },
+        )
+    })?;
     Ok(DrawSubset::new(PrimitiveSelection {
         connectivity,
         range: PrimitiveRange::Primitives { first: 0, count },
@@ -323,17 +370,35 @@ fn project_geometry_with_color(
     let [secondary, third, fourth] = additional;
     let topology = mesh
         .connectivity(subset.selection.connectivity)
-        .ok_or_else(|| projection_error("draw connectivity is absent".into()))?;
+        .ok_or_else(|| {
+            Error::at(
+                Location::new().field("connectivity"),
+                GeometryError::MissingConnectivity {
+                    connectivity: subset.selection.connectivity,
+                },
+            )
+        })?;
     let (first, count, restart) = match subset.selection.range {
         PrimitiveRange::Primitives { first, count } => (first as usize, count as usize, false),
         PrimitiveRange::StripIndices { first, count } => {
             let Topology::TriangleStrip(values) = &topology else {
-                return Err(projection_error(
-                    "strip selection requires strip topology".into(),
+                return Err(Error::at(
+                    Location::new().field("range"),
+                    GeometryError::SelectionDomain {
+                        topology: TopologyKind::from(&topology),
+                        range: subset.selection.range,
+                    },
                 ));
             };
             if first as usize + count as usize > values.len() {
-                return Err(projection_error("strip range exceeds connectivity".into()));
+                return Err(Error::at(
+                    Location::new().field("range"),
+                    GeometryError::SelectionRange {
+                        connectivity: subset.selection.connectivity,
+                        range: subset.selection.range,
+                        capacity: values.len(),
+                    },
+                ));
             }
             if count < 3 {
                 return Ok(Vec::new());
@@ -341,19 +406,25 @@ fn project_geometry_with_color(
             (first as usize, count as usize - 2, first % 2 == 1)
         }
     };
-    let mut selected = primitives(&topology, first, count)?;
+    let mut selected = primitives(&topology, subset.selection.connectivity, first, count)?;
     if restart {
         for primitive in &mut selected {
             primitive.corners.swap(0, 1);
         }
     }
-    if selected
+    if let Some(corner) = selected
         .iter()
-        .flat_map(|p| &p.corners)
-        .any(|c| c.vertex >= mesh.positions().len())
+        .flat_map(|primitive| &primitive.corners)
+        .find(|corner| corner.vertex >= mesh.positions().len())
     {
-        return Err(projection_error(
-            "connectivity exceeds vertex positions".into(),
+        return Err(Error::at(
+            Location::for_owner(subset.selection.connectivity)
+                .field("corners")
+                .index(corner.corner),
+            GeometryError::IndexOutOfBounds {
+                index: corner.vertex,
+                len: mesh.positions().len(),
+            },
         ));
     }
     let mut batches: Vec<(usize, Vec<SourceCorner>)> = Vec::new();
@@ -417,9 +488,13 @@ fn project_geometry_with_color(
                         {
                             target.push(values.get(index).unwrap());
                         } else {
-                            return Err(projection_error(format!(
-                                "texture coordinate set {coordinate} is absent"
-                            )));
+                            return Err(Error::at(
+                                Location::new().attribute(
+                                    AttributeSemantic::TexCoord(coordinate),
+                                    AttributeDomain::Vertex,
+                                ),
+                                GeometryError::MissingTextureCoordinates { slot: coordinate },
+                            ));
                         }
                     }
                 }
@@ -435,21 +510,36 @@ fn project_geometry_with_color(
                 }
                 if coordinate == 0 {
                     if let Some(binding) = subset.tangents {
-                        let pool = mesh
-                            .geometry
-                            .tangent_pool()
-                            .ok_or_else(|| projection_error("tangent pool is absent".into()))?;
+                        let pool = mesh.geometry.tangent_pool().ok_or_else(|| {
+                            Error::at(
+                                Location::new().field("tangents"),
+                                GeometryError::MissingTangentPool,
+                            )
+                        })?;
                         let index = c
                             .vertex
                             .checked_sub(binding.first_vertex as usize)
                             .filter(|i| *i < binding.vertex_count as usize)
                             .ok_or_else(|| {
-                                projection_error("vertex outside tangent binding".into())
+                                Error::at(
+                                    Location::new().field("tangents"),
+                                    GeometryError::TangentVertexWindow {
+                                        vertex: c.vertex,
+                                        first: binding.first_vertex,
+                                        count: binding.vertex_count,
+                                    },
+                                )
                             })?;
                         tangents.push(
                             pool.get(binding.first_tangent as usize + index)
                                 .ok_or_else(|| {
-                                    projection_error("tangent binding exceeds pool".into())
+                                    Error::at(
+                                        Location::new().field("tangents"),
+                                        GeometryError::IndexOutOfBounds {
+                                            index: binding.first_tangent as usize + index,
+                                            len: pool.len(),
+                                        },
+                                    )
                                 })?,
                         );
                     } else if let Some((AttributeValues::Vector4(values), index)) =
@@ -494,9 +584,13 @@ fn project_geometry_with_color(
             if !uvs.is_empty() {
                 output.texture_coordinates[0] = uvs;
             } else if coordinate != 0 {
-                return Err(projection_error(format!(
-                    "texture coordinate set {coordinate} is absent"
-                )));
+                return Err(Error::at(
+                    Location::new().attribute(
+                        AttributeSemantic::TexCoord(coordinate),
+                        AttributeDomain::Vertex,
+                    ),
+                    GeometryError::MissingTextureCoordinates { slot: coordinate },
+                ));
             } else {
                 output.texture_coordinates[0] = vec![Vec2::from_array([0.; 2]); corners.len()];
             }
@@ -533,27 +627,48 @@ pub fn skin_weights(
                         .position(|id| *id == v.node)
                         .map(|i| (i, v.weight))
                         .ok_or_else(|| {
-                            projection_error("influencing node is absent from skin".into())
+                            Error::at(
+                                Location::new()
+                                    .field("influences")
+                                    .index(vertex)
+                                    .field("node"),
+                                GeometryError::UnboundNode { node: v.node },
+                            )
                         })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         };
-        if values.iter().any(|(_, w)| !w.is_finite() || *w < 0.) {
-            return Err(projection_error(
-                "skin weights must be finite and nonnegative".into(),
-            ));
+        for (index, &(_, weight)) in values.iter().enumerate() {
+            if !weight.is_finite() || weight < 0. {
+                return Err(Error::at(
+                    Location::new()
+                        .field("influences")
+                        .index(vertex)
+                        .index(index)
+                        .field("weight"),
+                    GeometryError::InvalidWeight { weight },
+                ));
+            }
         }
         let active: Vec<_> = values.into_iter().filter(|(_, w)| *w > 0.).collect();
         let sum: f32 = active.iter().map(|(_, w)| w).sum();
         if !sum.is_finite() || sum <= 0. {
-            return Err(projection_error(
-                "skinned vertex has no positive joint contribution".into(),
+            return Err(Error::at(
+                Location::new().field("influences").index(vertex),
+                GeometryError::NoPositiveWeights { sum },
             ));
         }
         for &(joint, _) in &active {
             if joint >= joints.len() {
-                return Err(projection_error(
-                    "joint contribution exceeds skin palette".into(),
+                return Err(Error::at(
+                    Location::new()
+                        .field("influences")
+                        .index(vertex)
+                        .field("joint"),
+                    GeometryError::IndexOutOfBounds {
+                        index: joint,
+                        len: joints.len(),
+                    },
                 ));
             }
             palette.push(joint);
@@ -626,10 +741,11 @@ impl ProjectedGeometry {
         macro_rules! gather { ($($variant:ident),*) => { match value { $(AttributeValues::$variant(_) => {
             let mut output = Vec::with_capacity(self.sources.len());
             for &corner in &self.sources {
-                let Some((AttributeValues::$variant(values), index)) = attribute(mesh, subset, semantic, corner)? else {
-                    return Err(projection_error("inconsistent projected attribute type or presence".into()));
+                let actual = attribute(mesh, subset, semantic, corner)?;
+                let Some((AttributeValues::$variant(values), index)) = actual else {
+                    return Err(Error::at(Location::new().attribute(semantic.clone(), AttributeDomain::Corner).index(corner.corner), GeometryError::InconsistentAttribute { expected: AttributeValueKind::from(value), actual: actual.map(|(values, _)| AttributeValueKind::from(values)) }));
                 };
-                output.push(values.get(index).ok_or_else(|| projection_error("attribute correspondence is absent".into()))?);
+                output.push(values.get(index).ok_or_else(|| Error::at(Location::new().attribute(semantic.clone(), AttributeDomain::Corner).index(corner.corner), GeometryError::IndexOutOfBounds { index, len: values.len() }))?);
             }
             Ok(Some(AttributeValues::$variant(output.into_iter().collect())))
         },)* } }; }
