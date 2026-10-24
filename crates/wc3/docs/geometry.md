@@ -107,9 +107,10 @@ profile-specific constructor. `GeometryEdit` supplies atomic replacements for
 positions, vertex normals, tangent frames, primary colors, and ordered UV streams.
 An omitted field retains its existing value; an empty stream removes an optional
 value. The operation returns a validated replacement and leaves the original
-geometry unchanged on success or failure. Unchanged arrays retain their values and
-borrowed buffers; owned buffers are copied when cloning the geometry. Remapped
-streams are materialized as owned encoded arrays.
+geometry unchanged on success or failure. Unchanged arrays retain borrowed storage
+or share owned packed buffers when cloning the geometry. Editing a shared array
+copies it before changing values. Remapped streams are materialized as owned
+encoded arrays.
 
 `edit_capabilities` describes supported common streams, required normals or colors,
 UV-set limits, and whether the current geometry permits vertex remapping. M2, for

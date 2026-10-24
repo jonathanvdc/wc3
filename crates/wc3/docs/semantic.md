@@ -91,14 +91,16 @@ keeps the encoded representation separate from the aligned mathematical value:
 `Vec3` at a time through `get` or `iter`. Compatible native arrays borrow their
 encoded storage without allocating an aligned vector collection. Keep that source
 alive while using the graph. `from_storage` and `into_storage` bridge native
-`ZeroVec` buffers without rebuilding them; parsing bytes checks their packed
+`ZeroVec` buffers; extracting a shared owned buffer copies its bytes, while a
+unique buffer moves without rebuilding it. Parsing checks the packed
 representation, while model publication checks semantic validity.
 
 `IntoPackedArray` accepts existing packed arrays, arrays, vectors, and slices of
-semantic values. Cloning a borrowed array retains its buffer; cloning an owned
-array copies it. `into_owned` copies borrowed buffers and moves owned ones.
-`set` and `for_each_mut` copy a borrowed buffer on its first edit and then reuse
-owned storage. Variable-length rows use `ValueGroups`, a packed element array
+semantic values. Cloning retains borrowed buffers and shares owned packed buffers.
+`into_owned` copies borrowed buffers and retains already owned storage without
+copying. `set` and `for_each_mut` copy borrowed or shared storage before its first
+edit, then reuse the unique owned buffer. Other clones keep their original values.
+Variable-length rows use `ValueGroups`, a packed element array
 with encoded row offsets. These storage rules apply independently of graph
 identity and transactional validation.
 

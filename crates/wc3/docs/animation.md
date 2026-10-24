@@ -54,6 +54,12 @@ through to earlier tracks and ultimately authored defaults. Value sampling does
 not advance clocks or dispatch events; event traversal separately examines the
 interval crossed between playback states.
 
+Compiled programs own their animation data independently of the source graph.
+Compilation detaches borrowed key buffers and shares already owned packed buffers;
+cloning or composing programs retains those immutable buffers without copying the
+keys. Each program retains its own property bindings and track selections;
+playback state remains supplied by the caller.
+
 ## Construct values and curves
 
 Allocate constants with `PropertyValues::add` or `ModelBuilder::add_value`. Construct
