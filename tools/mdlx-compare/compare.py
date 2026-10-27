@@ -147,6 +147,7 @@ def process(source, relative, destination, ours, oracle, dialect, timeout):
 
 
 def run(args):
+    dialects = list(dict.fromkeys(args.dialects))
     directory = args.build_dir.resolve()
     metadata = json.loads((directory / "adapter.json").read_text())
     oracle = directory / "whiteout-adapter"
@@ -170,7 +171,7 @@ def run(args):
         "oracle": metadata, "ours_executable_sha256": digest(ours),
         "repository_revision": checked(["git", "rev-parse", "HEAD"], cwd=ROOT),
         "repository_dirty": bool(checked(["git", "status", "--porcelain"], cwd=ROOT)),
-        "corpus": str(corpus), "dialects": args.dialects, "timeout_seconds": args.timeout,
+        "corpus": str(corpus), "dialects": dialects, "timeout_seconds": args.timeout,
         "upgrade": {"source_versions": [900, 1000], "target_version": 1200,
                     "other_versions": "unchanged", "wc3_policy": "strict"},
         "comparison": "MDL decoded and re-encoded by wc3; conservative canonical text equality",
@@ -179,7 +180,7 @@ def run(args):
     for index, source in enumerate(sources, 1):
         relative = source.relative_to(corpus)
         identifier = f"{index:03}-{digest(source)[:12]}"
-        for dialect in args.dialects:
+        for dialect in dialects:
             destination = results / identifier / dialect
             destination.mkdir(parents=True)
             try:

@@ -1,8 +1,11 @@
 """Runner failure-path tests; do not require WhiteoutLib or network access."""
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("compare", Path(__file__).with_name("compare.py"))
 compare = importlib.util.module_from_spec(SPEC)
@@ -25,6 +28,41 @@ class ComparisonTests(unittest.TestCase):
         executable = self.executable("empty", "pass\n")
         result = compare.stage(executable, self.root / "input", self.root / "output", "hive", 5)
         self.assertEqual(result["status"], "missing_output")
+
+    def test_repeated_dialects_produce_one_report_each_in_selection_order(self):
+        executable = self.executable("converter", "import sys\nfrom pathlib import Path\nPath(sys.argv[2]).write_text('same canonical text')\n")
+        build = self.root / "build"
+        build.mkdir()
+        oracle = build / "whiteout-adapter"
+        oracle.write_bytes(executable.read_bytes())
+        oracle.chmod(0o755)
+        compare.save_json(build / "adapter.json", {
+            **compare.LOCK, "executable_sha256": compare.digest(oracle),
+            "adapter_source_sha256": compare.digest(compare.HERE / "adapter.cpp"),
+            "cmake_source_sha256": compare.digest(compare.HERE / "CMakeLists.txt"),
+        })
+        corpus = self.root / "corpus"
+        corpus.mkdir()
+        (corpus / "input.mdx").write_bytes(b"MDLX")
+        results = self.root / "results"
+        args = SimpleNamespace(build_dir=build, corpus=corpus, results=results,
+                               dialects=["hive", "engine", "hive"], timeout=5, fail_on_review=True)
+        metadata = json.dumps({"target_directory": str(self.root)})
+        target = self.root / "debug/examples"
+        target.mkdir(parents=True)
+        (target / "mdlx_compare").symlink_to(executable)
+        real_run = compare.subprocess.run
+        def without_build(command, **kwargs):
+            if command[0] != "cargo":
+                return real_run(command, **kwargs)
+        with patch.object(compare.subprocess, "run", side_effect=without_build), patch.object(
+                compare, "checked", side_effect=[metadata, "test-revision", ""]):
+            self.assertEqual(compare.run(args), 0)
+        summary = json.loads((results / "summary.json").read_text())
+        self.assertEqual(summary["counts"], {"agreement": 2})
+        self.assertEqual([report["dialect"] for report in summary["reports"]], ["hive", "engine"])
+        self.assertEqual(json.loads((results / "run.json").read_text())["dialects"], ["hive", "engine"])
+        self.assertTrue((results / "README.md").is_file())
 
     def test_timeout_retains_diagnostics(self):
         executable = self.executable("slow", "import sys, time\nprint('before timeout', file=sys.stderr, flush=True)\ntime.sleep(5)\n")
