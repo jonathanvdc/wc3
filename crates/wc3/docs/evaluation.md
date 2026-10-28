@@ -97,8 +97,12 @@ Use `ProjectedGeometry::attribute` to gather an additional typed stream through
 that source mapping. Named application fields and exact integer labels therefore
 survive projection without being converted into floats or copied for renderers
 that do not use them. Keep the originating mesh and subset with the batch when
-requesting additional attributes. Independent attribute pools require explicit
-bindings; unsupported pool interpretations return an error.
+requesting additional attributes. Explicit tangent requests honor the subset's
+`TangentBinding`, including its vertex window and tangent-pool offset, with the
+same precedence and diagnostics as projection. This also allows gathering authored
+tangents when a different UV slot was selected and the projected tangent stream
+is empty. Independent attribute pools require explicit bindings; unsupported
+pool interpretations return an error.
 
 For skinned geometry, `ProjectedGeometry::skin_weights` resolves source influences
 into normalized variable-length rows and a compact palette of source joint slots.

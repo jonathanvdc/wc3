@@ -4,8 +4,8 @@ use crate::model::error::{
 };
 use crate::model::ConnectivityId;
 use crate::model::{
-    AttributeDomain, AttributeSemantic, AttributeValues, DrawSubset, Error, GeometrySchema as _,
-    Mesh, NodeId, PrimitiveRange, PrimitiveSelection, Topology, VertexInfluences,
+    AttributeDomain, AttributeSemantic, AttributeValues, DrawSubset, Error, Mesh, NodeId,
+    PrimitiveRange, PrimitiveSelection, Topology, VertexInfluences,
 };
 use glam::Vec4;
 use glam::{Vec2, Vec3};
@@ -256,6 +256,51 @@ fn attribute<'m, 'a>(
     semantic: &AttributeSemantic<'_>,
     c: SourceCorner,
 ) -> Result<Option<ResolvedAttribute<'m, 'a>>, Error> {
+    if let Some(binding) = subset
+        .tangents
+        .filter(|_| matches!(semantic, AttributeSemantic::Tangent))
+    {
+        let values = &mesh
+            .geometry
+            .attributes
+            .get(semantic, AttributeDomain::Pool)
+            .ok_or_else(|| {
+                Error::at(
+                    Location::new().field("tangents"),
+                    GeometryError::MissingTangentPool,
+                )
+            })?
+            .values;
+        let offset = c
+            .vertex
+            .checked_sub(binding.first_vertex as usize)
+            .filter(|i| *i < binding.vertex_count as usize)
+            .ok_or_else(|| {
+                Error::at(
+                    Location::new().field("tangents"),
+                    GeometryError::TangentVertexWindow {
+                        vertex: c.vertex,
+                        first: binding.first_vertex,
+                        count: binding.vertex_count,
+                    },
+                )
+            })?;
+        let index = binding.first_tangent as usize + offset;
+        if index >= values.len() {
+            return Err(Error::at(
+                Location::new().field("tangents"),
+                GeometryError::IndexOutOfBounds {
+                    index,
+                    len: values.len(),
+                },
+            ));
+        }
+        return Ok(Some(ResolvedAttribute {
+            values,
+            index,
+            domain: AttributeDomain::Pool,
+        }));
+    }
     // Most specific authored correspondence wins over a vertex stream.
     for (domain, index) in [
         (
@@ -553,40 +598,7 @@ fn project_geometry_with_color(
                     second_colors.push(values.get(index).unwrap());
                 }
                 if coordinate == 0 {
-                    if let Some(binding) = subset.tangents {
-                        let pool = mesh.geometry.tangent_pool().ok_or_else(|| {
-                            Error::at(
-                                Location::new().field("tangents"),
-                                GeometryError::MissingTangentPool,
-                            )
-                        })?;
-                        let index = c
-                            .vertex
-                            .checked_sub(binding.first_vertex as usize)
-                            .filter(|i| *i < binding.vertex_count as usize)
-                            .ok_or_else(|| {
-                                Error::at(
-                                    Location::new().field("tangents"),
-                                    GeometryError::TangentVertexWindow {
-                                        vertex: c.vertex,
-                                        first: binding.first_vertex,
-                                        count: binding.vertex_count,
-                                    },
-                                )
-                            })?;
-                        tangents.push(
-                            pool.get(binding.first_tangent as usize + index)
-                                .ok_or_else(|| {
-                                    Error::at(
-                                        Location::new().field("tangents"),
-                                        GeometryError::IndexOutOfBounds {
-                                            index: binding.first_tangent as usize + index,
-                                            len: pool.len(),
-                                        },
-                                    )
-                                })?,
-                        );
-                    } else if let Some(ResolvedAttribute {
+                    if let Some(ResolvedAttribute {
                         values: AttributeValues::Vector4(values),
                         index,
                         ..
@@ -777,6 +789,8 @@ impl Mesh<'_> {
 impl ProjectedGeometry {
     /// Projects an additional typed attribute using this batch's complete source mapping.
     /// This preserves application fields without making the renderer copy unused streams.
+    /// Tangent requests honor the subset's explicit tangent-pool binding, even when
+    /// the batch was projected with a different UV slot and has no tangent stream.
     /// Returns `None` when the attribute is absent; partial correspondence is an error.
     pub fn attribute(
         &self,
