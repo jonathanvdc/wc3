@@ -86,6 +86,13 @@ streams; applications can index or optimize them afterward. Missing triangle
 normals are generated, while missing tangents remain empty. Bevy's adapter generates
 its renderer tangents during mesh construction.
 
+Projection stages source corners in contiguous storage with primitive boundaries.
+Triangles, lines, points, and expanded strips append directly into batch buffers,
+without a heap buffer per primitive. Polygon triangulation retains its scratch
+storage and appends results into the same batch buffers. All selected vertex
+indices are checked before triangulation; all triangulation finishes before
+attribute reads or color callbacks begin.
+
 Use `ProjectedGeometry::attribute` to gather an additional typed stream through
 that source mapping. Named application fields and exact integer labels therefore
 survive projection without being converted into floats or copied for renderers

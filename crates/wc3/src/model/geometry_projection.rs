@@ -21,8 +21,30 @@ pub struct SourceCorner {
     pub corner: usize,
 }
 
-struct Primitive {
+struct PrimitiveCorners {
     corners: Vec<SourceCorner>,
+    offsets: Vec<usize>,
+}
+impl PrimitiveCorners {
+    fn push(&mut self, face: usize, corner: usize, vertices: impl IntoIterator<Item = u32>) {
+        self.corners.extend(
+            vertices
+                .into_iter()
+                .enumerate()
+                .map(|(i, vertex)| SourceCorner {
+                    vertex: vertex as usize,
+                    face,
+                    corner: corner + i,
+                }),
+        );
+        self.offsets.push(self.corners.len());
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &[SourceCorner]> {
+        self.offsets
+            .windows(2)
+            .map(|range| &self.corners[range[0]..range[1]])
+    }
 }
 
 fn primitives(
@@ -30,7 +52,7 @@ fn primitives(
     connectivity: ConnectivityId,
     first: usize,
     count: usize,
-) -> Result<Vec<Primitive>, Error> {
+) -> Result<PrimitiveCorners, Error> {
     let end = first.checked_add(count).ok_or_else(|| {
         Error::at(
             Location::new().field("range"),
@@ -59,7 +81,7 @@ fn primitives(
         end: usize,
         base_face: usize,
         base_corner: usize,
-        output: &mut Vec<Primitive>,
+        output: &mut PrimitiveCorners,
     ) {
         let local_first = first.saturating_sub(base_face);
         let local_end = end
@@ -68,33 +90,20 @@ fn primitives(
         if local_first >= local_end {
             return;
         }
-        let mut push = |face: usize, corner: usize, vertices: Vec<u32>| {
-            output.push(Primitive {
-                corners: vertices
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, vertex)| SourceCorner {
-                        vertex: vertex as usize,
-                        face: base_face + face,
-                        corner: base_corner + corner + i,
-                    })
-                    .collect(),
-            });
-        };
         match topology {
             Topology::Triangles(values) => {
                 for i in local_first..local_end {
-                    push(i, i * 3, values.get(i).unwrap().to_vec());
+                    output.push(base_face + i, base_corner + i * 3, values.get(i).unwrap());
                 }
             }
             Topology::Lines(values) => {
                 for i in local_first..local_end {
-                    push(i, i * 2, values.get(i).unwrap().to_vec());
+                    output.push(base_face + i, base_corner + i * 2, values.get(i).unwrap());
                 }
             }
             Topology::Points(values) => {
                 for i in local_first..local_end {
-                    push(i, i, vec![values.get(i).unwrap()]);
+                    output.push(base_face + i, base_corner + i, [values.get(i).unwrap()]);
                 }
             }
             Topology::TriangleStrip(values) => {
@@ -107,17 +116,17 @@ fn primitives(
                     if i % 2 == 1 {
                         vertices.swap(0, 1);
                     }
-                    push(i, i * 3, vertices.to_vec());
+                    output.push(base_face + i, base_corner + i * 3, vertices);
                 }
             }
             Topology::Polygons { corners, offsets } => {
                 for i in local_first..local_end {
                     let start = offsets.get(i).unwrap() as usize;
                     let end = offsets.get(i + 1).unwrap() as usize;
-                    push(
-                        i,
-                        start,
-                        (start..end).map(|j| corners.get(j).unwrap()).collect(),
+                    output.push(
+                        base_face + i,
+                        base_corner + start,
+                        (start..end).map(|j| corners.get(j).unwrap()),
                     );
                 }
             }
@@ -135,7 +144,16 @@ fn primitives(
             }
         }
     }
-    let mut output = Vec::with_capacity(count);
+    let corner_capacity = if first == 0 && count == topology.primitive_count() {
+        topology.corner_count()
+    } else {
+        count
+    };
+    let mut output = PrimitiveCorners {
+        corners: Vec::with_capacity(corner_capacity),
+        offsets: Vec::with_capacity(count + 1),
+    };
+    output.offsets.push(0);
     visit(topology, first, end, 0, 0, &mut output);
     Ok(output)
 }
@@ -145,9 +163,14 @@ fn cross(a: Vec2, b: Vec2, c: Vec2) -> f32 {
 }
 
 // Ear clipping retains concave polygon boundaries; a fan would fill exterior areas.
-fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCorner>, Error> {
+fn triangulate(
+    mesh: &Mesh<'_>,
+    polygon: &[SourceCorner],
+    result: &mut Vec<SourceCorner>,
+) -> Result<(), Error> {
     if polygon.len() == 3 {
-        return Ok(polygon.to_vec());
+        result.extend_from_slice(polygon);
+        return Ok(());
     }
     let positions: Vec<_> = polygon
         .iter()
@@ -182,7 +205,6 @@ fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCo
     }
     let sign = area.signum();
     let mut remaining: Vec<_> = (0..polygon.len()).collect();
-    let mut result = Vec::new();
     while remaining.len() > 3 {
         let ear = (0..remaining.len())
             .find(|&i| {
@@ -218,7 +240,7 @@ fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCo
         remaining.remove(ear);
     }
     result.extend(remaining.into_iter().map(|i| polygon[i]));
-    Ok(result)
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -419,13 +441,13 @@ fn project_geometry_with_color(
     };
     let mut selected = primitives(&topology, subset.selection.connectivity, first, count)?;
     if restart {
-        for primitive in &mut selected {
-            primitive.corners.swap(0, 1);
+        for corners in selected.corners.as_chunks_mut::<3>().0 {
+            corners.swap(0, 1);
         }
     }
     if let Some(corner) = selected
+        .corners
         .iter()
-        .flat_map(|primitive| &primitive.corners)
         .find(|corner| corner.vertex >= mesh.positions().len())
     {
         return Err(Error::at(
@@ -439,20 +461,16 @@ fn project_geometry_with_color(
         ));
     }
     let mut batches: Vec<(usize, Vec<SourceCorner>)> = Vec::new();
-    for primitive in &selected {
-        let size = primitive.corners.len().min(3);
-        let values = if size == 3 {
-            triangulate(mesh, &primitive.corners)?
+    for primitive in selected.iter() {
+        let size = primitive.len().min(3);
+        if batches.last().is_none_or(|(previous, _)| *previous != size) {
+            batches.push((size, Vec::new()));
+        }
+        let (_, corners) = batches.last_mut().expect("primitive batch");
+        if size == 3 {
+            triangulate(mesh, primitive, corners)?;
         } else {
-            primitive.corners.clone()
-        };
-        if let Some((previous, corners)) =
-            batches.last_mut().filter(|(previous, _)| *previous == size)
-        {
-            let _ = previous;
-            corners.extend(values);
-        } else {
-            batches.push((size, values));
+            corners.extend_from_slice(primitive);
         }
     }
     batches

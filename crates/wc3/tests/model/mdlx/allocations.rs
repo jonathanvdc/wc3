@@ -347,3 +347,28 @@ fn influence_inspection_never_allocates_per_vertex() {
     });
     assert_eq!(count, 0);
 }
+
+#[test]
+fn triangle_projection_does_not_allocate_per_primitive() {
+    use glam::Vec3;
+    use wc3::model::{GeometryData, Mesh};
+
+    let project = |count| {
+        let mesh: Mesh<'_> = Mesh::new(
+            GeometryData::triangles([Vec3::ZERO, Vec3::X, Vec3::Y], vec![[0, 1, 2]; count])
+                .unwrap(),
+        );
+        let subset = mesh.whole_geometry().unwrap();
+        let (batches, allocations) = measured(|| mesh.project(&subset, 0, [None; 3]).unwrap());
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].positions.len(), count * 3);
+        allocations
+    };
+    let small = project(8);
+    let large = project(4096);
+    assert!(large <= 128, "projection allocated {large} times");
+    assert!(
+        large <= small + 64,
+        "projection allocations grew from {small} to {large}"
+    );
+}
