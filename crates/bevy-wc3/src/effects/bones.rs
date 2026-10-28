@@ -59,7 +59,7 @@ impl BoneSource {
                     }
                     VertexInfluences::Nodes(row) => {
                         candidates.extend(
-                            row.into_iter()
+                            row.iter()
                                 .filter(|influence| influence.weight > 0.)
                                 .map(|influence| influence.node),
                         );

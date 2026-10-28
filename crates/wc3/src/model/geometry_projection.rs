@@ -648,7 +648,7 @@ pub fn skin_weights(
                 .map(|v| (v.joint as usize, v.weight))
                 .collect(),
             Some(VertexInfluences::Nodes(values)) => values
-                .into_iter()
+                .iter()
                 .map(|v| {
                     joints
                         .iter()

@@ -85,6 +85,8 @@ pub use profiles::m2::M2Geometry;
 pub use profiles::mdlx::MdlxGeometry;
 mod vertex_geometry;
 pub use vertex_geometry::{JointInfluences, VertexData};
+mod influence_rows;
+pub use influence_rows::{JointWeightIter, JointWeights, VertexInfluences};
 mod influences;
 pub use influences::GeometryInfluences;
 mod geometry_edit;
@@ -97,7 +99,7 @@ pub use geometry_domains::{ConnectivitySets, TriangleProperties};
 pub mod geometry;
 pub use geometry::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, Draw, Influence, Mesh,
-    MeshInstance, NodeInfluence, Skin, Topology, VertexInfluences,
+    MeshInstance, NodeInfluence, Skin, Topology,
 };
 mod mounts;
 pub use mounts::*;

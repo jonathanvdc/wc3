@@ -253,7 +253,7 @@ fn constrained_profiles_and_explicit_binding_outlive_borrowed_sources() {
     m2.validate().unwrap();
     wmo.validate().unwrap();
     assert_eq!(
-        m2.influences().joint_weights(0).unwrap()[1],
+        m2.influences().joint_weights(0).unwrap().get(1).unwrap(),
         Influence {
             joint: 9,
             weight: 0.

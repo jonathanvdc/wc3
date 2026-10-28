@@ -48,6 +48,28 @@ and influence representations that the destination cannot retain; even a
 variable-length row containing four entries remains distinct from four authored
 slots.
 
+`mesh.influences()` exposes `InfluenceRows`. Its `get` and `iter` methods
+return `VertexInfluences` views without allocating a vector per vertex. `Joints`
+contains `JointWeights`, whose `get` and `iter` decode contributions by value;
+`Nodes` contains a borrowed `PackedArray<NodeInfluence>` and retains explicit
+hierarchy identities. Packed variable rows borrow their element buffer, fixed
+three/four-slot rows decode into inline storage, and matrix groups compute equal
+weights lazily. Every view preserves authored order, empty rows, and zero-weight
+slots. Views borrow the geometry; request `to_vec()` when an independent native
+vector is needed.
+
+```rust
+use wc3::model::{Mesh, VertexInfluences};
+
+fn positive_joint_count(mesh: &Mesh<'_>) -> usize {
+    mesh.influences().iter().map(|row| match row {
+        VertexInfluences::Joints(weights) =>
+            weights.iter().filter(|influence| influence.weight > 0.0).count(),
+        VertexInfluences::Nodes(_) => 0,
+    }).sum()
+}
+```
+
 Collision geometry also widens to `GeometryData`, retaining
 `GeometryKind::Collision` as its authored purpose. Face normals use face-domain
 `Normal` attributes, and per-triangle scalar controls use

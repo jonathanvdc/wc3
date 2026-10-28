@@ -289,3 +289,61 @@ fn input_conversion_encodes_once_and_moves_existing_storage_without_allocating()
     assert_eq!(borrowed.as_bytes().as_ptr(), pointer);
     assert!(!borrowed.is_owned());
 }
+
+#[test]
+fn influence_inspection_never_allocates_per_vertex() {
+    use wc3::model::profiles::Mdlx;
+    use wc3::model::{
+        Influence, InfluenceRows, IntoPackedArray, Model, NodeInfluence, ValueGroups,
+        VertexInfluences,
+    };
+
+    let positive = Influence {
+        joint: 7,
+        weight: 1.,
+    };
+    let zero = Influence {
+        joint: 19,
+        weight: 0.,
+    };
+    let variable = ValueGroups::from_rows([vec![zero, positive], vec![]]);
+    let three = [[zero, positive, zero]].into_packed_array();
+    let four = [[zero, positive, zero, zero]].into_packed_array();
+    let groups = ValueGroups::from_rows([vec![7u32, 19, 7], vec![]]);
+    let mut builder = Model::<Mdlx>::builder("row allocation test");
+    let definition = builder.new_node("bone");
+    let node = builder.add_node(definition).unwrap();
+    let nodes = ValueGroups::from_rows([vec![NodeInfluence { node, weight: 1. }], vec![]]);
+
+    let (_, count) = measured(|| {
+        for rows in [
+            InfluenceRows::None,
+            InfluenceRows::Variable(&variable),
+            InfluenceRows::Three(&three),
+            InfluenceRows::Four(&four),
+            InfluenceRows::MatrixGroups(&groups),
+            InfluenceRows::Nodes(&nodes),
+        ] {
+            for row in rows.iter() {
+                let total: f32 = row.weights().sum();
+                assert!(total == 0. || (total - 1.).abs() < f32::EPSILON);
+                match row {
+                    VertexInfluences::Joints(weights) => {
+                        assert_eq!(weights.iter().count(), weights.len());
+                        assert_eq!(weights.clone().into_iter().count(), weights.len());
+                        assert!(weights.get(weights.len()).is_none());
+                    }
+                    VertexInfluences::Nodes(weights) => {
+                        assert!(!weights.is_owned());
+                        for influence in weights.iter() {
+                            assert_eq!(influence.node, node);
+                        }
+                    }
+                }
+            }
+            assert!(rows.get(rows.len()).is_none());
+            assert!(rows.get(usize::MAX).is_none());
+        }
+    });
+    assert_eq!(count, 0);
+}

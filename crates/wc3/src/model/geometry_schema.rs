@@ -14,8 +14,8 @@ use crate::model::ValueGroups;
 use crate::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId,
     ConnectivitySets, DrawSubsetCapabilities, Error, GeometryAttributes, GeometryInfluences,
-    Influence, Link, NodeInfluence, PackedArray, TextureCoordinates, Topology, TriangleProperties,
-    ValidateLinks, VertexInfluences,
+    Influence, JointWeights, Link, NodeInfluence, PackedArray, TextureCoordinates, Topology,
+    TriangleProperties, ValidateLinks, VertexInfluences,
 };
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use glam::{Vec2, Vec3, Vec4};
@@ -128,7 +128,7 @@ pub enum InfluenceRows<'view, 'data> {
     /// Warcraft III matrix groups, whose members receive equal weights.
     MatrixGroups(&'view ValueGroups<'data, u32>),
 }
-impl InfluenceRows<'_, '_> {
+impl<'view> InfluenceRows<'view, '_> {
     /// Number of authored vertex distributions.
     pub fn len(&self) -> usize {
         match self {
@@ -144,43 +144,32 @@ impl InfluenceRows<'_, '_> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    /// Iterates decoded joint distributions without materializing a second stream.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = VertexInfluences> + '_ {
+    /// Borrows rows and decodes contributions lazily without allocating.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = VertexInfluences<'view>> + '_ {
         (0..self.len()).map(|index| self.get(index).expect("checked influence index"))
     }
-    /// Reads binding-slot contributions; direct-node geometry has no binding-slot row.
-    pub fn joint_weights(&self, index: usize) -> Option<Vec<Influence>> {
+    /// Borrows binding-slot contributions; direct-node geometry has no binding-slot row.
+    pub fn joint_weights(&self, index: usize) -> Option<JointWeights<'view>> {
         self.get(index)?.into_joint_weights()
     }
-    /// Reads one distribution in logical joint order.
-    pub fn get(&self, index: usize) -> Option<VertexInfluences> {
+    /// Borrows one distribution in logical joint order without allocating.
+    /// Fixed-width rows decode their three or four slots inline.
+    pub fn get(&self, index: usize) -> Option<VertexInfluences<'view>> {
         match self {
             Self::None => None,
-            Self::Nodes(values) => values
-                .get(index)
-                .map(|row| VertexInfluences::Nodes(row.to_vec())),
+            Self::Nodes(values) => values.get(index).map(VertexInfluences::Nodes),
             Self::Variable(values) => values
                 .get(index)
-                .map(|row| VertexInfluences::Joints(row.to_vec())),
+                .map(|row| VertexInfluences::Joints(JointWeights::packed(row))),
             Self::Three(values) => values
                 .get(index)
-                .map(|v| VertexInfluences::Joints(Vec::from(v))),
+                .map(|row| VertexInfluences::Joints(JointWeights::three(row))),
             Self::Four(values) => values
                 .get(index)
-                .map(|v| VertexInfluences::Joints(Vec::from(v))),
-            Self::MatrixGroups(values) => values.get(index).map(|joints| {
-                let weight = if joints.is_empty() {
-                    0.
-                } else {
-                    1. / joints.len() as f32
-                };
-                VertexInfluences::Joints(
-                    joints
-                        .iter()
-                        .map(|joint| Influence { joint, weight })
-                        .collect(),
-                )
-            }),
+                .map(|row| VertexInfluences::Joints(JointWeights::four(row))),
+            Self::MatrixGroups(values) => values
+                .get(index)
+                .map(|row| VertexInfluences::Joints(JointWeights::matrix_groups(row))),
         }
     }
 }
@@ -967,8 +956,8 @@ mod tests {
         );
         let row = widened.influences().joint_weights(0).unwrap();
         assert_eq!(row.len(), 5);
-        assert_eq!(row[4].joint, 24);
-        assert!((row[4].weight - 0.2).abs() < f32::EPSILON);
+        assert_eq!(row.get(4).unwrap().joint, 24);
+        assert!((row.get(4).unwrap().weight - 0.2).abs() < f32::EPSILON);
         widened.validate().unwrap();
     }
 

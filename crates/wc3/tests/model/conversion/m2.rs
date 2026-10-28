@@ -213,7 +213,15 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     };
     assert!(triangles.is_owned());
     assert_eq!(triangles.get(0), Some([0, 1, 2]));
-    assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
+    assert_eq!(
+        mesh.influences()
+            .joint_weights(0)
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .weight,
+        1.
+    );
     let texture = imported.value.sampled_images()[0];
     assert!(
         matches!(imported.value.image_resource(texture.resource).unwrap(),sm::M2ImageResource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
@@ -326,7 +334,10 @@ fn semantic_geometry_edits_rebuild_native_values() {
     let influences = (mesh
         .influences()
         .iter()
-        .map(|row| -> [sm::Influence; 4] { row.into_joint_weights().unwrap().try_into().unwrap() })
+        .map(|row| -> [sm::Influence; 4] {
+            let weights = row.into_joint_weights().unwrap();
+            std::array::from_fn(|slot| weights.get(slot).unwrap())
+        })
         .collect::<Vec<_>>())
     .into_zero_vec();
     mesh.geometry = sm::M2Geometry::new(

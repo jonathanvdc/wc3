@@ -211,34 +211,6 @@ pub struct NodeInfluence {
     /// Nonnegative normalized contribution to the vertex.
     pub weight: f32,
 }
-/// One vertex's influences preserve whether they name binding slots or hierarchy nodes.
-#[derive(Clone, Debug)]
-pub enum VertexInfluences {
-    /// Ordered slots interpreted through a skin's joint binding.
-    Joints(Vec<Influence>),
-    /// Explicit node identities interpreted through the hierarchy's rig convention.
-    Nodes(Vec<NodeInfluence>),
-}
-impl VertexInfluences {
-    /// Inspects contributions without discarding their reference domain.
-    pub fn weights(&self) -> impl ExactSizeIterator<Item = f32> + '_ {
-        let len = match self {
-            Self::Joints(v) => v.len(),
-            Self::Nodes(v) => v.len(),
-        };
-        (0..len).map(|index| match self {
-            Self::Joints(v) => v[index].weight,
-            Self::Nodes(v) => v[index].weight,
-        })
-    }
-    /// Consumes a joint-slot distribution; direct-node distributions remain distinct.
-    pub fn into_joint_weights(self) -> Option<Vec<Influence>> {
-        match self {
-            Self::Joints(v) => Some(v),
-            Self::Nodes(_) => None,
-        }
-    }
-}
 /// Attribute data associated with vertices, polygon corners, faces, or the mesh as a whole.
 #[derive(Clone, Debug, IntoOwned)]
 pub struct Attribute<'a> {
