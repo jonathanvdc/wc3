@@ -40,9 +40,8 @@ fn unspecified_emissive_header_uses_unity_and_retains_authored_track() {
         let gain = shader.inputs().emissive_gain.unwrap();
         assert_eq!(model.values()[gain], 1.);
         assert_eq!(model.is_animated(gain), key.is_some());
-        let output = io::mdlx::plan::<V1000>(&model, &ExportOptions::default())
+        let output = io::mdlx::export::<V1000>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         let material = output.materials().next().unwrap();
         let gain = material.layers[0].emissive_gain();

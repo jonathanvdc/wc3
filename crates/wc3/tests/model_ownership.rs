@@ -205,9 +205,8 @@ fn mdlx_detach_outlives_native_bytes_and_keeps_ids_animation_and_skinning() {
         let target = animate(&mut model, &times, &values);
         let expected = positions(&model.clone().widen::<Universal>(), 0.5);
         assert!(expected.iter().all(|position| position.z == 2.));
-        let native = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+        let native = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value
             .encode_mdx()
             .unwrap();
@@ -239,9 +238,8 @@ fn mdlx_detach_outlives_native_bytes_and_keeps_ids_animation_and_skinning() {
         expected
     );
     assert_eq!(
-        io::mdlx::plan::<mdlx::V800>(&owned, &ExportOptions::default())
+        io::mdlx::export::<mdlx::V800>(&owned, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value
             .encode_mdx()
             .unwrap(),
@@ -337,9 +335,8 @@ fn wmo_detach_outlives_group_buffers_and_preserves_world_catalog_and_output() {
             "Stone chamber"
         );
         let ids = identities(&model);
-        let expected = io::wmo::plan::<wmo::Classic>(&model, &ExportOptions::default())
+        let expected = io::wmo::export::<wmo::Classic>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value
             .encode()
             .unwrap();
@@ -363,9 +360,8 @@ fn wmo_detach_outlives_group_buffers_and_preserves_world_catalog_and_output() {
         "Stone chamber"
     );
     assert_eq!(
-        io::wmo::plan::<wmo::Classic>(&owned, &ExportOptions::default())
+        io::wmo::export::<wmo::Classic>(&owned, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value
             .encode()
             .unwrap(),

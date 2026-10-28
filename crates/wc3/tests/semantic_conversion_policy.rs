@@ -22,25 +22,23 @@ fn source() -> (Model<'static>, FeatureId) {
 #[test]
 fn strict_policy_rejects_unsupported_behavior_without_editing_source() {
     let (source, feature) = source();
-    assert!(Policy::<Mdlx>::new().plan(&source).is_err());
+    assert!(Policy::<Mdlx>::new().convert(&source).is_err());
     assert!(source.feature(feature).is_some());
 }
 
 #[test]
 fn selected_drop_prepares_a_valid_target_and_reports_its_consequence() {
     let (source, feature) = source();
-    let plan = Policy::<Mdlx>::new()
+    let conversion = Policy::<Mdlx>::new()
         .with_rule(DropUnsupportedFeatures::new([feature]))
-        .plan(&source)
+        .convert(&source)
         .unwrap();
     assert!(source.feature(feature).is_some());
-    assert!(plan.draft().feature(feature).is_none());
-    assert_eq!(plan.report().issues.len(), 1);
-    assert_eq!(plan.report().issues[0].kind, IssueKind::Dropped);
-    assert!(plan.report().issues[0].description.contains("behavior"));
-    let converted = plan.execute();
-    converted.value.validate().unwrap();
-    assert_eq!(converted.report.issues.len(), 1);
+    assert!(conversion.value.feature(feature).is_none());
+    assert_eq!(conversion.report.issues.len(), 1);
+    assert_eq!(conversion.report.issues[0].kind, IssueKind::Dropped);
+    assert!(conversion.report.issues[0].description.contains("behavior"));
+    conversion.value.validate().unwrap();
 }
 
 #[test]
@@ -55,7 +53,7 @@ fn dropping_one_selected_feature_does_not_authorize_other_losses() {
         .unwrap();
     assert!(Policy::<Mdlx>::new()
         .with_rule(DropUnsupportedFeatures::new([first]))
-        .plan(&source)
+        .convert(&source)
         .is_err());
     assert_eq!(source.features().len(), 2);
 }
@@ -70,14 +68,14 @@ fn application_rules_observe_previous_rewrites_and_cannot_publish_invalid_graphs
             assert!(draft.model().feature(feature).is_none());
             Ok(())
         });
-    assert!(valid.plan(&source).is_ok());
+    assert!(valid.convert(&source).is_ok());
     let invalid = Policy::<Mdlx>::new().with_rule(
         move |draft: &mut ModelBuilder<'static>, _: &mut Report| -> Result<(), Error> {
             draft.remove_node(node);
             Ok(())
         },
     );
-    assert!(invalid.plan(&source).is_err());
+    assert!(invalid.convert(&source).is_err());
     assert!(source.node(node).is_some());
     assert!(source.feature(feature).is_some());
 }
@@ -120,20 +118,23 @@ fn a_constant_light_switch_can_be_reexpressed_without_approximating_animation() 
     use wc3::model::conversion::ConstantLightVisibility;
     use wc3::model::profiles::mdlx;
     let (source, feature) = switched_light(false);
-    assert!(Policy::<Mdlx>::new().plan(&source).is_err());
-    let plan = Policy::<Mdlx>::new()
+    assert!(Policy::<Mdlx>::new().convert(&source).is_err());
+    let conversion = Policy::<Mdlx>::new()
         .with_rule(ConstantLightVisibility::new([feature]))
-        .plan(&source)
+        .convert(&source)
         .unwrap();
-    let mdlx::Node::Light(light) = &plan.draft().feature(feature).unwrap().payload else {
+    let mdlx::Node::Light(light) = &conversion.value.feature(feature).unwrap().payload else {
         panic!("expected light");
     };
-    assert_eq!(*plan.draft().values().get(light.activation).unwrap(), 1.);
-    assert_eq!(plan.report().issues[0].kind, IssueKind::Normalized);
+    assert_eq!(
+        *conversion.value.values().get(light.activation).unwrap(),
+        1.
+    );
+    assert_eq!(conversion.report.issues[0].kind, IssueKind::Normalized);
     let (animated, feature) = switched_light(true);
     let error = Policy::<Mdlx>::new()
         .with_rule(ConstantLightVisibility::new([feature]))
-        .plan(&animated)
+        .convert(&animated)
         .unwrap_err();
     assert!(
         matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("animated"))
@@ -146,17 +147,16 @@ fn selected_supported_features_are_preserved_without_loss_reports() {
     let (source, feature) = switched_light(false);
     let supported = Policy::<Mdlx>::new()
         .with_rule(ConstantLightVisibility::new([feature]))
-        .plan(&source)
+        .convert(&source)
         .unwrap()
-        .execute()
         .value
         .widen::<Universal>();
-    let plan = Policy::<Mdlx>::new()
+    let conversion = Policy::<Mdlx>::new()
         .with_rule(DropUnsupportedFeatures::new([feature]))
-        .plan(&supported)
+        .convert(&supported)
         .unwrap();
-    assert!(plan.draft().feature(feature).is_some());
-    assert!(plan.report().issues.is_empty());
+    assert!(conversion.value.feature(feature).is_some());
+    assert!(conversion.report.issues.is_empty());
 }
 
 fn fractional_light(visibility: f32, animated: bool) -> (Model<'static>, FeatureId) {
@@ -199,30 +199,32 @@ fn light_switch_approximation_obeys_its_explicit_error_bound() {
     use wc3::model::conversion::ConstantLightSwitch;
     use wc3::model::profiles::{m2, M2};
     let (source, feature) = fractional_light(0.75, false);
-    let plan = Policy::<M2>::new()
+    let conversion = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.25).unwrap())
-        .plan(&source)
+        .convert(&source)
         .unwrap();
-    let m2::ActorKind::Light(light) = &plan.draft().feature(feature).unwrap().payload else {
+    let m2::ActorKind::Light(light) = &conversion.value.feature(feature).unwrap().payload else {
         panic!("expected light");
     };
-    assert!(*plan.draft().values().get(light.activation).unwrap());
-    assert_eq!(plan.report().issues[0].kind, IssueKind::Approximated);
-    assert!(plan.report().issues[0].description.contains("error 0.25"));
+    assert!(*conversion.value.values().get(light.activation).unwrap());
+    assert_eq!(conversion.report.issues[0].kind, IssueKind::Approximated);
+    assert!(conversion.report.issues[0]
+        .description
+        .contains("error 0.25"));
     assert!(Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.2).unwrap())
-        .plan(&source)
+        .convert(&source)
         .is_err());
     // The same rule can choose the other switch state with an explicit bound.
-    let plan = Policy::<M2>::new()
+    let conversion = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.8, 0.75).unwrap())
-        .plan(&source)
+        .convert(&source)
         .unwrap();
-    let m2::ActorKind::Light(light) = &plan.draft().feature(feature).unwrap().payload else {
+    let m2::ActorKind::Light(light) = &conversion.value.feature(feature).unwrap().payload else {
         panic!("expected light");
     };
-    assert!(!*plan.draft().values().get(light.activation).unwrap());
-    assert!(Policy::<M2>::new().plan(&source).is_err());
+    assert!(!*conversion.value.values().get(light.activation).unwrap());
+    assert!(Policy::<M2>::new().convert(&source).is_err());
 }
 
 #[test]
@@ -238,22 +240,22 @@ fn light_switch_rule_rejects_invalid_parameters_and_unbounded_inputs() {
     let (source, feature) = fractional_light(1.5, false);
     assert!(Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 1.).unwrap())
-        .plan(&source)
+        .convert(&source)
         .is_err());
     let (source, feature) = fractional_light(0.75, true);
     let error = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 1.).unwrap())
-        .plan(&source)
+        .convert(&source)
         .unwrap_err();
     assert!(
         matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("animated"))
     );
     let (source, feature) = fractional_light(1., false);
-    let plan = Policy::<M2>::new()
+    let conversion = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.).unwrap())
-        .plan(&source)
+        .convert(&source)
         .unwrap();
-    assert_eq!(plan.report().issues[0].kind, IssueKind::Normalized);
+    assert_eq!(conversion.report.issues[0].kind, IssueKind::Normalized);
 }
 
 #[test]
@@ -289,7 +291,7 @@ fn selected_drop_checks_graph_dependent_feature_constraints() {
             Ok(())
         })
         .unwrap();
-    let Error::Semantic(error) = Policy::<Mdlx>::new().plan(&source).unwrap_err() else {
+    let Error::Semantic(error) = Policy::<Mdlx>::new().convert(&source).unwrap_err() else {
         panic!("exact projection must preserve its semantic failure")
     };
     assert!(matches!(
@@ -305,20 +307,20 @@ fn selected_drop_checks_graph_dependent_feature_constraints() {
             .field("projection")
             .field("field_of_view")
     );
-    let plan = Policy::<Mdlx>::new()
+    let conversion = Policy::<Mdlx>::new()
         .with_rule(DropUnsupportedFeatures::new([feature]))
-        .plan(&source)
+        .convert(&source)
         .unwrap();
-    assert!(plan.draft().feature(feature).is_none());
-    let light = plan.draft().features().values().next().unwrap();
+    assert!(conversion.value.feature(feature).is_none());
+    let light = conversion.value.features().values().next().unwrap();
     let mdlx::Node::Light(light) = &light.payload else {
         panic!("expected retained light");
     };
-    assert!(plan.draft().is_animated(light.diffuse.intensity));
-    assert_eq!(plan.report().issues.len(), 1);
-    assert_eq!(plan.report().issues[0].kind, IssueKind::Dropped);
+    assert!(conversion.value.is_animated(light.diffuse.intensity));
+    assert_eq!(conversion.report.issues.len(), 1);
+    assert_eq!(conversion.report.issues[0].kind, IssueKind::Dropped);
     assert_eq!(
-        plan.report().issues[0].path,
+        conversion.report.issues[0].path,
         format!("features[{feature:?}]")
     );
     assert!(source.feature(feature).is_some());

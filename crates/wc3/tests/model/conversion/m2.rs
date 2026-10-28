@@ -93,9 +93,8 @@ fn particle_program_bundle(programs: &[[u8; 2]]) -> m2::Bundle<'static, m2::Chun
     let source = native_triangle();
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let mut modern =
-        io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+        io::m2::export::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
     for _ in 0..2 {
         let mut particle = m2::records::ParticleEmitter::<m2::V274>::new(ModelFlags::default());
@@ -143,10 +142,10 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
             assert!(error.to_string().contains("standalone particle record"));
         }
     }
-    let output = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .value;
+    let output =
+        io::m2::export::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+            .unwrap()
+            .value;
     let restored = output
         .model
         .extensions()
@@ -160,7 +159,7 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
         .unwrap();
     assert_eq!(restored, vec![[0, 0], [3, 11], [0, 0]]);
     assert!(
-        io::m2::plan::<m2::Flat<m2::V274>>(&imported.value, &ExportOptions::default()).is_err()
+        io::m2::export::<m2::Flat<m2::V274>>(&imported.value, &ExportOptions::default()).is_err()
     );
 }
 
@@ -219,10 +218,10 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     assert!(
         matches!(imported.value.image_resource(texture.resource).unwrap(),sm::M2ImageResource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
     );
-    let target = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .value;
+    let target =
+        io::m2::export::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+            .unwrap()
+            .value;
     assert_eq!(
         target
             .model
@@ -294,9 +293,8 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
         track.curve.hermite_derivatives().unwrap().incoming.get(1),
         Some(Vec3::from_array([3., 0., 0.]))
     );
-    let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
+    let exported = io::m2::export::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let track = exported.model.core().bones[0]
         .translation
@@ -340,9 +338,8 @@ fn semantic_geometry_edits_rebuild_native_values() {
     )
     .unwrap();
     asset.edit(|draft| draft.set_mesh(id, mesh)).unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.model.core().vertices.get(1).unwrap().position,
@@ -389,8 +386,8 @@ fn quantization_requires_an_explicit_tolerance() {
         builder.finish()
     }
     .unwrap();
-    assert!(io::m2::plan::<m2::Flat<m2::V264>>(&asset, &ExportOptions::default()).is_err());
-    let plan = io::m2::plan::<m2::Flat<m2::V264>>(
+    assert!(io::m2::export::<m2::Flat<m2::V264>>(&asset, &ExportOptions::default()).is_err());
+    let conversion = io::m2::export::<m2::Flat<m2::V264>>(
         &asset,
         &ExportOptions {
             approximation: ApproximationPolicy::Allow { tolerance: 0.0005 },
@@ -398,7 +395,7 @@ fn quantization_requires_an_explicit_tolerance() {
         },
     )
     .unwrap();
-    assert!(!plan.report().issues.is_empty());
+    assert!(!conversion.report.issues.is_empty());
 }
 #[test]
 fn unresolved_companions_are_errors() {
@@ -494,9 +491,8 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
         .systems()
         .iter()
         .any(|(_, system)| matches!(system, mp::System::Collision(_))));
-    let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
+    let exported = io::m2::export::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let core = exported.model.core();
     assert_eq!(core.lights.len(), 1);
@@ -539,7 +535,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     edited
         .edit(|builder| builder.set_feature(ribbon_id, changed))
         .unwrap();
-    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default()).is_err());
+    assert!(io::m2::export::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default()).is_err());
     assert_eq!(core.collision_indices.get(2), Some(2));
     assert_eq!(core.collision_normals.get(0), Some([0., 0., 1.]));
 }
@@ -558,9 +554,8 @@ fn native_material_edits_affect_rebuilt_output() {
     asset
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.model.core().skins[0].batches[0].shader_id, 0x10);
 }
@@ -593,9 +588,9 @@ fn unknown_extensions_require_explicit_drop_policy() {
         .issues
         .iter()
         .any(|issue| issue.path == "m2.chunk" && issue.kind == conversion::IssueKind::Dropped));
-    let output = io::m2::plan::<m2::Chunked<m2::V256>>(&imported.value, &ExportOptions::default())
-        .unwrap()
-        .execute();
+    let output =
+        io::m2::export::<m2::Chunked<m2::V256>>(&imported.value, &ExportOptions::default())
+            .unwrap();
     assert!(!output
         .value
         .model
@@ -679,9 +674,8 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let file = output
         .files()
@@ -767,9 +761,8 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
-    let output = io::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let bone = output
         .files()
@@ -829,9 +822,8 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         approximation: ApproximationPolicy::Allow { tolerance: 0.00001 },
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &options)
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&asset, &options)
         .unwrap()
-        .execute()
         .value;
     match &output.model.core().particles[0].gravity.values {
         LegacyValues::Values(values) => assert_eq!(values.get(0), Some(word)),
@@ -863,9 +855,8 @@ fn static_node_transforms_become_constant_native_curves() {
                 .set(translation, Vec3::from_array([2., 3., 4.]))
         })
         .unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let LegacyValues::Values(values) = &output.model.core().bones[0].translation.values else {
         panic!("unexpected spline")
@@ -917,9 +908,8 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
             }))
         })
         .unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.model.core().lights[0].bone_id, 1);
     let LegacyValues::Values(values) = &output.model.core().bones[1].translation.values else {
@@ -945,9 +935,8 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
     let mut node = asset.node(id).unwrap().clone();
     node.name = Cow::Borrowed("edited");
     asset.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.model.core().materials.get(0).unwrap().blending_mode,
@@ -969,9 +958,8 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
     let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.model.core().particles[0].texture_scale.particle_type,
@@ -994,9 +982,8 @@ fn texture_sampling_drops_uninterpreted_flags_and_rejects_unencoded_interpretati
     let id = asset.sampled_images()[0];
     let texture = id;
     assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
-    let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let native = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(native.model.core().textures[0].flags.bits(), 1);
     let (material, value) = asset.materials().iter().next().unwrap();
@@ -1045,9 +1032,8 @@ fn replacement_texture_retains_its_separately_declared_filename() {
     let texture = asset.sampled_images()[0];
     assert!(matches!(asset.image_resource(texture.resource).unwrap(),
         sm::M2ImageResource::Replaceable { id: 0x1234, filename: Cow::Borrowed(path) } if *path == b"textures/checker.blp"));
-    let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
+    let native = io::m2::export::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let texture = &native.model.core().textures[0];
     assert_eq!(texture.kind, TextureSource::Unknown(0x1234));
@@ -1166,9 +1152,8 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
             Some(Vec3::from_array([1., 2., 3.]))
         );
     }
-    let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let exported = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         exported.model.core().global_sequences.to_vec(),
@@ -1246,9 +1231,8 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
             .transform
             .translation
     ));
-    let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let native = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let reread = io::m2::import(&native, &ImportOptions::default())
         .unwrap()
@@ -1275,9 +1259,8 @@ fn native_environment_then_t1_exports_the_active_transform_in_slot_zero() {
     let surface = &imported.materials().iter().next().unwrap().1.surface;
     assert_eq!(surface.steps[0].inputs()[0].coordinates.source, -1);
     assert_eq!(surface.steps[0].inputs()[1].coordinates.source, 0);
-    let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let native = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let core = native.model.core();
     let index = core.texture_transform_combos.get(0).unwrap() as usize;
@@ -1302,9 +1285,8 @@ fn native_three_route_programme_uses_third_transform_for_uv1() {
             .collect::<Vec<_>>(),
         [0, -1, 1]
     );
-    let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let native = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let core = native.model.core();
     let index = core.texture_transform_combos.get(2).unwrap() as usize;
@@ -1333,7 +1315,7 @@ fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
             draft.set_material_surface(id, surface)
         })
         .unwrap();
-    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
+    assert!(io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
 }
 
 #[test]
@@ -1348,7 +1330,7 @@ fn native_export_rejects_coordinate_sources_incompatible_with_shader_routes() {
     imported
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
-    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
+    assert!(io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
 }
 
 #[test]
@@ -1381,9 +1363,9 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
         Vec3::from_array([0.25, 0.5, 0.75])
     );
     let error =
-        io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
+        io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
     assert!(error.to_string().contains("guild"));
-    let planned = io::m2::plan::<m2::Flat<m2::V256>>(
+    let planned = io::m2::export::<m2::Flat<m2::V256>>(
         &imported,
         &ExportOptions {
             loss_policy: LossPolicy::Drop,
@@ -1391,7 +1373,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
         },
     )
     .unwrap();
-    let exported = planned.execute();
+    let exported = planned;
     assert!(exported
         .report
         .issues
@@ -1470,9 +1452,8 @@ fn batch_layers_become_ordered_steps_with_independent_animation() {
     for (_index, step) in material.surface.steps.iter().enumerate().take(2) {
         assert!(imported.is_animated(step.declaration().color));
     }
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let core = output.model.core();
     let batches = &core.skins[0].batches;
@@ -1510,9 +1491,8 @@ fn batch_layers_become_ordered_steps_with_independent_animation() {
     edited
         .edit(|draft| draft.set_material_surface(id, program))
         .unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.model.core().skins[0]
@@ -1543,9 +1523,8 @@ fn auxiliary_section_words_are_draw_local_and_survive_profile_changes() {
     let instance = imported.instances().iter().next().unwrap().1;
     assert_eq!(instance.draws.len(), 3);
     assert_eq!(instance.draws[0].subset, instance.draws[1].subset);
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.model.core().skins[0]
@@ -1594,9 +1573,8 @@ fn ribbon_export_flattens_material_programs_into_ordered_native_materials() {
     imported
         .edit(|draft| draft.set_material_surface(material_id, surface))
         .unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let core = output.model.core();
     let materials = &core.ribbons[0].material_indices;
@@ -1641,9 +1619,8 @@ fn export_interns_equivalent_images_with_independent_resource_declarations() {
         })
         .unwrap();
     assert_eq!(model.sampled_images().len(), 2);
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.model.core().textures.len(), 1);
 }
@@ -1688,9 +1665,8 @@ fn offset_animation_interval_exports_as_native_local_keys() {
         )
         .unwrap();
     let model = builder.finish().unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V264>>(&model, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V264>>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let imported = io::m2::import(&output, &ImportOptions::default())
         .unwrap()
@@ -1747,9 +1723,8 @@ fn event_sources_round_trip_native_codes_data_clocks_and_duplicate_occurrences()
     assert_eq!(model.global_events().count(), 3);
     let widened = model.widen::<sm::profiles::Universal>();
     let restored = widened.try_narrow::<sm::profiles::M2>().unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&restored, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&restored, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let events = &output.model.core().events;
     assert_eq!(events.len(), 2);
@@ -1859,9 +1834,8 @@ fn ordinary_event_source_retains_sequence_timing_and_unordered_duplicate_keys() 
             .collect::<Vec<_>>(),
         [0.75, 0.25, 0.25]
     );
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let core = output.model.core();
     let origin = core.sequences[0].timing.start;
@@ -1909,9 +1883,8 @@ fn billboard_flags_round_trip_while_effective_states_are_normalized() {
             .widen::<sm::profiles::Universal>()
             .try_narrow::<sm::profiles::M2>()
             .unwrap();
-        let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+        let output = io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         assert_eq!(output.model.core().bones[0].flags, original);
     }
@@ -1934,9 +1907,8 @@ fn billboard_edits_do_not_reactivate_inactive_m2_declarations() {
         scale: BillboardScale::LocalBasisLengths,
     };
     model.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let flags = output.model.core().bones[0].flags;
     assert!(flags.billboard());
@@ -1944,9 +1916,8 @@ fn billboard_edits_do_not_reactivate_inactive_m2_declarations() {
     let mut node = model.node(id).unwrap().clone();
     node.billboard = Billboard::None;
     model.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let flags = output.model.core().bones[0].flags;
     assert!(!flags.billboard());
@@ -1974,7 +1945,7 @@ fn m2_export_rejects_incompatible_facing_and_transform_operations() {
         let mut node = node.clone();
         node.billboard = mode;
         model.edit(|draft| draft.set_node(id, node)).unwrap();
-        assert!(io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
+        assert!(io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
     }
     let mut model = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
@@ -1984,7 +1955,7 @@ fn m2_export_rejects_incompatible_facing_and_transform_operations() {
     node.transform_semantics = TransformSemantics::PivotLocal;
     node.inheritance.rotation = false;
     model.edit(|draft| draft.set_node(id, node)).unwrap();
-    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
+    assert!(io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
 }
 
 #[test]
@@ -2008,9 +1979,8 @@ fn file_data_image_declarations_retain_accompanying_filenames() {
         .widen::<sm::profiles::Universal>()
         .try_narrow::<sm::profiles::M2>()
         .unwrap();
-    let output = io::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
+    let output = io::m2::export::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.model.core().textures[0].filename.as_bytes(),
@@ -2044,9 +2014,8 @@ fn animation_categories_preserve_named_and_unknown_ids_through_conversion() {
         let (_, clip) = imported.value.clips().iter().next().unwrap();
         assert_eq!(clip.properties.animation_id, category);
         let exported =
-            io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
+            io::m2::export::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
                 .unwrap()
-                .execute()
                 .value;
         assert_eq!(exported.model.core().sequences[0].id, category.get());
     }
@@ -2139,9 +2108,8 @@ fn native_empty_model_and_sequence_extents_are_explicitly_absent() {
             .unwrap()
             .bounds
             .is_none()));
-        let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        let exported = io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         assert_eq!(exported.model.core().bounding.minimum, [f32::MAX; 3]);
         assert_eq!(
@@ -2266,9 +2234,8 @@ fn modern_ribbon_zero_lookup_imports_animated_uv_and_round_trips_without_an_orig
                 .unwrap();
             assert!((transform.m2_affine(&sample).translation.x - 0.25).abs() < 1e-6);
         }
-        let output = io::m2::plan::<m2::Flat<m2::V274>>(&imported, &ExportOptions::default())
+        let output = io::m2::export::<m2::Flat<m2::V274>>(&imported, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         assert_eq!(
             output.model.core().ribbons[0]
@@ -2407,9 +2374,8 @@ fn modern_particle_sort_fog_and_refraction_flags_round_trip_independently() {
             );
         }
         let output =
-            io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+            io::m2::export::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
                 .unwrap()
-                .execute()
                 .value;
         let encoded = output.encode().unwrap();
         let decoded = m2::Bundle::<m2::Chunked<m2::V274>>::decode(
@@ -2482,9 +2448,8 @@ fn declared_section_bone_palettes_preserve_unused_nodes_and_exclusions() {
         Some([nodes[2], nodes[0], nodes[1]].as_slice())
     );
     let narrowed = universal.try_narrow::<M2>().unwrap();
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&narrowed, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&narrowed, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let section = &output.model.core().skins[0].sections[0];
     assert_eq!(section.bone_count, 3);
@@ -2529,17 +2494,16 @@ fn empty_declared_bone_palette_does_not_become_an_inferred_binding() {
         "skin binding and body-spawn eligibility are distinct"
     );
     let error =
-        io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
+        io::m2::export::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
     assert!(error.to_string().contains("bone_palette"));
-    let lossy = io::m2::plan::<m2::Flat<m2::V256>>(
+    let lossy = io::m2::export::<m2::Flat<m2::V256>>(
         &imported,
         &ExportOptions {
             loss_policy: LossPolicy::Drop,
             ..Default::default()
         },
     )
-    .unwrap()
-    .execute();
+    .unwrap();
     assert!(!lossy.report.issues.is_empty());
     assert_eq!(lossy.value.model.core().skins[0].sections[0].bone_count, 1);
 
@@ -2557,9 +2521,8 @@ fn empty_declared_bone_palette_does_not_become_an_inferred_binding() {
     let unweighted = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = io::m2::plan::<m2::Flat<m2::V256>>(&unweighted, &ExportOptions::default())
+    let output = io::m2::export::<m2::Flat<m2::V256>>(&unweighted, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.model.core().skins[0].sections[0].bone_count, 0);
 }
@@ -2592,7 +2555,8 @@ fn declared_palette_start_overflow_is_a_checked_export_boundary() {
     let model = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let error = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).unwrap_err();
+    let error =
+        io::m2::export::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).unwrap_err();
     assert!(
         error.to_string().contains("palette start exceeds u16"),
         "{error}"
@@ -2605,9 +2569,8 @@ fn illumination_preserves_two_uv0_transform_owners_through_modern_native_and_uni
     let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let modern = io::m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
+    let modern = io::m2::export::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         modern.skin(0, false).unwrap().profile.batches[0].shader_id,
@@ -2690,9 +2653,8 @@ fn illumination_preserves_two_uv0_transform_owners_through_modern_native_and_uni
     imported
         .edit(|builder| builder.set_animation(id, animation))
         .unwrap();
-    let native = io::m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
+    let native = io::m2::export::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         native.skin(0, false).unwrap().profile.batches[0].shader_id,
@@ -2788,10 +2750,10 @@ fn compatibility_alias_keeps_unknown_native_routes_and_nonidentity_third_transfo
         assert_eq!(compatibility.inputs()[2].coordinates.transform, *third);
         let universal = imported.widen::<sm::profiles::Universal>();
         let imported = universal.try_narrow::<sm::profiles::M2>().unwrap();
-        let exported = io::m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
-            .unwrap()
-            .execute()
-            .value;
+        let exported =
+            io::m2::export::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
+                .unwrap()
+                .value;
         assert_eq!(
             exported.skin(0, false).unwrap().profile.batches[0].shader_id,
             selector

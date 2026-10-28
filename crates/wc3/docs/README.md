@@ -14,7 +14,7 @@ native-document guides below when you need direct access to encoded records.
 | --- | --- |
 | Read native models and resolve their required companions | [Model loading](loading.md) |
 | Understand IDs, math values, packed storage, and checked edits | [Model graphs](semantic.md) |
-| Import a native asset or plan an export | [Import and export](conversion.md) |
+| Import a native asset or export a model | [Import and export](conversion.md) |
 | Change streams, skinning, or draw subsets | [Geometry](geometry.md) |
 | Edit shader steps and texture inputs | [Materials](materials.md) |
 | Author curves, clips, clocks, and events | [Animation](animation.md) |

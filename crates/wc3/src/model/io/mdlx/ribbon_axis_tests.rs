@@ -21,9 +21,8 @@ fn ribbon_axis_import_roundtrip_and_strict_export_loss() {
         panic!("ribbon lost")
     };
     assert_eq!(ribbon.geometry.axis, Axis::PositiveY);
-    let output = plan::<V800>(&model, &ExportOptions::default())
+    let output = export::<V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let roundtrip = import(&output, &ImportOptions::default()).unwrap().value;
     let Feature::Ribbon(ribbon) = &roundtrip.features().iter().next().unwrap().1.payload else {
@@ -38,5 +37,5 @@ fn ribbon_axis_import_roundtrip_and_strict_export_loss() {
     model
         .edit(|builder| builder.set_feature(id, changed))
         .unwrap();
-    assert!(plan::<V800>(&model, &ExportOptions::default()).is_err());
+    assert!(export::<V800>(&model, &ExportOptions::default()).is_err());
 }

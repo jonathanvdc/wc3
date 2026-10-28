@@ -4,7 +4,7 @@ use super::{
     relationships, root_output::RootOutput, visibility,
 };
 use crate::model::common::FileKey;
-use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
+use crate::model::conversion::{Context, Conversion, Error, ExportOptions, IssueKind};
 use crate::model::error::Location;
 use crate::model::formats::wmo::legacy::{
     Batch14, Batch16, Bundle16, Group14, Group16, GroupInfo14, HeaderBatchRange, Root14, Root16,
@@ -22,7 +22,7 @@ use std::error::Error as StdError;
 pub(super) fn alpha<'a>(
     asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
-) -> Result<Plan<Root14<'a>>, Error> {
+) -> Result<Conversion<Root14<'a>>, Error> {
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
@@ -37,7 +37,7 @@ fn alpha_model<'a>(
     model: &Model<'_, Wmo>,
     options: &ExportOptions,
     mut context: Context,
-) -> Result<Plan<Root14<'a>>, Error> {
+) -> Result<Conversion<Root14<'a>>, Error> {
     let world = world(model)?;
     let mut root = Root14::new();
     let controls = model.metadata();
@@ -150,12 +150,15 @@ fn alpha_model<'a>(
     }
     root.synchronize_counts().map_err(error)?;
     root.validate().map_err(error)?;
-    Ok(Plan::new(root, context.report))
+    Ok(Conversion {
+        value: root,
+        report: context.report,
+    })
 }
 pub(super) fn beta<'a>(
     asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
-) -> Result<Plan<Bundle16<'a>>, Error> {
+) -> Result<Conversion<Bundle16<'a>>, Error> {
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
@@ -170,7 +173,7 @@ fn beta_model<'a>(
     model: &Model<'_, Wmo>,
     options: &ExportOptions,
     mut context: Context,
-) -> Result<Plan<Bundle16<'a>>, Error> {
+) -> Result<Conversion<Bundle16<'a>>, Error> {
     let world = world(model)?;
     if model.bounds().is_none() {
         context.unsupported(Location::new().field("world").field("bounds"), "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
@@ -262,7 +265,10 @@ fn beta_model<'a>(
     }
     bundle.root.synchronize_counts().map_err(error)?;
     bundle.validate_complete().map_err(error)?;
-    Ok(Plan::new(bundle, context.report))
+    Ok(Conversion {
+        value: bundle,
+        report: context.report,
+    })
 }
 struct Names {
     bytes: Vec<u8>,

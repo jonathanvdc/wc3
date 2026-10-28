@@ -26,7 +26,10 @@ mod scene;
 mod spatial_queries;
 mod visibility;
 use crate::model::common::FileKey;
-use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
+use crate::model::conversion::{
+    Context, Conversion, Error, ExportOptions, ImportOptions, IssueKind,
+};
+use crate::model::formats::wmo::legacy::{Bundle16, Root14};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Bundle, Dialect, GroupKey};
 use crate::model::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
@@ -245,10 +248,10 @@ fn bounds([minimum, maximum]: [[f32; 3]; 2]) -> Bounds {
     }
 }
 
-pub(super) fn plan<'a, D: Dialect>(
+pub(super) fn export<'a, D: Dialect>(
     asset: &'a Model<'_, Wmo>,
-    options: &crate::model::conversion::ExportOptions,
-) -> Result<crate::model::conversion::Plan<Bundle<'a, D>>, Error> {
+    options: &ExportOptions,
+) -> Result<Conversion<Bundle<'a, D>>, Error> {
     encode::write(asset, options)
 }
 
@@ -260,28 +263,27 @@ fn handle_unknown(context: &mut Context, file: FileKey, tag: [u8; 4]) -> Result<
 }
 
 pub(super) fn import_alpha<'a>(
-    source: &'a crate::model::formats::wmo::legacy::Root14<'_>,
+    source: &'a Root14<'_>,
     options: &ImportOptions,
 ) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     legacy_import::alpha(source, options)
 }
 pub(super) fn import_beta<'a>(
-    source: &'a crate::model::formats::wmo::legacy::Bundle16<'_>,
+    source: &'a Bundle16<'_>,
     options: &ImportOptions,
 ) -> Result<Conversion<Model<'a, Wmo>>, Error> {
     legacy_import::beta(source, options)
 }
 
-pub(super) fn plan_alpha<'a>(
+pub(super) fn export_alpha<'a>(
     asset: &'a Model<'_, Wmo>,
-    options: &crate::model::conversion::ExportOptions,
-) -> Result<crate::model::conversion::Plan<crate::model::formats::wmo::legacy::Root14<'a>>, Error> {
+    options: &ExportOptions,
+) -> Result<Conversion<Root14<'a>>, Error> {
     legacy_encode::alpha(asset, options)
 }
-pub(super) fn plan_beta<'a>(
+pub(super) fn export_beta<'a>(
     asset: &'a Model<'_, Wmo>,
-    options: &crate::model::conversion::ExportOptions,
-) -> Result<crate::model::conversion::Plan<crate::model::formats::wmo::legacy::Bundle16<'a>>, Error>
-{
+    options: &ExportOptions,
+) -> Result<Conversion<Bundle16<'a>>, Error> {
     legacy_encode::beta(asset, options)
 }

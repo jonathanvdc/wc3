@@ -50,9 +50,8 @@ fn warcraft_layer_additive_selectors_share_weighted_rgb_operation_and_roundtrip_
         // Both declarations carry the shared source-alpha-weighted RGB operation.
         assert!(matches!(blend, BlendOperations::AdditiveAlpha(_)));
         assert_ne!(blend, mdlx::Blend::Additive);
-        let output = semantic_mdlx::plan::<V800>(&model, &ExportOptions::default())
+        let output = semantic_mdlx::export::<V800>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         assert_eq!(
             output.materials().next().unwrap().layers[0].filter_mode,
@@ -69,7 +68,7 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
     model
         .edit(|builder| builder.set_material_surface(material, surface))
         .unwrap();
-    let error = match semantic_mdlx::plan::<V800>(&model, &ExportOptions::default()) {
+    let error = match semantic_mdlx::export::<V800>(&model, &ExportOptions::default()) {
         Err(error) => error,
         Ok(_) => panic!("unweighted additive exported without loss"),
     };
@@ -84,7 +83,7 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
             .index(0)
             .field("blend")
     );
-    let plan = semantic_mdlx::plan::<V800>(
+    let conversion = semantic_mdlx::export::<V800>(
         &model,
         &ExportOptions {
             loss_policy: LossPolicy::Drop,
@@ -92,8 +91,8 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
         },
     )
     .unwrap();
-    let issue = plan
-        .report()
+    let issue = conversion
+        .report
         .issues
         .iter()
         .find(|issue| issue.description.contains("unweighted"))
@@ -125,9 +124,8 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
         particle.details.rendering.blend,
         mdlx::Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
     );
-    let output = semantic_mdlx::plan::<V800>(&model, &ExportOptions::default())
+    let output = semantic_mdlx::export::<V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.particle_emitters2().next().unwrap().filter_mode,
@@ -141,5 +139,5 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
     model
         .edit(|builder| builder.set_feature(id, payload))
         .unwrap();
-    assert!(semantic_mdlx::plan::<V800>(&model, &ExportOptions::default()).is_err());
+    assert!(semantic_mdlx::export::<V800>(&model, &ExportOptions::default()).is_err());
 }

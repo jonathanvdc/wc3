@@ -10,7 +10,7 @@ Native bits formerly stored in those fields are discarded during semantic import
 and are not reconstructed on export.
 
 The usual workflow is to [import](conversion.md), edit through a builder, then
-plan a native export or [evaluate the result](evaluation.md). This guide introduces
+construct native output or [evaluate the result](evaluation.md). This guide introduces
 the relationships and editing rules shared by those tasks.
 
 ## Choose a profile
@@ -231,7 +231,7 @@ The detailed guides separate common editing tasks from the graph overview:
 - [Animation](animation.md) covers value slots, curves, clips, clocks, and events.
 - [Features](features.md) covers shared inspection and native effect definitions.
 - [Evaluation](evaluation.md) covers pose sampling, deformation, and surface values.
-- [Conversion](conversion.md) covers output plans and explicit loss policies.
+- [Conversion](conversion.md) covers native output and explicit loss policies.
 
 Custom profiles implement `Profile` and relationship validation through
 `ValidateLinks`. Their payloads can reuse the topic modules under `model` while

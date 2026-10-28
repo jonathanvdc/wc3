@@ -877,9 +877,8 @@ fn many_wmo_groups_keep_declaration_order_and_native_semantics_during_incrementa
     .unwrap();
     let (expected_report, expected) = {
         let imported = semantic_wmo::import(&native, &ImportOptions::default()).unwrap();
-        let expected = semantic_wmo::plan::<Classic>(&imported.value, &ExportOptions::default())
+        let expected = semantic_wmo::export::<Classic>(&imported.value, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value
             .encode()
             .unwrap();
@@ -945,9 +944,8 @@ fn many_wmo_groups_keep_declaration_order_and_native_semantics_during_incrementa
         (0..48).map(|index| index as f32 * 3.).collect::<Vec<_>>()
     );
     let typed = converted.value.try_narrow::<Wmo>().unwrap();
-    let actual = semantic_wmo::plan::<Classic>(&typed, &ExportOptions::default())
+    let actual = semantic_wmo::export::<Classic>(&typed, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value
         .encode()
         .unwrap();

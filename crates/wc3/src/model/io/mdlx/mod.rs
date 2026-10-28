@@ -1,5 +1,5 @@
 //! Warcraft III adapters for independent, borrowed semantic model graphs.
-use super::{Conversion, Error, ExportOptions, ImportOptions, Plan};
+use super::{Conversion, Error, ExportOptions, ImportOptions};
 use crate::model::formats::mdlx::mdl::Read as _;
 use crate::model::formats::mdlx::{
     visit_document, Chunk, Dialect, Document as NativeDocument, DynamicDocument, NoExtensions,
@@ -87,18 +87,19 @@ where
     import::read::<_, storage::Owned>(source, options)
 }
 /// Constructs a native model for a selected file dialect and reports encoding losses.
+/// The returned value and report are complete; encoding and file writes are separate.
 ///
 /// The input vocabulary must be Warcraft III. Translating a broader graph is a
-/// separate operation; this planner does not implicitly approximate its payloads.
+/// separate operation; this exporter does not implicitly approximate its payloads.
 ///
 /// ```compile_fail
 /// use wc3::model::{conversion::ExportOptions, io, formats::mdlx::V800, profiles::Universal, Model, ModelMetadata};
 /// let universal = Model::<Universal>::empty(ModelMetadata::Mdlx(Default::default())).unwrap();
-/// io::mdlx::plan::<V800>(&universal, &ExportOptions::default());
+/// io::mdlx::export::<V800>(&universal, &ExportOptions::default());
 /// ```
-pub fn plan<'a, 'data, T: Dialect>(
+pub fn export<'a, 'data, T: Dialect>(
     asset: &'a Model<'data, Mdlx>,
     options: &ExportOptions,
-) -> Result<Plan<NativeDocument<'a, T>>, Error> {
+) -> Result<Conversion<NativeDocument<'a, T>>, Error> {
     export::write(asset, options)
 }

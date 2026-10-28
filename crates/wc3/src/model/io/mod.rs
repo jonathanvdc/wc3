@@ -1,4 +1,4 @@
-//! Import native documents into checked models and plan explicit native exports.
+//! Import native documents into checked models and export native documents in memory.
 use super::conversion::*;
 /// ANIMATION import and export support.
 pub mod animation;

@@ -44,9 +44,8 @@ fn every_native_billboard_flag_combination_preserves_behavior_and_wire_bits() {
             Billboard::None
         };
         assert_eq!(semantic.billboard, expected);
-        let output = plan::<V800>(&model, &ExportOptions::default())
+        let output = export::<V800>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         assert_eq!(output.nodes()[0].flags.bits() & 0x78, flags.bits());
     }
@@ -61,9 +60,8 @@ fn semantic_edits_do_not_reactivate_overridden_axis_declarations() {
         let mut node = node.clone();
         node.billboard = mode;
         model.edit(|builder| builder.set_node(id, node)).unwrap();
-        let output = plan::<V800>(&model, &ExportOptions::default())
+        let output = export::<V800>(&model, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         assert_eq!(
             output.nodes()[0].flags.bits() & 0x78,
@@ -91,7 +89,7 @@ fn incompatible_effective_operations_require_explicit_export_loss() {
         let mut node = node.clone();
         node.billboard = mode;
         model.edit(|builder| builder.set_node(id, node)).unwrap();
-        assert!(plan::<V800>(&model, &ExportOptions::default()).is_err());
+        assert!(export::<V800>(&model, &ExportOptions::default()).is_err());
     }
 }
 
@@ -103,5 +101,5 @@ fn transform_semantics_are_checked_independently_of_billboards() {
     let mut node = node.clone();
     node.transform_semantics = TransformSemantics::Affine;
     model.edit(|builder| builder.set_node(id, node)).unwrap();
-    assert!(plan::<V800>(&model, &ExportOptions::default()).is_err());
+    assert!(export::<V800>(&model, &ExportOptions::default()).is_err());
 }

@@ -23,7 +23,7 @@ use semantic::profiles::NoProperties;
 use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
-pub use export::plan;
+pub use export::export;
 use semantic::{DynamicTrack, ImageResource, Property, SharedClock, Texture, Time};
 
 /// Native animation data and its resolved semantic playback identities.

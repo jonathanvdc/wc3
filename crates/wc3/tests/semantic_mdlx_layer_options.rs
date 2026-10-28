@@ -28,9 +28,8 @@ fn known_layer_declarations_roundtrip_independently_of_common_lighting_and_sampl
     let image = model.values()[step.shader.inputs().binding.image].unwrap();
     assert_eq!(image.sampler.u, AddressMode::Clamp);
     assert_eq!(image.sampler.v, AddressMode::Clamp);
-    let output = io::mdlx::plan::<native::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<native::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let bytes = output.encode_mdx().unwrap();
     let decoded = native::Document::<native::V800>::decode_mdx(&bytes).unwrap();

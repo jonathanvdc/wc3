@@ -40,9 +40,8 @@ fn semantic_roundtrip_preserves_non_utf8_effect_and_attachment_paths() {
         })
         .is_err());
     assert!(model.effect_resource(face_resource).is_some());
-    let output = io::mdlx::plan::<native::V1000>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<native::V1000>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let bytes = output.encode_mdx().unwrap();
     let output = native::Document::<native::V1000>::decode_mdx(&bytes).unwrap();

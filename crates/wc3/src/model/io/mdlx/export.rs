@@ -1,7 +1,7 @@
-//! Native Warcraft III export planning over independent logical models.
+//! Native Warcraft III export over independent logical models.
 use super::billboard;
 use super::encode_animation::{unsigned_frame, Encoder};
-use crate::model::conversion::{Context, Error, ExportOptions, Plan};
+use crate::model::conversion::{Context, Conversion, Error, ExportOptions};
 use crate::model::error::Location;
 use crate::model::formats::mdlx::mdx::FixedText;
 use crate::model::formats::mdlx::scene::{Node as NativeNode, NodeFlags};
@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     asset: &'a Model<'data, Mdlx>,
     options: &ExportOptions,
-) -> Result<Plan<NativeModel<'a, T>>, Error> {
+) -> Result<Conversion<NativeModel<'a, T>>, Error> {
     asset.validate()?;
     let model = asset;
     // These fields share the native MODL declaration with its mandatory extent.
@@ -263,5 +263,8 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         result.set_model_info(&info);
     }
     encoder.audit()?;
-    Ok(Plan::new(result, context.report))
+    Ok(Conversion {
+        value: result,
+        report: context.report,
+    })
 }

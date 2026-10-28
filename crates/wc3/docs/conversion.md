@@ -2,8 +2,8 @@
 
 Use `wc3::model::io` to import a native document into a checked
 [model graph](semantic.md). When the destination has different semantics, use
-`wc3::model::conversion` to prepare its profile explicitly, then plan a native
-export. These operations work in memory. Your application supplies native
+`wc3::model::conversion` to prepare its profile explicitly, then export a native
+document. These operations work in memory. Your application supplies native
 documents, resolves dependencies, and writes the encoded outputs.
 
 When starting with encoded bytes rather than decoded documents,
@@ -52,7 +52,7 @@ parent still belongs to the parent import. Manually supplied optional root
 companions keep their existing behavior.
 
 Numeric child addresses require a chunked output envelope. Child resource
-addresses do not contain native child documents. The semantic M2 export planner
+addresses do not contain native child documents. The semantic M2 exporter
 currently accepts a model and export options, with no input for those documents,
 so it rejects referenced child-model trees whose payloads are unavailable.
 Edit the retained native bundle when rewriting a complete child-model tree.
@@ -70,7 +70,7 @@ variants retain their original error kinds and input locations: a byte offset
 and optional chunk tag for MDX, or a source span for MDL. An MDL error's
 `diagnostic(source)` formats that location against the original text. Every
 variant exposes its original cause through `std::error::Error::source`.
-Imports of already decoded documents and export planning instead return
+Imports of already decoded documents and export instead return
 `conversion::Error`. Its `Semantic` variant retains the checked model error,
 including its domain reason and structured `Location`. Its `Source` variant
 retains a concrete native or checked-operation error behind `Arc`; inspect it
@@ -90,7 +90,7 @@ causes have no general equality contract.
 
 MDLX import returns `Model<'data, Mdlx>`; M2 and WMO imports return their matching
 profiles. Native export requires that same vocabulary:
-for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicitly
+for example, the MDLX exporter accepts `Model<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening a model
 preserves its meanings, identities, and encoded arrays; it does not translate
 materials, effects, or playback semantics into another game's equivalents.
@@ -100,7 +100,7 @@ It moves the existing values and checks required metadata, controls, and referen
 Shared vertex geometry is checked against the
 target's stream, topology, and influence constraints, independently of its source
 profile. Narrowing is an exact projection; translating another game's behavior
-requires an explicit semantic transformation before the native planner can accept
+requires an explicit semantic transformation before the native exporter can accept
 it.
 
 The destination type separately selects a native dialect or envelope. A profile
@@ -121,22 +121,22 @@ methods to change it. Rules run once in insertion order, and each completed
 stage must form a valid universal graph. The final `try_narrow` checks the whole
 target vocabulary, including data that no rule visited.
 
-Planning takes a shared source reference and prepares an independent draft.
+Conversion takes a shared source reference and edits an independent draft.
 A failed rule, invalid relationship, or unsupported target meaning leaves the
-source unchanged. A successful plan exposes a checked target model and ordered
-decisions for review, just like a native output plan. Execute that semantic plan,
-then pass its target model to the native format planner.
+source unchanged. Success returns a `Conversion` containing the checked target
+model in `value` and ordered decisions in `report`. Inspect the report, then
+pass the target model to the native exporter.
 
 ```rust
 use wc3::model::{conversion, profiles::Mdlx, FeatureId, Model};
 use conversion::{DropUnsupportedFeatures, Policy};
 
 fn translate<'data>(source: &Model<'data>, selected: Vec<FeatureId>)
-    -> Result<conversion::Plan<Model<'data, Mdlx>>, conversion::Error>
+    -> Result<conversion::Conversion<Model<'data, Mdlx>>, conversion::Error>
 {
     Policy::<Mdlx>::new()
         .with_rule(DropUnsupportedFeatures::new(selected))
-        .plan(source)
+        .convert(source)
 }
 ```
 
@@ -179,18 +179,18 @@ while specialized destination rules can preserve more fidelity than a common
 fallback. Universal retains distinct authored effects when their behavior
 differs; translation does not require reducing every effect to a common minimum.
 
-## Editing and inspecting an output plan
+## Editing and inspecting native output
 
 Edit the imported model with `Model::edit`, which publishes the changes only
 after graph validation. Resources, placements, draws, and material assignments
 have separate identities, so changing a placement need not change every user of
 its mesh. The [graph guide](semantic.md) explains these relationships.
 
-A plan exposes its proposed native value through `draft()` and its ordered
-conversion decisions through `report()`. Inspect both before calling `execute()`.
-Execution infallibly accepts the validated draft and returns the value with its report;
-it does not perform file writes. Use the resulting document or bundle's codec when
-ready to encode it.
+Native export constructs and validates the complete document or bundle before
+returning a `Conversion`. Its public `value` and `report` fields let you inspect
+the native records and accepted conversion decisions. Export performs no external
+I/O. Encode the returned document or bundle with its native codec and write the
+bytes only after accepting those decisions.
 
 ```rust
 use wc3::model::{conversion, formats::mdlx, io};
@@ -198,10 +198,10 @@ use conversion::{ExportOptions, ImportOptions};
 
 fn prepare(source: &mdlx::Document<'_, mdlx::V800>) -> Result<(), conversion::Error> {
     let model = io::mdlx::import(source, &ImportOptions::default())?.value;
-    let plan = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())?;
-    let _proposed_model = plan.draft();
-    let _decisions = plan.report();
-    let _output = plan.execute();
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())?;
+    let _decisions = &output.report;
+    let _native_document = &output.value;
+    // Inspect the decisions before encoding or writing the native document.
     Ok(())
 }
 ```

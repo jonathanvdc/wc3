@@ -43,7 +43,7 @@
 //!
 //! # Work across the native boundary
 //!
-//! [`io`](crate::model::io) imports documents and plans exports with policies from [`conversion`](crate::model::conversion).
+//! [`io`](crate::model::io) imports and exports native documents with policies from [`conversion`](crate::model::conversion).
 //! Use [`formats`](crate::model::formats) directly for native record edits and preservation of unknown
 //! source data. Checked models retain supported meanings rather than source-file
 //! layouts. Their fixed-width [`PackedArray`](crate::model::PackedArray) arrays can borrow compatible native

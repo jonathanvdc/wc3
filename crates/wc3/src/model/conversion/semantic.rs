@@ -1,5 +1,5 @@
 //! Ordered graph rewrites followed by an exact target projection.
-use super::{Error, Issue, IssueKind, Plan, Report};
+use super::{Conversion, Error, Issue, IssueKind, Report};
 use crate::model::error::Location;
 use crate::model::profiles::{Mdlx, Narrows, Universal, M2};
 use crate::model::{FeatureId, Light, LightActivation, Model, ModelBuilder, NodeFeature};
@@ -26,7 +26,7 @@ where
 
 /// A caller-assembled, ordered set of transformations for one target vocabulary.
 ///
-/// An empty policy requires exact representability. Planning clones the source;
+/// An empty policy requires exact representability. Conversion clones the source;
 /// neither failed rules nor a failed final projection publish any source edits.
 /// Rules run once, in insertion order, without implicit fallback or retries.
 pub struct Policy<'rules, 'a, Q: Narrows<Universal>> {
@@ -47,8 +47,8 @@ impl<'rules, 'a, Q: Narrows<Universal>> Policy<'rules, 'a, Q> {
         self.rules.push(Box::new(rule));
         self
     }
-    /// Prepares and validates a target model without changing the source.
-    pub fn plan(&self, source: &Model<'a>) -> Result<Plan<Model<'a, Q>>, Error> {
+    /// Converts and validates a target model without changing the source.
+    pub fn convert(&self, source: &Model<'a>) -> Result<Conversion<Model<'a, Q>>, Error> {
         let mut current = source.clone();
         let mut report = Report::default();
         for rule in &self.rules {
@@ -57,7 +57,10 @@ impl<'rules, 'a, Q: Narrows<Universal>> Policy<'rules, 'a, Q> {
             current = draft.finish()?;
         }
         let target = current.try_narrow::<Q>()?;
-        Ok(Plan::new(target, report))
+        Ok(Conversion {
+            value: target,
+            report,
+        })
     }
 }
 

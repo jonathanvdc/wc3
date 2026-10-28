@@ -1,7 +1,7 @@
 //! Direct native root and companion construction from typed world semantics.
 use super::{geometry, materials};
 use crate::model::common::FileKey;
-use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
+use crate::model::conversion::{Context, Conversion, Error, ExportOptions, IssueKind};
 use crate::model::error::Location;
 use crate::model::formats::wmo::codec::Array;
 use crate::model::formats::wmo::records::{HeaderTailField, RootFlags};
@@ -15,7 +15,7 @@ use crate::model::WorldModelResource;
 pub(super) fn write<'a, D: Dialect>(
     asset: &'a Model<'_, Wmo>,
     options: &ExportOptions,
-) -> Result<Plan<Bundle<'a, D>>, Error> {
+) -> Result<Conversion<Bundle<'a, D>>, Error> {
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
@@ -30,7 +30,7 @@ fn write_model<'a, D: Dialect>(
     model: &Model<'_, Wmo>,
     options: &ExportOptions,
     mut context: Context,
-) -> Result<Plan<Bundle<'a, D>>, Error> {
+) -> Result<Conversion<Bundle<'a, D>>, Error> {
     if model.bounds().is_none() {
         context.unsupported(Location::new().field("world").field("bounds"), "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
     }
@@ -282,7 +282,10 @@ fn write_model<'a, D: Dialect>(
     bundle.validate_complete().map_err(|error| {
         Error::from_source(Location::new().field("world").field("output"), error)
     })?;
-    Ok(Plan::new(bundle, context.report))
+    Ok(Conversion {
+        value: bundle,
+        report: context.report,
+    })
 }
 pub(super) fn array<'a, T: Write + RecordLayout>(rows: &[T]) -> Result<Array<'a, T>, Error> {
     Array::from_records(rows)

@@ -164,9 +164,8 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
         .with_positions((positions).into_packed_array())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let output = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<io::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     output.validate().unwrap();
     let group = output.group(0).unwrap();
@@ -211,9 +210,8 @@ fn beta_native_header_and_draw_controls_survive_semantic_roundtrip() {
     let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = io::wmo::plan::<io::wmo::V16>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<io::wmo::V16>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     output.validate_complete().unwrap();
     let group = output.group(0).unwrap();
@@ -269,9 +267,8 @@ fn historical_multiple_placements_relocate_lighting_windows() {
             Ok(())
         })
         .unwrap();
-    let encoded = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
+    let encoded = io::wmo::export::<io::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(asset.instances().iter().count(), 2);
     assert_eq!(

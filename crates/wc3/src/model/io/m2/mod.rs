@@ -1,5 +1,5 @@
 //! Direct conversion between native M2 bundles and checked logical model graphs.
-use super::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use super::{Context, Conversion, Error, ExportOptions, ImportOptions};
 use crate::model::error::Location;
 use crate::model::formats::m2::{
     self as native,
@@ -39,7 +39,7 @@ mod particles;
 pub use particles::ParticleConversion;
 use particles::{gravity_vector, gravity_word};
 mod graph;
-pub use graph::plan;
+pub use graph::export;
 mod import;
 pub use import::{import, ImportDialect};
 fn failure(error: impl StdError + Send + Sync + 'static) -> Error {

@@ -36,7 +36,7 @@ assert_eq!(imported.value.name(), "Example");
 The returned model owns its values, so you can release the input. Import also
 returns a report. Strict import rejects unsupported data; explicitly permitted
 losses are recorded there. The [model guide](docs/semantic.md) introduces checked
-editing, and the [import and export guide](docs/conversion.md) shows how to plan
+editing, and the [import and export guide](docs/conversion.md) shows how to construct
 native output, inspect conversion decisions, and distinguish native decoding
 failures from checked import failures.
 

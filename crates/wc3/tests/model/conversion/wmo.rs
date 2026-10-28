@@ -80,9 +80,8 @@ fn roundtrip<D: Dialect>() {
         .widen::<Universal>()
         .try_narrow::<Wmo>()
         .unwrap();
-    let output = io::wmo::plan::<D>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<D>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     output.validate_complete().unwrap();
     assert_eq!(output.root.header().wmo_id, 55);
@@ -152,9 +151,8 @@ fn region_lights_are_independent_editable_features() {
     asset
         .edit(|builder| builder.set_feature(id, feature))
         .unwrap();
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
     let light = group
@@ -208,9 +206,8 @@ fn edited_geometry_rebuilds_native_companions() {
         .with_positions((positions).into_packed_array())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
     let positions = group
@@ -281,9 +278,8 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
         .unwrap()
         .material
         .is_none());
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
     assert_eq!(group.header().interior_batch_count, 1);
@@ -361,9 +357,8 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
     asset
         .edit(|builder| builder.set_instance(id, instance))
         .unwrap();
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let liquid = output
         .group(GroupKey { index: 0, lod: 0 })
@@ -413,9 +408,8 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
         asset
             .edit(|builder| builder.set_material(id, material))
             .unwrap();
-        let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+        let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
             .unwrap()
-            .execute()
             .value;
         let material = output
             .root
@@ -461,9 +455,8 @@ fn unknown_payloads_are_rejected_or_dropped_before_rebuilding_files() {
     .unwrap()
     .value;
 
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert!(output.root.chunks().all(|chunk| chunk.tag() != *b"XTRA"));
 }
@@ -513,9 +506,8 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
     let region = &asset.instances().iter().next().unwrap().1.properties;
     assert_eq!(region.portals[0].portal.index, 0);
     assert_eq!(region.portals[0].neighbor.index, 0);
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     output.validate_complete().unwrap();
     assert_eq!(output.root.header().portal_count, 1);
@@ -598,9 +590,8 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
         ))
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     output.validate_complete().unwrap();
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
@@ -687,9 +678,8 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
         world.ambient_volumes[region.ambients[1].index as usize].volume,
         Volume::Planes { .. }
     ));
-    let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     output.validate_complete().unwrap();
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
@@ -774,9 +764,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
             Ok(())
         })
         .unwrap();
-    let result = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute();
+    let result = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default()).unwrap();
     assert!(result
         .report
         .issues
@@ -822,9 +810,8 @@ fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
     let (_, instance) = asset.instances().iter().next().unwrap();
     assert_eq!(instance.properties.implicit_liquid, Some(37));
     assert!(instance.properties.liquids.is_empty());
-    let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let group = output.group(key).unwrap();
     assert!(group.header().flags.has_liquid());
@@ -858,9 +845,8 @@ fn semantic_world_controls_drop_unclassified_bits() {
     let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
+    let output = io::wmo::export::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.root.header().flags().bits(), 0);
 }
@@ -877,8 +863,8 @@ fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
             Ok(())
         })
         .unwrap();
-    assert!(io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default()).is_err());
-    let plan = io::wmo::plan::<wmo::Legion>(
+    assert!(io::wmo::export::<wmo::Legion>(&asset, &ExportOptions::default()).is_err());
+    let conversion = io::wmo::export::<wmo::Legion>(
         &asset,
         &ExportOptions {
             loss_policy: conversion::LossPolicy::Drop,
@@ -886,8 +872,8 @@ fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
         },
     )
     .unwrap();
-    assert!(plan
-        .report()
+    assert!(conversion
+        .report
         .issues
         .iter()
         .any(|issue| issue.path == "world.bounds" && issue.kind == conversion::IssueKind::Dropped));

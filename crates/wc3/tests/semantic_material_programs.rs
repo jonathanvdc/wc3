@@ -253,8 +253,7 @@ fn export<V: FormatVersion>(
     model: &Model<'_, Mdlx>,
 ) -> Result<native::Document<'static, V>, wc3::model::conversion::Error> {
     // Material test inputs own their text, and the native output is consumed here.
-    Ok(io::mdlx::plan::<V>(model, &ExportOptions::default())?
-        .execute()
+    Ok(io::mdlx::export::<V>(model, &ExportOptions::default())?
         .value
         .into_owned())
 }

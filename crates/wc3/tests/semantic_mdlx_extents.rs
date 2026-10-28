@@ -65,9 +65,8 @@ fn native_empty_extents_remain_distinct_from_finite_point_bounds_and_roundtrip()
             Extent::Empty
         ]
     );
-    let output = io::mdlx::plan::<V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.sequences().next().unwrap().extent, empty());
     assert_eq!(

@@ -54,9 +54,8 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
     );
     assert!(model.is_animated(first.coordinates.transform.translation));
     assert!(model.is_animated(second.coordinates.transform.translation));
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.textures().count(), 1);
     assert_eq!(output.texture_animations().count(), 1);
@@ -104,9 +103,8 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
             .scale],
         Vec3::from_array([1.; 3])
     );
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.textures().count(), 2);
     assert_eq!(output.texture_animations().count(), 2);
@@ -148,9 +146,8 @@ fn animated_selection_retains_each_selected_images_sampler() {
     assert_eq!(selections.len(), 2);
     assert_ne!(selections[0].resource, selections[1].resource);
     assert_ne!(selections[0].sampler.u, selections[1].sampler.u);
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let textures: Vec<_> = output.textures().collect();
     assert_eq!(textures.len(), 2);
@@ -192,9 +189,8 @@ fn equal_native_texture_declarations_retain_independent_inputs_before_export_nor
         model.image_resource(second.resource)
     );
     assert_eq!(first.sampler, second.sampler);
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     // Equal declarations can share a transport record once the output is compiled.
     assert_eq!(output.textures().count(), 1);
@@ -253,9 +249,8 @@ fn replaceable_image_declarations_retain_filenames_and_drop_uninterpreted_flags(
     assert_eq!(model.dependencies().images().len(), 1);
     assert_eq!(texture.sampler.u, AddressMode::Repeat);
     assert_eq!(texture.sampler.v, AddressMode::Clamp);
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let texture = output.textures().next().unwrap();
     assert_eq!(texture.replaceable_id, 1);

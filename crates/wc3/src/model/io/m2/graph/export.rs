@@ -1,4 +1,4 @@
-//! Typed M2 output planning and native graph construction.
+//! Typed M2 native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
 use crate::model::error::Location;
@@ -8,11 +8,12 @@ use crate::model::{M2ImageResource, M2ModelResource};
 use glam::Vec3;
 use zerovec::ZeroVec;
 
-/// Plans a typed M2 bundle, checking index limits, curves and resource identities.
-pub fn plan<D: ExportDialect>(
+/// Constructs a typed M2 bundle, checking index limits, curves and resource identities.
+/// The returned value and report are complete; encoding and file writes are separate.
+pub fn export<D: ExportDialect>(
     asset: &Model<'_, M2Vocabulary>,
     options: &ExportOptions,
-) -> Result<Plan<Bundle<'static, D>>, Error>
+) -> Result<Conversion<Bundle<'static, D>>, Error>
 where
     D::Layout: ExportLayout + ParticleConversion + CameraConversion,
     <D::Layout as native::HeaderLayout>::Flipbooks<'static>: FlipbookField<'static, D::Layout>,
@@ -498,7 +499,10 @@ where
     }
     physics::export(model, &nodes, &mut bundle, &mut context)?;
     bundle.validate_complete().map_err(failure)?;
-    Ok(Plan::new(bundle, context.report))
+    Ok(Conversion {
+        value: bundle,
+        report: context.report,
+    })
 }
 fn native_optional_bounds(value: Option<semantic::Bounds>) -> native::records::Extent {
     value.map(native_bounds).unwrap_or(native::records::Extent {

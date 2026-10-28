@@ -68,9 +68,8 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
         curve.values().get(0),
         Some(Vec3::from_array([0.1, 0.2, 0.3]))
     );
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let camera = output.cameras().next().unwrap();
     assert_eq!(
@@ -129,9 +128,8 @@ fn native_integer_effect_curves_keep_full_width() {
         .unwrap();
     assert_eq!(curve.values().get(0), Some(16_777_217));
     assert!(curve.values().is_owned());
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output
@@ -163,9 +161,8 @@ fn unknown_native_blend_remains_its_own_operation() {
     let surface = &imported.value.materials().iter().next().unwrap().1.surface;
     let material = surface;
     assert_eq!(material.steps[0].state.blend, profile::Blend::Unknown(8));
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.materials().next().unwrap().layers[0].filter_mode,
@@ -184,9 +181,8 @@ fn unsigned_native_intervals_and_blend_duration_are_not_keyframe_limited() {
     info.blend_time = u32::MAX;
     source.set_model_info(&info);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.sequences().next().unwrap().interval,
@@ -217,9 +213,8 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
         .value
         .edit(|builder| builder.set_mesh(id, edited))
         .unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.geosets().next().unwrap().vertices().get(0),
@@ -276,9 +271,8 @@ fn exterior_keys_keep_exact_milliseconds_across_large_clip_origins() {
     );
     source.set_helpers([node]);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output
@@ -328,9 +322,8 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
         .coordinates
         .transform;
     assert!(graph.is_animated(transform.translation));
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(
         output.materials().next().unwrap().layers[0].texture_animation_id,
@@ -360,9 +353,8 @@ fn unchanged_packed_geometry_is_borrowed_by_native_output() {
     ))
     .unwrap();
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let mesh = output.geosets().next().unwrap();
     assert!(!mesh.vertices().is_owned());
@@ -396,9 +388,8 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
             .count(),
         1
     );
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.sequences().count(), 0);
     assert_eq!(
@@ -488,9 +479,8 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
             builder.set_animation(id, animation)
         })
         .unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let nodes = output.nodes();
     let track = nodes[0].translation.as_ref().unwrap();
@@ -543,9 +533,8 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
             .count(),
         1
     );
-    let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.sequences().count(), 0);
     assert_eq!(output.global_sequences(), [1000]);
@@ -607,7 +596,9 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
         })
         .is_ok()
     {
-        assert!(io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default()).is_err());
+        assert!(
+            io::mdlx::export::<mdlx::V800>(&imported.value, &ExportOptions::default()).is_err()
+        );
     }
 }
 
@@ -645,9 +636,8 @@ fn semantic_sequence_controls_drop_unclassified_bits() {
     let asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(output.sequences().next().unwrap().flags.bits(), 0);
 }
@@ -660,9 +650,8 @@ fn absent_model_info_stays_absent_and_encoding_requires_bounds_for_metadata() {
         .unwrap()
         .value;
     assert!(asset.bounds().is_none());
-    let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert!(output.model_info().is_none());
     let named = Model::<Mdlx>::builder("named").finish().unwrap();
@@ -676,7 +665,7 @@ fn absent_model_info_stays_absent_and_encoding_requires_bounds_for_metadata() {
         .unwrap();
     assert!(asset.bounds().is_none());
     asset.validate().unwrap();
-    let error = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default()).unwrap_err();
+    let error = io::mdlx::export::<mdlx::V800>(&asset, &ExportOptions::default()).unwrap_err();
     assert_eq!(
         error.location(),
         &wc3::model::error::Location::new()
@@ -703,9 +692,8 @@ fn empty_material_declarations_survive_import_widening_and_export() {
     assert!(declaration.two_sided);
     assert_eq!(declaration.shader_name, "empty shader");
     let restored = broad.try_narrow::<Mdlx>().unwrap();
-    let output = io::mdlx::plan::<mdlx::V1000>(&restored, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V1000>(&restored, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let material = output.materials().next().unwrap();
     assert!(material.layers.is_empty());
@@ -713,7 +701,7 @@ fn empty_material_declarations_survive_import_widening_and_export() {
     assert!(material.render_mode.two_sided());
     assert_eq!(material.try_shader().unwrap(), "empty shader");
     // An uninterpreted declaration cannot be normalized into a numeric selector.
-    let error = io::mdlx::plan::<mdlx::V1800>(&restored, &ExportOptions::default()).unwrap_err();
+    let error = io::mdlx::export::<mdlx::V1800>(&restored, &ExportOptions::default()).unwrap_err();
     assert_eq!(
         error.location(),
         &wc3::model::error::Location::new()
@@ -750,9 +738,8 @@ fn distinct_selected_animations_preserve_coincident_event_occurrences() {
             builder.set_clip(clip, selection)
         })
         .unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     assert_eq!(*output.event_objects().next().unwrap().frames(), [500, 500]);
 }
@@ -771,9 +758,8 @@ fn empty_shared_event_source_retains_its_clock_and_name() {
         .value;
     assert_eq!(model.event_sources().len(), 1);
     assert!(model.features().is_empty());
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let event = output.event_objects().next().unwrap();
     assert_eq!(event.node.name.text(), "Empty action");
@@ -800,9 +786,8 @@ fn independent_event_sources_can_share_an_anchor_without_becoming_helpers() {
             .unwrap();
     }
     let model = draft.finish().unwrap();
-    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+    let output = io::mdlx::export::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
-        .execute()
         .value;
     let events: Vec<_> = output.event_objects().collect();
     assert_eq!(events.len(), 2);
