@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import difflib
 import hashlib
 import json
+import math
 from pathlib import Path
 import struct
 import subprocess
@@ -209,6 +210,20 @@ def run(args):
     return 1 if args.fail_on_review and any(r["status"] != "agreement" for r in reports) else 0
 
 
+def positive_jobs(value):
+    jobs = int(value)
+    if jobs <= 0:
+        raise argparse.ArgumentTypeError("jobs must be positive")
+    return jobs
+
+
+def positive_timeout(value):
+    timeout = float(value)
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be finite and positive")
+    return timeout
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -216,14 +231,14 @@ def main():
     setup = commands.add_parser("build", help="build a verified pinned WhiteoutLib checkout")
     setup.add_argument("--source", type=Path, required=True)
     setup.add_argument("--build-dir", type=Path, default=default_build)
-    setup.add_argument("--jobs", type=int, default=4)
+    setup.add_argument("--jobs", type=positive_jobs, default=4)
     setup.add_argument("--cmake-arg", action="append", default=[], help="additional CMake argument (use --cmake-arg=-D...)")
     execute = commands.add_parser("run", help="compare every MDX in a local corpus")
     execute.add_argument("--corpus", type=Path, default=ROOT / "data/hive-workshop-models")
     execute.add_argument("--build-dir", type=Path, default=default_build)
     execute.add_argument("--results", type=Path, help="new directory; existing paths are refused")
     execute.add_argument("--dialects", nargs="+", choices=["engine", "hive"], default=["engine", "hive"])
-    execute.add_argument("--timeout", type=float, default=30)
+    execute.add_argument("--timeout", type=positive_timeout, default=30)
     execute.add_argument("--fail-on-review", action="store_true")
     args = parser.parse_args()
     try:

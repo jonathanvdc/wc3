@@ -1,5 +1,7 @@
 """Runner failure-path tests; do not require WhiteoutLib or network access."""
 import importlib.util
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -23,6 +25,36 @@ class ComparisonTests(unittest.TestCase):
         path.write_text("#!/usr/bin/env python3\n" + code)
         path.chmod(0o755)
         return path
+
+    def test_invalid_execution_limits_are_rejected_before_work(self):
+        for command, option, values, diagnostic in (
+            (["run"], "--timeout", ["0", "-1", "nan", "inf", "-inf", "1e999", "invalid"],
+             "--timeout"),
+            (["build", "--source", str(self.root)], "--jobs", ["0", "-1", "1.5", "invalid"],
+             "--jobs"),
+        ):
+            for value in values:
+                with self.subTest(option=option, value=value), patch.object(
+                        compare.sys, "argv", ["compare.py", *command, f"{option}={value}"]), patch.object(
+                        compare, "build") as build, patch.object(compare, "run") as run:
+                    errors = io.StringIO()
+                    with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as error:
+                        compare.main()
+                    self.assertEqual(error.exception.code, 2)
+                    self.assertIn(diagnostic, errors.getvalue())
+                    build.assert_not_called()
+                    run.assert_not_called()
+
+    def test_positive_execution_limits_reach_the_selected_command(self):
+        for command, option, value, expected in (
+            (["run"], "timeout", "0.25", 0.25),
+            (["build", "--source", str(self.root)], "jobs", "2", 2),
+        ):
+            with self.subTest(option=option), patch.object(
+                    compare.sys, "argv", ["compare.py", *command, f"--{option}={value}"]), patch.object(
+                    compare, command[0], return_value=0) as selected:
+                self.assertEqual(compare.main(), 0)
+                self.assertEqual(getattr(selected.call_args.args[0], option), expected)
 
     def test_success_without_output_is_not_agreement(self):
         executable = self.executable("empty", "pass\n")
