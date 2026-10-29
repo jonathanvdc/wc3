@@ -1,4 +1,5 @@
 mod bundle;
+mod companion_framing;
 mod companions;
 mod derive;
 mod document_io;

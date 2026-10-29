@@ -2,7 +2,8 @@
 use super::super::codec::Encoder;
 use super::super::records::ModelFlags;
 use super::super::{ReadError, WriteError};
-use super::{chunk_bytes, write_chunk};
+use super::write_chunk;
+use crate::model::common::binary::Chunks;
 use crate::model::common::Ownership;
 use std::borrow::Cow;
 #[derive(Clone, Debug, PartialEq, Ownership)]
@@ -28,13 +29,17 @@ impl<'data> AnimationFile<'data> {
             return Ok(Self::Raw(Cow::Borrowed(data)));
         }
         Ok(Self::Chunked(
-            chunk_bytes(data)?
-                .into_iter()
-                .map(|(tag, data)| AnimationStream {
-                    tag,
-                    data: Cow::Borrowed(data),
+            Chunks::new(data, 0)
+                .map(|chunk| {
+                    let chunk = chunk.map_err(|error| {
+                        ReadError::invalid(error.offset, "animation chunk framing")
+                    })?;
+                    Ok(AnimationStream {
+                        tag: chunk.header.tag,
+                        data: Cow::Borrowed(chunk.data),
+                    })
                 })
-                .collect(),
+                .collect::<Result<_, ReadError>>()?,
         ))
     }
     /// Returns the requested animation stream without resolving track descriptors.

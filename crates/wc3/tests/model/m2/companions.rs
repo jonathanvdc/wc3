@@ -119,6 +119,36 @@ mod skeleton {
             Skeleton::<V274>::read_with_sequences(&bytes, ModelFlags::default(), &[true]).is_err()
         );
     }
+    #[test]
+    fn last_local_sequence_chunk_supplies_context_without_losing_earlier_records() {
+        let mut bytes = attachment_external();
+        let mut inline = vec![0; 96];
+        word(&mut inline, 8, 1);
+        word(&mut inline, 12, 32);
+        word(&mut inline, 44, 0x130);
+        bytes.extend(chunk(*b"SKS1", &inline));
+        let mut external = inline.clone();
+        word(&mut external, 44, 0);
+        bytes.extend(chunk(*b"SKS1", &external));
+        let skeleton = Skeleton::<V274>::read(&bytes, ModelFlags::default()).unwrap();
+        for (index, expected) in [(1, false), (2, true)] {
+            let SkeletonChunk::Sequences { sequences, .. } = &skeleton.chunks[index] else {
+                panic!("local sequences")
+            };
+            assert_eq!(sequences[0].flags.external_animation(), expected);
+        }
+        let written = skeleton.write().unwrap();
+        assert_eq!(
+            Skeleton::<V274>::read(&written, ModelFlags::default()).unwrap(),
+            skeleton
+        );
+
+        // An empty last SKS1 still supplies local context and overrides inheritance.
+        bytes.extend(chunk(*b"SKS1", &[0; 32]));
+        assert!(
+            Skeleton::<V274>::read_with_sequences(&bytes, ModelFlags::default(), &[true]).is_err()
+        );
+    }
 }
 
 mod resources {
