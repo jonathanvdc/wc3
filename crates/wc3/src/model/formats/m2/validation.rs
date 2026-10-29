@@ -1,9 +1,8 @@
 //! Cross-record consistency checks separate from bounded binary decoding.
 use super::companions::{DynamicSkeleton, Skeleton, SkeletonChunk};
-use super::records::{Sequence, Validate};
-use super::{Core, Dialect, Document, ModelLayout, ReadError};
+use super::records::{Bone, Sequence, Validate};
+use super::{Core, Dialect, Document, ModelLayout, ReadError, ZeroVec};
 use crate::visit_m2_skeleton;
-use std::collections::BTreeSet;
 
 impl<D: Dialect> Document<'_, D> {
     /// Checks native cross-record references without requiring supporting files.
@@ -29,26 +28,7 @@ impl<V: ModelLayout> Core<'_, V> {
     /// Checks locally available record relationships.
     pub fn validate(&self) -> Result<(), ReadError> {
         validate_aliases(&self.sequences)?;
-        for (index, _) in self.bones.iter().enumerate() {
-            let mut current = index;
-            let mut seen = BTreeSet::new();
-            loop {
-                if !seen.insert(current) {
-                    return Err(ReadError::invalid(0, "bone parent cycle"));
-                }
-                let bone = self
-                    .bones
-                    .get(current)
-                    .ok_or_else(|| ReadError::invalid(0, "bone parent index"))?;
-                if bone.parent_bone_id == -1 {
-                    break;
-                }
-                if bone.parent_bone_id < -1 {
-                    return Err(ReadError::invalid(0, "bone parent sentinel"));
-                }
-                current = bone.parent_bone_id as usize;
-            }
-        }
+        validate_bones(&self.bones)?;
         if !self.collision_indices.len().is_multiple_of(3) {
             return Err(ReadError::invalid(0, "collision triangle index count"));
         }
@@ -61,15 +41,11 @@ impl<V: ModelLayout> Core<'_, V> {
         }
         for (lookup, count) in [
             (&self.sequence_lookup, self.sequences.len()),
+            (&self.key_bone_lookup, self.bones.len()),
             (&self.attachment_lookup, self.attachments.len()),
             (&self.camera_lookup, self.cameras.len()),
         ] {
-            if lookup
-                .iter()
-                .any(|index| index != u16::MAX && index as usize >= count)
-            {
-                return Err(ReadError::invalid(0, "lookup index"));
-            }
+            validate_lookup(lookup, count)?;
         }
         macro_rules! validate { ($($field:ident),* $(,)?) => { $(for record in &self.$field { record.validate()?; })* }; }
         validate!(
@@ -96,22 +72,36 @@ impl<V: ModelLayout> Core<'_, V> {
 }
 
 impl<V: ModelLayout> Skeleton<'_, V> {
-    /// Checks the native track cardinalities and sequence records of this skeleton.
+    /// Checks each local table's hierarchy, aliases, lookup indices, and track cardinalities.
+    ///
+    /// Binary decoding checks byte bounds and retains unresolved animation leaves.
+    /// Parent skeletons supply missing tables; bone parents and sequence aliases
+    /// address their own local tables. Cross-table references and external
+    /// animation streams are not checked here.
     pub fn validate(&self) -> Result<(), ReadError> {
         for chunk in &self.chunks {
             match chunk {
-                SkeletonChunk::Bones { bones, .. } => {
+                SkeletonChunk::Bones { bones, lookup } => {
+                    validate_bones(bones)?;
+                    validate_lookup(lookup, bones.len())?;
                     for bone in bones {
                         bone.validate()?;
                     }
                 }
-                SkeletonChunk::Attachments { attachments, .. } => {
+                SkeletonChunk::Attachments {
+                    attachments,
+                    lookup,
+                } => {
+                    validate_lookup(lookup, attachments.len())?;
                     for attachment in attachments {
                         attachment.validate()?;
                     }
                 }
-                SkeletonChunk::Sequences { sequences, .. } => {
+                SkeletonChunk::Sequences {
+                    sequences, lookup, ..
+                } => {
                     validate_aliases(sequences)?;
+                    validate_lookup(lookup, sequences.len())?;
                     for sequence in sequences {
                         sequence.validate()?;
                     }
@@ -123,23 +113,74 @@ impl<V: ModelLayout> Skeleton<'_, V> {
     }
 }
 
+fn validate_lookup(lookup: &ZeroVec<'_, u16>, count: usize) -> Result<(), ReadError> {
+    if lookup
+        .iter()
+        .any(|index| index != u16::MAX && index as usize >= count)
+    {
+        return Err(ReadError::invalid(0, "lookup index"));
+    }
+    Ok(())
+}
+
+fn validate_bones<V: ModelLayout>(bones: &[Bone<'_, V>]) -> Result<(), ReadError> {
+    validate_chains(
+        bones.len(),
+        |index| match bones[index].parent_bone_id {
+            -1 => Ok(None),
+            parent if parent < -1 => Err(ReadError::invalid(0, "bone parent sentinel")),
+            parent => Ok(Some(parent as usize)),
+        },
+        "bone parent index",
+        "bone parent cycle",
+    )
+}
+
 fn validate_aliases<V: ModelLayout>(sequences: &[Sequence<V>]) -> Result<(), ReadError> {
-    for (index, sequence) in sequences.iter().enumerate() {
-        if sequence.flags.alias() {
-            let mut current = index;
-            let mut seen = BTreeSet::new();
-            loop {
-                if !seen.insert(current) {
-                    return Err(ReadError::invalid(0, "animation alias cycle"));
-                }
-                let sequence = sequences
-                    .get(current)
-                    .ok_or_else(|| ReadError::invalid(0, "animation alias index"))?;
-                if !sequence.flags.alias() {
-                    break;
-                }
-                current = sequence.alias_next as usize;
+    if !sequences.iter().any(|sequence| sequence.flags.alias()) {
+        return Ok(());
+    }
+    validate_chains(
+        sequences.len(),
+        |index| {
+            let sequence = &sequences[index];
+            Ok(sequence
+                .flags
+                .alias()
+                .then_some(sequence.alias_next as usize))
+        },
+        "animation alias index",
+        "animation alias cycle",
+    )
+}
+
+// Each walk has a distinct nonzero marker. Reaching its own marker is a cycle;
+// reaching an earlier walk reuses a chain already checked through its endpoint.
+fn validate_chains(
+    count: usize,
+    next: impl Fn(usize) -> Result<Option<usize>, ReadError>,
+    invalid_index: &'static str,
+    cycle: &'static str,
+) -> Result<(), ReadError> {
+    let mut visited = vec![0; count];
+    for start in 0..count {
+        if visited[start] != 0 {
+            continue;
+        }
+        let marker = start + 1;
+        let mut current = Some(start);
+        while let Some(index) = current {
+            let state = visited
+                .get_mut(index)
+                .ok_or_else(|| ReadError::invalid(0, invalid_index))?;
+            if *state == marker {
+                return Err(ReadError::invalid(0, cycle));
             }
+            if *state != 0 {
+                break;
+            }
+            *state = marker;
+            current = next(index)?;
         }
     }
     Ok(())
