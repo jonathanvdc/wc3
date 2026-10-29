@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-29",
+  "baseline_revision": "3764c69a20d329e2c0850729197f7ff7edddf3b9",
+  "toolchain": "Rust 1.99.0",
+  "profile": "bench (optimized), wc3 default features",
+  "method": "Criterion 0.7.0; 10 samples, 0.2 s warmup, 0.5 s measurement per case; same cloud container, sequential runs after all builds completed. The baseline executable was retained before changing validation.rs. Inputs are synthetic chains and terminal controls; these measure semantic validation, not file decoding or full model loading. Short local samples are not cross-machine performance guarantees.",
+  "command": "cargo bench --locked --offline -p wc3 --bench m2_validation -- --warm-up-time 0.2 --measurement-time 0.5 --sample-size 10 --save-baseline before; then run changed benchmark with --baseline before",
+  "results": [
+    {
+      "case": "alias-chain",
+      "records": 2048,
+      "estimator": "mean",
+      "before_ns": 22368164.633333333,
+      "after_ns": 4991.392466747606,
+      "speedup": 4481.347596356903
+    },
+    {
+      "case": "alias-chain",
+      "records": 256,
+      "estimator": "slope",
+      "before_ns": 286566.58214285714,
+      "after_ns": 657.9545777453384,
+      "speedup": 435.5415887899983
+    },
+    {
+      "case": "alias-chain",
+      "records": 32,
+      "estimator": "slope",
+      "before_ns": 3486.874787386357,
+      "after_ns": 91.47844922559052,
+      "speedup": 38.11689875489194
+    },
+    {
+      "case": "bone-chain",
+      "records": 2048,
+      "estimator": "mean",
+      "before_ns": 22078932.266666666,
+      "after_ns": 12081.564597371227,
+      "speedup": 1827.4894852170653
+    },
+    {
+      "case": "bone-chain",
+      "records": 256,
+      "estimator": "slope",
+      "before_ns": 280319.0118506494,
+      "after_ns": 1477.9898585437272,
+      "speedup": 189.66233782337957
+    },
+    {
+      "case": "bone-chain",
+      "records": 32,
+      "estimator": "slope",
+      "before_ns": 3842.5587696172106,
+      "after_ns": 209.0452819506546,
+      "speedup": 18.38146612906696
+    },
+    {
+      "case": "bone-roots",
+      "records": 2048,
+      "estimator": "slope",
+      "before_ns": 23451.5292372602,
+      "after_ns": 11010.328971533518,
+      "speedup": 2.129957179108144
+    },
+    {
+      "case": "bone-roots",
+      "records": 256,
+      "estimator": "slope",
+      "before_ns": 2828.2523804064786,
+      "after_ns": 1428.2298407493472,
+      "speedup": 1.980250166823698
+    },
+    {
+      "case": "bone-roots",
+      "records": 32,
+      "estimator": "slope",
+      "before_ns": 389.6789547535886,
+      "after_ns": 209.80997883752653,
+      "speedup": 1.8572946668821204
+    },
+    {
+      "case": "no-aliases",
+      "records": 2048,
+      "estimator": "slope",
+      "before_ns": 3454.747481367777,
+      "after_ns": 3422.4404739086217,
+      "speedup": 1.0094397573034364
+    },
+    {
+      "case": "no-aliases",
+      "records": 256,
+      "estimator": "slope",
+      "before_ns": 446.07132014411,
+      "after_ns": 443.07791601163694,
+      "speedup": 1.0067559316867294
+    },
+    {
+      "case": "no-aliases",
+      "records": 32,
+      "estimator": "slope",
+      "before_ns": 52.68729791854582,
+      "after_ns": 56.06695106068243,
+      "speedup": 0.9397211177315717
+    }
+  ]
+}

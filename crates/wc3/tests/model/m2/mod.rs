@@ -6,5 +6,6 @@ mod document_io;
 mod geometry;
 mod io;
 mod layouts;
+mod topology_validation;
 mod traversal_derive;
 mod types;

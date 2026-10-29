@@ -59,6 +59,10 @@ name = "model"
 harness = false
 
 [[bench]]
+name = "m2_validation"
+harness = false
+
+[[bench]]
 name = "animation"
 harness = false
 
