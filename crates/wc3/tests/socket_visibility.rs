@@ -2,7 +2,7 @@ use wc3::model::profiles::{m2, Universal, M2};
 use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationProgram, AnimationSample, Attachment, Clip, Curve, DynamicTrack, Light,
-    LightActivation, Model, NodeFeature, Time, TimeSource, Track,
+    LightActivation, Model, NodeFeature, Socket, SocketIdentity, Time, TimeSource, Track,
 };
 
 fn time(value: f64) -> Time {
@@ -110,6 +110,18 @@ fn explicit_boolean_conversion_samples_at_retimed_clocks() {
         sample.at_times(time(0.), time(0.)).animated(&visibility),
         1.
     );
+    let attachment = Attachment::Socket(Socket {
+        identity: SocketIdentity::Role(7),
+        visibility,
+        control: None,
+    });
+    assert_eq!(attachment.visibility(&sample), 0.);
+    assert_eq!(attachment.visibility(&sample.evaluate()), 0.);
+    let retimed = sample.at_times(time(0.), time(0.));
+    assert_eq!(attachment.visibility(&retimed), 1.);
+    let initial = animation.sample(AnimationSample::default()).unwrap();
+    assert_eq!(attachment.visibility(&initial), 1.);
+    assert_eq!(attachment.visibility(&initial.evaluate()), 1.);
     assert!(
         Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
             .finish()

@@ -18,7 +18,12 @@ after changing node definitions or animation channel targets. Samples must belon
 to the same model identities as the prepared layout. Animation compilation remains
 separate: reuse
 `AnimationProgram` when sampling many frames, and supply the resulting
-`SampledAnimation` to the layout.
+`SampledAnimation` to the layout. Compilation owns each reusable animation once and
+indexes property writers for model-level and clip selections. Sampling borrows
+those indices, so property reads inspect only matching writers, including
+lower-priority candidates when a curve has no applicable keys. Clip aliases share
+the same curve storage. Composing programs rebuilds the indices for their combined
+selections.
 
 ```rust
 use wc3::model::{AnimationProgram, AnimationSample, ModelPose, PoseInputs};
@@ -64,7 +69,9 @@ blend local transforms with `Transform::blend` before hierarchy composition.
 `cargo bench -p wc3 --bench evaluation` measures reusable pose evaluation and
 draw projection without initializing a renderer. `cargo bench -p wc3 --bench
 packed_storage` compares borrowed packed glam access with native `ZeroVec`
-component access.
+component access. `cargo bench -p wc3 --bench animation --
+animation/selected_tracks` measures selection and property reads as the number of
+selected reusable animations grows, including absent writers and empty overrides.
 `ValueSample` accepts both ordinary and retimed animation samples, so effect
 and event times do not require selecting animations again.
 

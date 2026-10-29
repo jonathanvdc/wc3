@@ -57,4 +57,10 @@ fn native_child_mounts_retain_fractional_visibility_without_inventing_points() {
     assert_eq!(placement.visibility(&sample), 1.);
     assert!(point.mount(feature, node).is_none());
     assert_eq!(point.visibility(&sample), 0.);
+    let retimed = sample.at_times(Default::default(), Default::default());
+    let snapshot = sample.evaluate();
+    for (attachment, expected) in [(&attachment, 0.25), (&point, 0.), (&placement, 1.)] {
+        assert_eq!(attachment.visibility(&retimed), expected);
+        assert_eq!(attachment.visibility(&snapshot), expected);
+    }
 }

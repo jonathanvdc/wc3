@@ -7,8 +7,8 @@ use std::borrow::Cow;
 
 use crate::model::profiles::{m2, wmo};
 use crate::model::{
-    scene, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property,
-    SampledAnimation, ValidateLinks,
+    scene, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property, ValidateLinks,
+    ValueSample,
 };
 
 /// Sockets and authored child model references.
@@ -49,8 +49,9 @@ impl<'a> Attachment<'a> {
         })
     }
 
-    /// Sample mounted content visibility; children without a socket are fully visible.
-    pub fn visibility(&self, sample: &SampledAnimation<'_, '_>) -> f32 {
+    /// Samples mounted content visibility from ordinary, retimed, or evaluated values.
+    /// Children without a socket are fully visible.
+    pub fn visibility(&self, sample: &impl ValueSample) -> f32 {
         self.socket()
             .map_or(1., |point| sample.animated(&point.visibility).clamp(0., 1.))
     }

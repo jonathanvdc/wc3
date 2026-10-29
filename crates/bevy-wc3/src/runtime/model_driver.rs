@@ -345,7 +345,7 @@ fn initialize_attachment_start(
         let Some(rig) = world.get::<ModelRig>(parent) else {
             return false;
         };
-        let Ok(mut selection) = clock.selection() else {
+        let Ok(selection) = clock.selection() else {
             return false;
         };
         if let Some(socket) = attachment.definition.socket() {
@@ -357,11 +357,7 @@ fn initialize_attachment_start(
             {
                 return false;
             }
-            selection.clip_time = Time::seconds(0.).unwrap();
-            selection.shared_time = selection.clip_time;
-            let Ok(initial) = rig.model.animation.sample(selection) else {
-                return false;
-            };
+            let initial = current.at_times(Time::default(), Time::default());
             if attachment.definition.visibility(&initial) <= 0. {
                 return false;
             }

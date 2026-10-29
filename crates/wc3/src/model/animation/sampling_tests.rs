@@ -80,6 +80,9 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
         dynamic_track(node_translation, TimeSource::Animation, 2.),
     )
     .unwrap();
+    let unmapped_clip = host
+        .add_clip(Clip::named("unmapped clip").with_duration(time(2.)))
+        .unwrap();
     let host = AnimationProgram::compile(
         &{
             host.import_values(&slot_values).unwrap();
@@ -128,6 +131,43 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
         sampled.override_value(&extra_scale),
         Some(Vec3::from_array([3.; 3]))
     );
+    let globals = combined
+        .sample(AnimationSample {
+            clip_time: time(1.),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(globals.override_value(&node_translation), None);
+    assert_eq!(globals.override_value(&extra_translation), None);
+    assert_eq!(globals.override_value(&extra_scale), Some(Vec3::splat(3.)));
+    let unmapped = combined
+        .sample(AnimationSample {
+            clip: Some(unmapped_clip),
+            clip_time: time(1.),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(unmapped.override_value(&node_translation), None);
+    assert_eq!(unmapped.override_value(&extra_translation), None);
+    assert_eq!(unmapped.override_value(&extra_scale), Some(Vec3::splat(3.)));
+    let filtered = host
+        .compose(&part, &[(clip, part_clip)], |track| {
+            track.target() != extra_translation.slot()
+        })
+        .unwrap();
+    let filtered = filtered
+        .sample(AnimationSample {
+            clip: Some(clip),
+            clip_time: time(1.),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(
+        filtered.override_value(&node_translation),
+        Some(Vec3::splat(1.))
+    );
+    assert_eq!(filtered.override_value(&extra_translation), None);
+    assert_eq!(filtered.override_value(&extra_scale), Some(Vec3::splat(3.)));
     assert!(host
         .compose(&part, &[(clip, part_clip), (clip, part_clip)], |_| true)
         .is_err());
@@ -246,7 +286,7 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
     let TrackSelection::Indexed(selection) = &sampled.tracks else {
         panic!("owned programs must use indexed selection")
     };
-    assert_eq!(selection.iter().count(), 1);
+    assert_eq!(selection.matching(property.slot()).count(), 1);
     assert_eq!(
         sampled.override_value(&property),
         Some(Vec3::from_array([2.; 3]))
@@ -358,6 +398,176 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
             .override_value(&property),
         Some(Vec3::from_array([2.; 3]))
     );
+}
+
+fn assert_same_track<T: TrackValue>(
+    expected: Option<SampledTrack<'_, '_, T>>,
+    actual: Option<SampledTrack<'_, '_, T>>,
+) {
+    assert_eq!(expected.is_some(), actual.is_some());
+    if let (Some(expected), Some(actual)) = (expected, actual) {
+        assert_eq!(expected.track.target, actual.track.target);
+        assert_eq!(expected.track.clock, actual.track.clock);
+        assert_eq!(
+            expected.track.curve.interpolation(),
+            actual.track.curve.interpolation()
+        );
+        assert_eq!(expected.track.curve.times(), actual.track.curve.times());
+        assert_eq!(expected.time, actual.time);
+        assert_eq!(expected.period, actual.period);
+        assert_eq!(expected.origin, actual.origin);
+        assert_eq!(expected.interval, actual.interval);
+    }
+}
+
+#[test]
+fn compiled_selection_matches_flat_sampling_across_precedence_and_clock_boundaries() {
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let scalar = builder.add_value(-1f32);
+    let absent = builder.add_value(42f32);
+    let shared = builder.add_value(-2f32);
+    let frozen = builder.add_value(-3f32);
+    let rotation = builder.add_value(Quat::IDENTITY);
+    let clock = builder
+        .add_clock(SharedClock::Repeating { period: time(2.) })
+        .unwrap();
+    let frozen_clock = builder.add_clock(SharedClock::Frozen).unwrap();
+    let scalar_track = |curve, clock| {
+        DynamicTrack::Scalar(Track {
+            target: scalar,
+            curve,
+            clock,
+        })
+    };
+    let base = builder.add_animation(Animation {
+        tracks: vec![
+            scalar_track(
+                Curve::linear(
+                    [time(10.), time(11.), time(11.), time(12.)],
+                    [0., 1., 3., 4.],
+                )
+                .unwrap(),
+                TimeSource::Animation,
+            ),
+            DynamicTrack::Scalar(Track {
+                target: shared,
+                curve: Curve::linear([time(0.), time(2.)], [0., 8.]).unwrap(),
+                clock: TimeSource::Shared(clock),
+            }),
+            DynamicTrack::Scalar(Track {
+                target: frozen,
+                curve: Curve::step([time(0.)], [7.]).unwrap(),
+                clock: TimeSource::Shared(frozen_clock),
+            }),
+            DynamicTrack::Rotation(Track {
+                target: rotation,
+                curve: Curve::slerp(
+                    [time(10.), time(12.)],
+                    [Quat::IDENTITY, Quat::from_rotation_z(1.)],
+                )
+                .unwrap(),
+                clock: TimeSource::Animation,
+            }),
+        ],
+        ..Default::default()
+    });
+    let priority = builder.add_animation(Animation {
+        tracks: vec![
+            scalar_track(
+                Curve::step([time(10.5), time(11.5)], [20., 30.]).unwrap(),
+                TimeSource::Animation,
+            ),
+            scalar_track(
+                Curve::step([time(50.)], [99.]).unwrap(),
+                TimeSource::Animation,
+            ),
+            scalar_track(
+                Curve::step(Vec::<Time>::new(), Vec::<f32>::new()).unwrap(),
+                TimeSource::Animation,
+            ),
+        ],
+        ..Default::default()
+    });
+    // Animations reused across global and clip selections retain writer precedence.
+    builder.set_global_animations(vec![base, priority]);
+    let clips = [
+        Clip::named("loop")
+            .with_source_start(time(10.))
+            .with_duration(time(2.)),
+        Clip::named("once")
+            .with_source_start(time(10.))
+            .with_duration(time(2.))
+            .once(),
+        Clip::named("zero duration")
+            .with_source_start(time(11.))
+            .with_duration(time(0.)),
+        Clip::named("no keys")
+            .with_source_start(time(20.))
+            .with_duration(time(2.)),
+    ]
+    .map(|clip| {
+        builder
+            .add_clip(clip.with_animation(priority).with_animation(base))
+            .unwrap()
+    });
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let global_sample = program.sample(AnimationSample::default()).unwrap();
+    let TrackSelection::Indexed(global_selection) = &global_sample.tracks else {
+        unreachable!()
+    };
+    for clip in [None].into_iter().chain(clips.into_iter().map(Some)) {
+        for seconds in [-3., 0., 0.5, 1., 1.5, 2., 3., 10., 11., 50.] {
+            let selection = AnimationSample {
+                clip,
+                clip_time: time(seconds),
+                shared_time: time(seconds),
+            };
+            let flat = model.animation_sample(selection).unwrap();
+            let indexed = program.sample(selection).unwrap();
+            let TrackSelection::Indexed(indexed_selection) = &indexed.tracks else {
+                unreachable!()
+            };
+            assert!(eq(global_selection.global, indexed_selection.global));
+            for property in [scalar, absent, shared, frozen] {
+                assert_eq!(
+                    flat.override_value(&property),
+                    indexed.override_value(&property)
+                );
+                assert_eq!(flat.animated(&property), indexed.animated(&property));
+                assert_same_track(flat.track(&property), indexed.track(&property));
+            }
+            assert_eq!(
+                flat.override_value(&rotation),
+                indexed.override_value(&rotation)
+            );
+            assert_same_track(flat.track(&rotation), indexed.track(&rotation));
+            for occurrence in [
+                None,
+                Some((TimeSource::Animation, time(12.))),
+                Some((TimeSource::Shared(clock), time(2.))),
+            ] {
+                let mut flat = flat.at_times(time(-seconds), time(seconds + 2.));
+                let mut indexed = indexed.at_times(time(-seconds), time(seconds + 2.));
+                if let Some((clock, time)) = occurrence {
+                    flat = flat.at_occurrence(clock, time);
+                    indexed = indexed.at_occurrence(clock, time);
+                }
+                for property in [scalar, absent, shared, frozen] {
+                    assert_eq!(
+                        flat.override_value(&property),
+                        indexed.override_value(&property)
+                    );
+                    assert_same_track(flat.track(&property), indexed.track(&property));
+                }
+                assert_eq!(
+                    flat.override_value(&rotation),
+                    indexed.override_value(&rotation)
+                );
+                assert_same_track(flat.track(&rotation), indexed.track(&rotation));
+            }
+        }
+    }
 }
 #[test]
 fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
@@ -514,7 +724,7 @@ fn compiled_scalar_curve(
     program: &AnimationProgram,
     animation: AnimationId,
 ) -> &Curve<'static, f32> {
-    let DynamicTrack::Scalar(track) = &program.animations[&animation].tracks[0] else {
+    let DynamicTrack::Scalar(track) = &program.tracks[program.animations[&animation].start] else {
         panic!("expected the scalar fixture track")
     };
     &track.curve

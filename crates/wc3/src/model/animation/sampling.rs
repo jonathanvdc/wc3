@@ -9,6 +9,7 @@ use crate::model::{
 use glam::{Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ops::Range;
 
 /// TimeSource values and explicitly selected programmes for one evaluation.
 ///
@@ -46,35 +47,24 @@ enum TrackSelection<'view, 'data> {
     Indexed(IndexedSelection<'view>),
 }
 struct IndexedSelection<'view> {
-    animations: &'view BTreeMap<AnimationId, IndexedTracks>,
-    global: &'view [AnimationId],
-    clip: &'view [AnimationId],
+    tracks: &'view [DynamicTrack<'static>],
+    global: &'view TrackIndex,
+    clip: Option<&'view TrackIndex>,
 }
 impl<'view> IndexedSelection<'view> {
-    fn iter(&self) -> impl DoubleEndedIterator<Item = &'view IndexedTracks> + '_ {
+    fn matching(
+        &self,
+        slot: ValueSlot,
+    ) -> impl DoubleEndedIterator<Item = &'view DynamicTrack<'static>> + '_ {
         self.global
-            .iter()
-            .chain(self.clip)
-            .map(|id| &self.animations[id])
+            .get(&slot)
+            .into_iter()
+            .chain(self.clip.and_then(|index| index.get(&slot)))
+            .flatten()
+            .map(|&index| &self.tracks[index])
     }
 }
-#[derive(Clone, Debug)]
-struct IndexedTracks {
-    tracks: Vec<DynamicTrack<'static>>,
-    index: HashMap<ValueSlot, Vec<usize>>,
-}
-impl IndexedTracks {
-    fn new(tracks: Vec<DynamicTrack<'static>>) -> Self {
-        let mut index: HashMap<ValueSlot, Vec<usize>> = HashMap::new();
-        for (ordinal, dynamic_track) in tracks.iter().enumerate() {
-            index
-                .entry(dynamic_track.target())
-                .or_default()
-                .push(ordinal);
-        }
-        Self { tracks, index }
-    }
-}
+type TrackIndex = HashMap<ValueSlot, Vec<usize>>;
 
 /// A value represented by a typed semantic animation track.
 pub trait TrackValue: SampleValue + PropertyValue {
@@ -180,14 +170,10 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                 .iter()
                 .rev()
                 .find_map(|dynamic_track| self.sample_track(dynamic_track, property, times)),
-            TrackSelection::Indexed(programmes) => programmes.iter().rev().find_map(|programme| {
-                programme
-                    .index
-                    .get(&property.slot())?
-                    .iter()
-                    .rev()
-                    .find_map(|index| self.sample_track(&programme.tracks[*index], property, times))
-            }),
+            TrackSelection::Indexed(selection) => selection
+                .matching(property.slot())
+                .rev()
+                .find_map(|track| self.sample_track(track, property, times)),
         }
     }
     fn sample_track<T: TrackValue>(
@@ -314,14 +300,10 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                 .iter()
                 .rev()
                 .find_map(|dynamic_track| resolve(dynamic_track)),
-            TrackSelection::Indexed(programmes) => programmes.iter().rev().find_map(|programme| {
-                programme
-                    .index
-                    .get(&property.slot())?
-                    .iter()
-                    .rev()
-                    .find_map(|index| resolve(&programme.tracks[*index]))
-            }),
+            TrackSelection::Indexed(selection) => selection
+                .matching(property.slot())
+                .rev()
+                .find_map(|track| resolve(track)),
         }
     }
     /// Evaluates an animated value, preserving its authored default without a track.
@@ -436,6 +418,7 @@ struct ClipProgram {
     looping: bool,
     source_start: Time,
     animations: Vec<AnimationId>,
+    index: TrackIndex,
 }
 /// Owned semantic animation data, independent of geometry and source asset lifetime.
 ///
@@ -445,8 +428,10 @@ struct ClipProgram {
 pub struct AnimationProgram {
     values: PropertyValues,
     clocks: BTreeMap<ClockId, Time>,
-    animations: BTreeMap<AnimationId, IndexedTracks>,
+    tracks: Vec<DynamicTrack<'static>>,
+    animations: BTreeMap<AnimationId, Range<usize>>,
     global: Vec<AnimationId>,
+    global_index: TrackIndex,
     clips: BTreeMap<ClipId, ClipProgram>,
 }
 impl AnimationProgram {
@@ -454,30 +439,36 @@ impl AnimationProgram {
     pub fn values(&self) -> &PropertyValues {
         &self.values
     }
-    /// Copies each reusable animation once and retains playback selections.
+    /// Copies each reusable animation once and indexes candidates by playback selection.
+    /// Clip aliases share curve storage; each property read visits only its selected writers.
     pub fn compile<P: Profile>(model: &Model<'_, P>) -> Self {
-        let own = |tracks: &[DynamicTrack<'_>]| {
-            IndexedTracks::new(
-                tracks
-                    .iter()
-                    .cloned()
-                    .map(DynamicTrack::into_owned)
-                    .collect(),
-            )
-        };
-        Self {
+        let mut tracks = Vec::new();
+        let animations = model
+            .animations()
+            .iter()
+            .map(|(id, animation)| {
+                let start = tracks.len();
+                tracks.extend(
+                    animation
+                        .tracks
+                        .iter()
+                        .cloned()
+                        .map(DynamicTrack::into_owned),
+                );
+                (id, start..tracks.len())
+            })
+            .collect();
+        let mut program = Self {
             values: model.values().clone(),
             clocks: model
                 .clocks()
                 .iter()
                 .map(|(id, clock)| (id, clock.period()))
                 .collect(),
-            animations: model
-                .animations()
-                .iter()
-                .map(|(id, animation)| (id, own(&animation.tracks)))
-                .collect(),
+            tracks,
+            animations,
             global: model.global_animations().to_vec(),
+            global_index: TrackIndex::new(),
             clips: model
                 .clips()
                 .iter()
@@ -489,10 +480,31 @@ impl AnimationProgram {
                             looping: clip.is_looping(),
                             source_start: clip.source_start,
                             animations: clip.animations.clone(),
+                            index: TrackIndex::new(),
                         },
                     )
                 })
                 .collect(),
+        };
+        program.index_selections();
+        program
+    }
+    fn index_selections(&mut self) {
+        let index = |selection: &[AnimationId]| {
+            let mut index = TrackIndex::new();
+            for id in selection {
+                for ordinal in self.animations[id].clone() {
+                    index
+                        .entry(self.tracks[ordinal].target())
+                        .or_default()
+                        .push(ordinal);
+                }
+            }
+            index
+        };
+        self.global_index = index(&self.global);
+        for clip in self.clips.values_mut() {
+            clip.index = index(&clip.animations);
         }
     }
     /// Combines disjoint property owners on the receiver's playback clocks.
@@ -566,20 +578,16 @@ impl AnimationProgram {
             }
             result.clocks.insert(id, period);
         }
-        let owned: HashSet<_> = self
-            .animations
-            .values()
-            .flat_map(|animation| animation.index.keys())
-            .collect();
-        for (&id, animation) in &source.animations {
+        let owned: HashSet<_> = self.tracks.iter().map(DynamicTrack::target).collect();
+        for (&id, range) in &source.animations {
             if result.animations.contains_key(&id) {
                 return Err(Error::at(
                     Location::for_owner(id),
                     AnimationError::AnimationIdentityConflict { animation: id },
                 ));
             }
-            let mut tracks = Vec::new();
-            for dynamic_track in &animation.tracks {
+            let start = result.tracks.len();
+            for dynamic_track in &source.tracks[range.clone()] {
                 if !include(dynamic_track) {
                     continue;
                 }
@@ -591,9 +599,9 @@ impl AnimationProgram {
                         },
                     ));
                 }
-                tracks.push(dynamic_track.clone());
+                result.tracks.push(dynamic_track.clone());
             }
-            result.animations.insert(id, IndexedTracks::new(tracks));
+            result.animations.insert(id, start..result.tracks.len());
         }
         result.global.extend(&source.global);
         for &(destination, source_clip) in clips {
@@ -604,11 +612,12 @@ impl AnimationProgram {
                 .animations
                 .extend(&source.clips[&source_clip].animations);
         }
+        result.index_selections();
         Ok(result)
     }
     /// Selects clocks and programmes using the same precedence as `Model::animation_sample`.
     pub fn sample(&self, sample: AnimationSample) -> Result<SampledAnimation<'_, 'static>, Error> {
-        let mut selected_clip: &[AnimationId] = &[];
+        let mut selected_clip = None;
         let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
             let clip = self.clips.get(&id).ok_or_else(|| {
                 Error::at(
@@ -616,7 +625,7 @@ impl AnimationProgram {
                     AnimationError::UnknownClip { clip: id },
                 )
             })?;
-            selected_clip = &clip.animations;
+            selected_clip = Some(&clip.index);
             resolve_times(sample, clip.duration, clip.looping, clip.source_start)?
         } else {
             (None, sample.clip_time, None)
@@ -629,8 +638,8 @@ impl AnimationProgram {
             source_interval,
             shared_time: sample.shared_time,
             tracks: TrackSelection::Indexed(IndexedSelection {
-                animations: &self.animations,
-                global: &self.global,
+                tracks: &self.tracks,
+                global: &self.global_index,
                 clip: selected_clip,
             }),
         })
