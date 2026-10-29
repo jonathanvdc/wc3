@@ -39,21 +39,6 @@ pub(crate) fn encode_records<T: m2::Write + m2::RecordLayout>(
     e.write_records(records)?;
     Ok(e.finish())
 }
-type ChunkBytes<'data> = ([u8; 4], &'data [u8]);
-pub(crate) fn chunk_bytes(data: &[u8]) -> Result<Vec<ChunkBytes<'_>>, ReadError> {
-    let mut d = Decoder::new(data, 0, ModelFlags::default());
-    let mut chunks = Vec::new();
-    while d.position() < data.len() {
-        let tag = d
-            .bytes(4)?
-            .try_into()
-            .map_err(|_| ReadError::invalid(d.position(), "chunk tag"))?;
-        let size = d.u32()? as usize;
-        let payload = d.bytes(size)?;
-        chunks.push((tag, payload));
-    }
-    Ok(chunks)
-}
 pub(crate) fn write_chunk(e: &mut Encoder, tag: [u8; 4], data: &[u8]) -> Result<(), WriteError> {
     let size =
         u32::try_from(data.len()).map_err(|_| WriteError::invalid("chunk size exceeds u32"))?;

@@ -3,7 +3,8 @@ use super::super as m2;
 use super::super::codec::{ArrayRef, Decoder, Encoder};
 use super::super::records::ModelFlags;
 use super::super::{ReadError, WriteError, ZeroVec};
-use super::{chunk_bytes, encode_records, flat_records, write_chunk, BoneMatrix};
+use super::{encode_records, flat_records, write_chunk, BoneMatrix};
+use crate::model::common::binary::Chunks;
 use crate::model::common::Ownership;
 #[derive(Clone, Debug, Default, PartialEq, Ownership)]
 /// Sparse bone corrections for one character-customization choice.
@@ -23,19 +24,38 @@ impl<'data> BoneFile<'data> {
         if version != 1 {
             return Err(ReadError::invalid(0, "unsupported bone-file version"));
         }
-        let chunks = chunk_bytes(d.bytes(data.len() - 4)?)?;
-        if chunks.len() != 2 || chunks[0].0 != *b"BIDA" || chunks[1].0 != *b"BOMT" {
+        let mut chunks = Chunks::new(d.bytes(data.len() - 4)?, 4).map(|chunk| {
+            chunk.map_err(|error| ReadError::invalid(error.offset, "bone chunk framing"))
+        });
+        let indices_chunk = chunks.next().transpose()?;
+        let matrices_chunk = chunks.next().transpose()?;
+        let extra = chunks.next().transpose()?;
+        let (Some(indices_chunk), Some(matrices_chunk), None) =
+            (indices_chunk, matrices_chunk, extra)
+        else {
+            return Err(ReadError::invalid(4, "bone file requires BIDA then BOMT"));
+        };
+        if indices_chunk.header.tag != *b"BIDA" || matrices_chunk.header.tag != *b"BOMT" {
             return Err(ReadError::invalid(4, "bone file requires BIDA then BOMT"));
         }
-        let bytes = chunks[0].1;
+        let bytes = indices_chunk.data;
         if !bytes.len().is_multiple_of(2) {
-            return Err(ReadError::invalid(4, "bone indices length"));
+            return Err(ReadError::invalid(
+                indices_chunk.offset,
+                "bone indices length",
+            ));
         }
-        let indices = Decoder::new(bytes, 0, ModelFlags::default()).array(ArrayRef {
-            count: (bytes.len() / 2) as u32,
-            offset: 0,
-        })?;
-        let matrices = flat_records(chunks[1].1, 0, ModelFlags::default())?;
+        let indices = Decoder::new(bytes, 0, ModelFlags::default())
+            .with_origin(indices_chunk.offset)
+            .array(ArrayRef {
+                count: (bytes.len() / 2) as u32,
+                offset: 0,
+            })?;
+        let matrices =
+            flat_records(matrices_chunk.data, 0, ModelFlags::default()).map_err(|mut error| {
+                error.offset = matrices_chunk.offset.saturating_add(error.offset);
+                error
+            })?;
         if indices.len() != matrices.len() {
             return Err(ReadError::invalid(
                 4,

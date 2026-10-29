@@ -10,6 +10,7 @@ use std::convert::Infallible;
 use std::fmt::Debug;
 use std::iter::once;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 /// A chunk in a model document, retaining its original position.
 #[derive(Clone, Debug, PartialEq, Ownership)]
@@ -156,8 +157,8 @@ impl<'data, V: ModelLayout> ChunkStream<'data, V> {
             tag == b"SKID" && payload.get(..4).is_some_and(|id| id != [0; 4])
         });
         let core = Core::decode_context(primary.1, primary.2, inherited, deferred)?;
-        let external: Vec<bool> = if core.sequences.is_empty() {
-            inherited.unwrap_or_default().to_vec()
+        let external: Arc<[bool]> = if core.sequences.is_empty() {
+            inherited.unwrap_or_default().into()
         } else {
             core.sequences
                 .iter()
@@ -182,7 +183,7 @@ impl<'data, V: ModelLayout> ChunkStream<'data, V> {
                 chunks.push(ModelChunk::Core(Box::new(core)));
             } else {
                 let mut context =
-                    ChunkContext::<V>::new(flags, Some(core_light_count), external.clone().into());
+                    ChunkContext::<V>::new(flags, Some(core_light_count), external.clone());
                 context.unresolved_sequences = unresolved_sequences;
                 let mut chunk = Chunk::read(tag, payload, &context).map_err(|mut error| {
                     error.offset = error.offset.saturating_add(origin);

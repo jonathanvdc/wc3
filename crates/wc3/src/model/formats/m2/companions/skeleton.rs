@@ -4,9 +4,11 @@ use super::super::chunks::AnimationFileId;
 use super::super::codec::{ArrayRef, Decoder, Encoder};
 use super::super::records::{Attachment, Bone, ModelFlags, Sequence, SkeletonFlags};
 use super::super::{ModelLayout, ReadError, WriteError, ZeroVec};
-use super::{chunk_bytes, encode_records, flat_records, write_chunk};
+use super::{encode_records, flat_records, write_chunk};
+use crate::model::common::binary::Chunks;
 use crate::model::common::Ownership;
 use std::borrow::Cow;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Ownership)]
 /// Shared skeleton arrays and dependency references identified by native chunk tags.
@@ -88,103 +90,129 @@ impl<'data, L: ModelLayout> Skeleton<'data, L> {
         flags: ModelFlags,
         external_sequences: &[bool],
     ) -> Result<Self, ReadError> {
-        let raw = chunk_bytes(data)?;
-        let mut external = external_sequences.to_vec();
-        let mut has_sequence_context = !external_sequences.is_empty();
-        for (tag, data) in &raw {
-            if tag == b"SKS1" {
-                has_sequence_context = true;
-                let mut d = Decoder::new(data, L::VERSION, flags);
-                d.descriptor()?;
-                let a = d.descriptor()?;
-                let sequences: Vec<Sequence<L>> = d.records(a)?;
-                external = sequences
-                    .iter()
-                    .map(|s| s.flags.external_animation())
-                    .collect();
+        // Validate framing and locate the last local context without building an
+        // index. Local sequence flags apply even to chunks preceding SKS1.
+        let mut sequence_chunk = None;
+        for chunk in Chunks::new(data, 0) {
+            let chunk = chunk
+                .map_err(|error| ReadError::invalid(error.offset, "skeleton chunk framing"))?;
+            if chunk.header.tag == *b"SKS1" {
+                sequence_chunk = Some(chunk);
             }
         }
+        let has_sequence_context = sequence_chunk.is_some() || !external_sequences.is_empty();
+        let mut cached_sequences = sequence_chunk
+            .map(|chunk| {
+                let mut d = Decoder::new(chunk.data, L::VERSION, flags).with_origin(chunk.offset);
+                d.descriptor()?;
+                let reference = d.descriptor()?;
+                d.records::<Sequence<L>>(reference)
+            })
+            .transpose()?;
+        let external: Arc<[bool]> = match &cached_sequences {
+            Some(sequences) => sequences
+                .iter()
+                .map(|sequence| sequence.flags.external_animation())
+                .collect(),
+            None => external_sequences.into(),
+        };
         let mut chunks = Vec::new();
-        for (tag, data) in raw {
+        for chunk in Chunks::new(data, 0) {
+            let chunk = chunk
+                .map_err(|error| ReadError::invalid(error.offset, "skeleton chunk framing"))?;
+            let tag = chunk.header.tag;
+            let data = chunk.data;
             let mut d = Decoder::new(data, L::VERSION, flags);
-            d.external_sequences = external.clone().into();
+            d.external_sequences = external.clone();
             d.unresolved_sequences = !has_sequence_context;
-            let chunk = match &tag {
-                b"SKL1" => {
-                    let flags = SkeletonFlags::from_bits_retain(d.u32()?);
-                    let name = d.descriptor()?;
-                    let reserved = d
-                        .bytes(4)?
-                        .try_into()
-                        .map_err(|_| ReadError::invalid(12, "skeleton reserved"))?;
-                    SkeletonChunk::Header {
-                        flags,
-                        name: d.array(name)?,
-                        reserved,
+            let chunk = (|| {
+                Ok(match &tag {
+                    b"SKL1" => {
+                        let flags = SkeletonFlags::from_bits_retain(d.u32()?);
+                        let name = d.descriptor()?;
+                        let reserved = d
+                            .bytes(4)?
+                            .try_into()
+                            .map_err(|_| ReadError::invalid(12, "skeleton reserved"))?;
+                        SkeletonChunk::Header {
+                            flags,
+                            name: d.array(name)?,
+                            reserved,
+                        }
                     }
-                }
-                b"SKA1" => {
-                    let attachments = d.descriptor()?;
-                    let lookup = d.descriptor()?;
-                    SkeletonChunk::Attachments {
-                        attachments: d.records(attachments)?,
-                        lookup: d.array(lookup)?,
+                    b"SKA1" => {
+                        let attachments = d.descriptor()?;
+                        let lookup = d.descriptor()?;
+                        SkeletonChunk::Attachments {
+                            attachments: d.records(attachments)?,
+                            lookup: d.array(lookup)?,
+                        }
                     }
-                }
-                b"SKB1" => {
-                    let bones = d.descriptor()?;
-                    let lookup = d.descriptor()?;
-                    SkeletonChunk::Bones {
-                        bones: d.records(bones)?,
-                        lookup: d.array(lookup)?,
+                    b"SKB1" => {
+                        let bones = d.descriptor()?;
+                        let lookup = d.descriptor()?;
+                        SkeletonChunk::Bones {
+                            bones: d.records(bones)?,
+                            lookup: d.array(lookup)?,
+                        }
                     }
-                }
-                b"SKS1" => {
-                    let global = d.descriptor()?;
-                    let sequences = d.descriptor()?;
-                    let lookup = d.descriptor()?;
-                    let reserved = d
-                        .bytes(8)?
-                        .try_into()
-                        .map_err(|_| ReadError::invalid(24, "skeleton reserved"))?;
-                    SkeletonChunk::Sequences {
-                        global_loops: d.array(global)?,
-                        sequences: d.records(sequences)?,
-                        lookup: d.array(lookup)?,
-                        reserved,
+                    b"SKS1" => {
+                        let global = d.descriptor()?;
+                        let sequences = d.descriptor()?;
+                        let lookup = d.descriptor()?;
+                        let reserved = d
+                            .bytes(8)?
+                            .try_into()
+                            .map_err(|_| ReadError::invalid(24, "skeleton reserved"))?;
+                        SkeletonChunk::Sequences {
+                            global_loops: d.array(global)?,
+                            sequences: if sequence_chunk
+                                .is_some_and(|last| last.offset == chunk.offset)
+                            {
+                                cached_sequences.take().expect("last SKS1 was decoded")
+                            } else {
+                                d.records(sequences)?
+                            },
+                            lookup: d.array(lookup)?,
+                            reserved,
+                        }
                     }
-                }
-                b"SKPD" => {
-                    let reserved0 = d
-                        .bytes(8)?
-                        .try_into()
-                        .map_err(|_| ReadError::invalid(0, "skeleton parent reserved"))?;
-                    let file_id = d.u32()?;
-                    let reserved1 = d
-                        .bytes(4)?
-                        .try_into()
-                        .map_err(|_| ReadError::invalid(12, "skeleton parent reserved"))?;
-                    SkeletonChunk::Parent {
-                        reserved0,
-                        file_id,
-                        reserved1,
+                    b"SKPD" => {
+                        let reserved0 = d
+                            .bytes(8)?
+                            .try_into()
+                            .map_err(|_| ReadError::invalid(0, "skeleton parent reserved"))?;
+                        let file_id = d.u32()?;
+                        let reserved1 = d
+                            .bytes(4)?
+                            .try_into()
+                            .map_err(|_| ReadError::invalid(12, "skeleton parent reserved"))?;
+                        SkeletonChunk::Parent {
+                            reserved0,
+                            file_id,
+                            reserved1,
+                        }
                     }
-                }
-                b"AFID" => SkeletonChunk::AnimationIds(flat_records(data, L::VERSION, flags)?),
-                b"BFID" => {
-                    if !data.len().is_multiple_of(4) {
-                        return Err(ReadError::invalid(0, "bone IDs length"));
+                    b"AFID" => SkeletonChunk::AnimationIds(flat_records(data, L::VERSION, flags)?),
+                    b"BFID" => {
+                        if !data.len().is_multiple_of(4) {
+                            return Err(ReadError::invalid(0, "bone IDs length"));
+                        }
+                        SkeletonChunk::BoneIds(d.array(ArrayRef {
+                            count: (data.len() / 4) as u32,
+                            offset: 0,
+                        })?)
                     }
-                    SkeletonChunk::BoneIds(d.array(ArrayRef {
-                        count: (data.len() / 4) as u32,
-                        offset: 0,
-                    })?)
-                }
-                _ => SkeletonChunk::Unknown {
-                    tag,
-                    data: Cow::Borrowed(data),
-                },
-            };
+                    _ => SkeletonChunk::Unknown {
+                        tag,
+                        data: Cow::Borrowed(data),
+                    },
+                })
+            })()
+            .map_err(|mut error: ReadError| {
+                error.offset = chunk.offset.saturating_add(error.offset);
+                error
+            })?;
             chunks.push(chunk);
         }
         Ok(Self { flags, chunks })
