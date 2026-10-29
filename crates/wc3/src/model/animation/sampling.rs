@@ -52,10 +52,10 @@ struct IndexedSelection<'view> {
     clip: Option<&'view TrackIndex>,
 }
 impl<'view> IndexedSelection<'view> {
-    fn matching(
+    fn matching<'data: 'view>(
         &self,
         slot: ValueSlot,
-    ) -> impl DoubleEndedIterator<Item = &'view DynamicTrack<'static>> + '_ {
+    ) -> impl DoubleEndedIterator<Item = &'view DynamicTrack<'data>> + '_ {
         self.global
             .get(&slot)
             .into_iter()
@@ -300,10 +300,9 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                 .iter()
                 .rev()
                 .find_map(|dynamic_track| resolve(dynamic_track)),
-            TrackSelection::Indexed(selection) => selection
-                .matching(property.slot())
-                .rev()
-                .find_map(|track| resolve(track)),
+            TrackSelection::Indexed(selection) => {
+                selection.matching(property.slot()).rev().find_map(resolve)
+            }
         }
     }
     /// Evaluates an animated value, preserving its authored default without a track.
