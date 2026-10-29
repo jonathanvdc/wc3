@@ -225,3 +225,450 @@ fn equal_native_bitmap_declarations_keep_independent_renderer_requests() {
         Some(&handles[2])
     );
 }
+
+fn scoped_texture_model(material_count: usize) -> (Model<'static>, Vec<MaterialId>, [Texture; 4]) {
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
+
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let first = builder.add_file_texture("shared.png").unwrap();
+    let mut linear = first;
+    linear.color_space = ColorSpace::Linear;
+    linear.sampler.u = AddressMode::Clamp;
+    let mut srgb = first;
+    srgb.color_space = ColorSpace::Srgb;
+    srgb.sampler.u = AddressMode::Mirror;
+    let second = builder.add_file_texture("second.png").unwrap();
+    let textures = [first, linear, srgb, second];
+    let mut materials = Vec::new();
+    for index in 0..material_count {
+        let steps = textures
+            .iter()
+            .map(|&texture| {
+                let mut step: MdlxStep = builder.construct();
+                step.shader.inputs_mut().binding.image = builder.add_value(Some(texture));
+                step
+            })
+            .collect();
+        materials.push(
+            builder
+                .add_material(Material {
+                    name: format!("surface {index}").into(),
+                    surface: MaterialSurface::from(MdlxMaterial {
+                        declaration: Default::default(),
+                        steps,
+                    }),
+                })
+                .unwrap(),
+        );
+    }
+    (builder.finish().unwrap(), materials, textures)
+}
+
+#[test]
+fn scoped_lookup_and_color_maps_match_flat_request_interpretations() {
+    let (model, materials, textures) = scoped_texture_model(3);
+    let mut images = Assets::<Image>::default();
+    let mut flat = HashMap::new();
+    let mut observed = Vec::new();
+    let resolved = TextureImages::resolve(&model, |request| {
+        let image = images.add(Image::default());
+        observed.push(request.key());
+        flat.insert(request.key(), image.clone());
+        Some(image)
+    });
+    assert_eq!(
+        observed,
+        texture_requests(&model)
+            .iter()
+            .map(TextureRequest::key)
+            .collect::<Vec<_>>()
+    );
+
+    for &material in &materials {
+        for step in 0..4 {
+            let scoped = resolved.material(material, step);
+            let input = Some(TextureInput::Material {
+                material,
+                step,
+                slot: 0,
+            });
+            let expected = flat
+                .iter()
+                .filter(|(key, _)| key.input == input)
+                .map(|(key, image)| {
+                    (
+                        Texture {
+                            resource: key.resource,
+                            color_space: key.declared,
+                            sampler: key.sampler,
+                        },
+                        image.clone(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            assert_eq!(*scoped.color_images(), expected);
+            for texture in textures {
+                for role in [TextureRole::Color, TextureRole::Normal, TextureRole::Data] {
+                    let key = TextureRequestKey {
+                        input,
+                        resource: texture.resource,
+                        declared: texture.color_space,
+                        color_space: TextureColorSpace::selected(texture.color_space, role),
+                        sampler: texture.sampler,
+                    };
+                    assert_eq!(scoped.for_role(texture, role), flat.get(&key));
+                    assert!(scoped.for_slot(1, texture, role).is_none());
+                }
+            }
+        }
+    }
+    let expected = flat
+        .iter()
+        .filter(|(key, _)| key.input.is_none())
+        .map(|(key, image)| {
+            (
+                Texture {
+                    resource: key.resource,
+                    color_space: key.declared,
+                    sampler: key.sampler,
+                },
+                image.clone(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    assert_eq!(*resolved.color_images(), expected);
+}
+
+#[test]
+fn image_remapping_updates_scoped_animation_maps_without_changing_clones() {
+    let (model, materials, textures) = scoped_texture_model(2);
+    let mut images = Assets::<Image>::default();
+    let old = images.add(Image::default());
+    let replacement = images.add(Image::default());
+    let original = TextureImages::resolve(&model, |_| Some(old.clone()));
+    let mut mapped = original.material(materials[0], 0);
+    // Construct the animation map before mapping to catch stale derived storage.
+    let previous_colors = mapped.color_images();
+    let mut calls = 0;
+    mapped.map_images(&mut |image| {
+        assert_eq!(image, &old);
+        calls += 1;
+        Some(replacement.clone())
+    });
+    assert_eq!(calls, texture_requests(&model).len());
+    assert_eq!(previous_colors.get(&textures[0]), Some(&old));
+    for &material in &materials {
+        for (step, texture) in textures.into_iter().enumerate() {
+            let remapped = mapped.material(material, step as u32);
+            assert_eq!(
+                remapped.for_role(texture, TextureRole::Color),
+                Some(&replacement)
+            );
+            assert_eq!(remapped.color_images().get(&texture), Some(&replacement));
+            assert_eq!(
+                original
+                    .material(material, step as u32)
+                    .for_role(texture, TextureRole::Color),
+                Some(&old)
+            );
+        }
+    }
+    mapped.map_images(&mut |_| None);
+    assert!(mapped.color_images().is_empty());
+    assert!(mapped.for_role(textures[0], TextureRole::Color).is_none());
+    assert_eq!(
+        original
+            .material(materials[0], 0)
+            .for_role(textures[0], TextureRole::Color),
+        Some(&old)
+    );
+}
+
+#[test]
+fn selected_images_filter_resources_independently_of_sampler_and_declaration() {
+    let (model, materials, textures) = scoped_texture_model(2);
+    let mut selected = textures[0];
+    selected.sampler.v = AddressMode::Clamp;
+    selected.color_space = ColorSpace::Srgb;
+    let selected = HashSet::from([selected]);
+    let mut images = Assets::<Image>::default();
+    let image = images.add(Image::default());
+    let mut observed = Vec::new();
+    let resolved = TextureImages::resolve_selected(&model, Some(&selected), |request| {
+        observed.push(request.key());
+        Some(image.clone())
+    });
+    let expected = texture_requests(&model)
+        .into_iter()
+        .filter(|request| request.texture.resource == textures[0].resource)
+        .map(|request| request.key())
+        .collect::<Vec<_>>();
+    assert_eq!(observed, expected);
+    for &material in &materials {
+        for (step, texture) in textures.into_iter().enumerate() {
+            assert_eq!(
+                resolved
+                    .material(material, step as u32)
+                    .for_role(texture, TextureRole::Color),
+                (step < 3).then_some(&image)
+            );
+        }
+    }
+    let empty = TextureImages::resolve_selected(&model, Some(&HashSet::new()), |_| {
+        panic!("empty selection must not resolve requests")
+    });
+    assert!(empty.color_images().is_empty());
+}
+
+#[test]
+#[ignore = "manual CPU comparison of scoped lookup and the previous full-table scan"]
+fn scoped_color_lookup_scaling() {
+    use std::hint::black_box;
+    use std::time::Instant;
+
+    for count in [32, 128, 512] {
+        let (model, materials, _) = scoped_texture_model(count);
+        let mut images = Assets::<Image>::default();
+        let image = images.add(Image::default());
+        let resolved = TextureImages::resolve(&model, |_| Some(image.clone()));
+        let flat = texture_requests(&model)
+            .into_iter()
+            .map(|request| (request.key(), image.clone()))
+            .collect::<HashMap<_, _>>();
+        let start = Instant::now();
+        for _ in 0..10 {
+            for &material in &materials {
+                for step in 0..4 {
+                    black_box(resolved.material(material, step).color_images());
+                }
+            }
+        }
+        let scoped = start.elapsed();
+        let start = Instant::now();
+        for _ in 0..10 {
+            for &material in &materials {
+                for step in 0..4 {
+                    let input = Some(TextureInput::Material {
+                        material,
+                        step,
+                        slot: 0,
+                    });
+                    black_box(
+                        flat.iter()
+                            .filter(|(key, _)| key.input == input)
+                            .filter_map(|(key, image)| {
+                                (key.color_space
+                                    == TextureColorSpace::selected(
+                                        key.declared,
+                                        TextureRole::Color,
+                                    ))
+                                .then_some((
+                                    Texture {
+                                        resource: key.resource,
+                                        color_space: key.declared,
+                                        sampler: key.sampler,
+                                    },
+                                    image.clone(),
+                                ))
+                            })
+                            .collect::<HashMap<_, _>>(),
+                    );
+                }
+            }
+        }
+        eprintln!(
+            "{} material steps: scoped {:?}, flat scan {:?} (10 repetitions)",
+            count * 4,
+            scoped,
+            start.elapsed()
+        );
+    }
+}
+
+#[test]
+fn animated_declarations_and_data_roles_keep_distinct_interpretations_in_one_scope() {
+    use wc3::model::materials::mdlx::{
+        MaterialStep as MdlxStep, ReforgedInputs, Shader, TextureSlot,
+    };
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
+    use wc3::model::{Curve, DynamicTrack, Time, TimeSource, Track};
+
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let unspecified = builder.add_file_texture("shared.png").unwrap();
+    let srgb = Texture {
+        color_space: ColorSpace::Srgb,
+        ..unspecified
+    };
+    let linear = Texture {
+        color_space: ColorSpace::Linear,
+        ..unspecified
+    };
+    let mut step: MdlxStep = builder.construct();
+    let mut hd: ReforgedInputs = builder.construct();
+    hd.inputs.binding.image = builder.add_value(Some(unspecified));
+    let target = hd.inputs.binding.image;
+    hd.textures = [1, 2]
+        .map(|slot| TextureSlot {
+            slot,
+            binding: TextureBinding {
+                image: builder.add_value(Some(unspecified)),
+                ..builder.construct()
+            },
+        })
+        .into();
+    step.shader = Shader::ReforgedDefault(hd);
+    let material = builder
+        .add_material(Material {
+            name: "animated HD".into(),
+            surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
+                steps: vec![step],
+            }),
+        })
+        .unwrap();
+    builder
+        .add_global_track(DynamicTrack::OptionalTexture(Track {
+            target,
+            clock: TimeSource::Animation,
+            curve: Curve::step(
+                [
+                    Time::default(),
+                    Time::seconds(1.).unwrap(),
+                    Time::seconds(2.).unwrap(),
+                ],
+                [Some(unspecified), Some(srgb), Some(linear)],
+            )
+            .unwrap(),
+        }))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let mut images = Assets::<Image>::default();
+    let mut flat = HashMap::new();
+    let resolved = TextureImages::resolve(&model, |request| {
+        let image = images.add(Image::default());
+        flat.insert(request.key(), image.clone());
+        Some(image)
+    });
+    let scoped = resolved.material(material, 0);
+    let colors = scoped.color_images();
+    assert_eq!(colors.len(), 3);
+    for texture in [unspecified, srgb, linear] {
+        assert_eq!(
+            colors.get(&texture),
+            scoped.for_role(texture, TextureRole::Color)
+        );
+    }
+    assert_ne!(
+        resolved.for_role(unspecified, TextureRole::Color),
+        resolved.for_role(unspecified, TextureRole::Data)
+    );
+    assert!(resolved.slot(1).color_images().contains_key(&srgb));
+    assert!(scoped.slot(1).color_images().is_empty());
+    for request in texture_requests(&model) {
+        let scope = match request.input {
+            None => resolved.clone(),
+            Some(TextureInput::Material {
+                material,
+                step,
+                slot,
+            }) => resolved.material(material, step).slot(slot),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            scope.get_with_sampler(
+                request.texture,
+                request.texture.color_space,
+                request.role,
+                request.sampler
+            ),
+            flat.get(&request.key())
+        );
+    }
+}
+
+#[test]
+fn repeated_animated_textures_resolve_once_per_input_in_source_order() {
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
+    use wc3::model::{Curve, DynamicTrack, Time, TimeSource, Track};
+
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let texture = builder.add_file_texture("repeated.png").unwrap();
+    let mut step: MdlxStep = builder.construct();
+    step.shader.inputs_mut().binding.image = builder.add_value(Some(texture));
+    let target = step.shader.inputs().binding.image;
+    let mut materials = Vec::new();
+    for _ in 0..2 {
+        materials.push(
+            builder
+                .add_material(Material {
+                    name: "repeated".into(),
+                    surface: MaterialSurface::from(MdlxMaterial {
+                        declaration: Default::default(),
+                        steps: vec![step.clone(), step.clone()],
+                    }),
+                })
+                .unwrap(),
+        );
+    }
+    builder
+        .add_global_track(DynamicTrack::OptionalTexture(Track {
+            target,
+            clock: TimeSource::Animation,
+            curve: Curve::step(
+                [
+                    Time::default(),
+                    Time::seconds(1.).unwrap(),
+                    Time::seconds(2.).unwrap(),
+                ],
+                [Some(texture); 3],
+            )
+            .unwrap(),
+        }))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let mut images = Assets::<Image>::default();
+    let mut inputs = Vec::new();
+    let resolved =
+        TextureImages::resolve_selected(&model, Some(&HashSet::from([texture])), |request| {
+            assert_eq!(request.texture, texture);
+            inputs.push(request.input);
+            Some(images.add(Image::default()))
+        });
+    let mut expected = vec![None];
+    for &material in &materials {
+        for step in 0..2 {
+            expected.push(Some(TextureInput::Material {
+                material,
+                step,
+                slot: 0,
+            }));
+        }
+    }
+    assert_eq!(
+        inputs, expected,
+        "repeated animation keys must not duplicate resolver work or reorder inputs"
+    );
+    let handles = materials
+        .iter()
+        .flat_map(|&material| (0..2).map(move |step| (material, step)))
+        .map(|(material, step)| {
+            resolved
+                .material(material, step)
+                .for_role(texture, TextureRole::Color)
+                .unwrap()
+                .id()
+        })
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        handles.len(),
+        4,
+        "the same resource in distinct inputs may resolve independently"
+    );
+    assert_eq!(
+        images.len(),
+        5,
+        "one unscoped resolution and four scoped resolutions"
+    );
+}

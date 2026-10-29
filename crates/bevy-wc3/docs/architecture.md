@@ -29,6 +29,14 @@ independent. Standalone `CompiledModel::prepare` retains its
 local preparation behavior; manual clients can reuse a `PreparedGeometryCache`
 with `CompiledModel::prepare_with_cache` across calls.
 
+Resolved image interpretations are indexed by material step or effect input.
+Building an animated color-selection map visits only that input's resolved images,
+rather than rescanning the model's entire request table for every material step.
+Authored color declarations, effective transfer functions, samplers and slots
+remain distinct. Compilation filters selected images through a resource-ID set;
+resolution still visits accepted requests in their original order. Remapping
+images creates independent lookup storage for the remapped model.
+
 Animated materials remain private to an instance and only change their Bevy assets
 when sampled values change. On capable devices, `ModelMaterial` uses Bevy's
 bindless material allocator for combined extension data and image bindings.

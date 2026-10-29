@@ -342,3 +342,21 @@ fixed scene/renderer cost. Use animated versus frozen instances to distinguish
 changing-pose work from repeated render preparation and GPU drawing. The
 benchmark reports measurements rather than asserting a production FPS target or
 native rendering fidelity; use `capture` for matched image checks.
+
+## Measure scoped texture lookup
+
+A CPU-only comparison isolates animated color-map construction across 128, 512,
+and 2,048 material steps. Each step has one resolved image; the comparison builds
+all maps ten times through the current scope index and the previous full-table
+scan. Run it explicitly:
+
+```sh
+cargo test -p bevy-wc3 --lib textures::tests::scoped_color_lookup_scaling \
+  -- --ignored --exact --nocapture
+```
+
+The scope index visits each input's images instead of scanning the entire model
+for every step. It allocates a map per populated input, so this timing check does
+not establish a memory reduction. Compare the same build profile and machine;
+the test reports timings without a speed threshold. It excludes model loading,
+texture decoding, GPU preparation and rendering, and does not measure frame rate.

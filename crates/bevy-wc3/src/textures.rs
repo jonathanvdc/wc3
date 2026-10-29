@@ -297,10 +297,12 @@ pub fn texture_requests<'view, 'data>(
     requests
 }
 
-/// Shared resolved images; source IDs, transfer functions, and samplers stay distinct.
+type ImageVariants = HashMap<(Texture, TextureColorSpace), Handle<Image>>;
+
+/// Shared resolved images indexed by input; interpretations remain distinct within each scope.
 #[derive(Clone, Default)]
 pub(crate) struct TextureImages {
-    variants: Arc<HashMap<TextureRequestKey, Handle<Image>>>,
+    variants: Arc<HashMap<Option<TextureInput>, ImageVariants>>,
     input: Option<TextureInput>,
 }
 impl TextureImages {
@@ -315,20 +317,33 @@ impl TextureImages {
         selected: Option<&HashSet<Texture>>,
         mut resolver: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
     ) -> Self {
-        let variants = texture_requests(model)
-            .into_iter()
-            .filter(|request| {
-                selected.is_none_or(|selected| {
-                    selected
-                        .iter()
-                        .any(|image| image.resource == request.texture.resource)
-                })
-            })
-            .filter_map(|request| {
-                let key = request.key();
-                resolver(request).map(|image| (key, image))
-            })
-            .collect();
+        let selected = selected.map(|textures| {
+            textures
+                .iter()
+                .map(|texture| texture.resource)
+                .collect::<HashSet<_>>()
+        });
+        let mut variants: HashMap<_, ImageVariants> = HashMap::new();
+        for request in texture_requests(model) {
+            if selected
+                .as_ref()
+                .is_some_and(|resources| !resources.contains(&request.texture.resource))
+            {
+                continue;
+            }
+            let input = request.input;
+            let texture = Texture {
+                sampler: request.sampler,
+                ..request.texture
+            };
+            let color_space = request.color_space;
+            if let Some(image) = resolver(request) {
+                variants
+                    .entry(input)
+                    .or_default()
+                    .insert((texture, color_space), image);
+            }
+        }
         Self {
             variants: Arc::new(variants),
             input: None,
@@ -365,19 +380,15 @@ impl TextureImages {
     pub(crate) fn color_images(&self) -> Arc<HashMap<Texture, Handle<Image>>> {
         Arc::new(
             self.variants
-                .iter()
-                .filter(|(key, _)| key.input == self.input)
-                .filter_map(|(key, image)| {
+                .get(&self.input)
+                .into_iter()
+                .flat_map(|variants| variants.iter())
+                .filter_map(|((texture, color_space), image)| {
                     // Animation selects authored Texture values. Retain both unspecified
                     // and explicit color declarations when they select this interpretation.
-                    let texture = Texture {
-                        resource: key.resource,
-                        color_space: key.declared,
-                        sampler: key.sampler,
-                    };
-                    (key.color_space
-                        == TextureColorSpace::selected(key.declared, TextureRole::Color))
-                    .then_some((texture, image.clone()))
+                    (*color_space
+                        == TextureColorSpace::selected(texture.color_space, TextureRole::Color))
+                    .then_some((*texture, image.clone()))
                 })
                 .collect(),
         )
@@ -397,14 +408,11 @@ impl TextureImages {
         role: TextureRole,
         sampler: Sampler,
     ) -> Option<&Handle<Image>> {
-        let key = TextureRequestKey {
-            input: self.input,
-            resource: texture.resource,
-            declared: texture.color_space,
-            color_space: TextureColorSpace::selected(declared, role),
-            sampler,
-        };
-        self.lookup(key)
+        self.lookup(
+            self.input,
+            Texture { sampler, ..texture },
+            TextureColorSpace::selected(declared, role),
+        )
     }
     pub(crate) fn map_images(
         &mut self,
@@ -413,12 +421,23 @@ impl TextureImages {
         self.variants = Arc::new(
             self.variants
                 .iter()
-                .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
+                .map(|(input, variants)| {
+                    let variants = variants
+                        .iter()
+                        .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
+                        .collect();
+                    (*input, variants)
+                })
                 .collect(),
         );
     }
-    fn lookup(&self, key: TextureRequestKey) -> Option<&Handle<Image>> {
-        self.variants.get(&key)
+    fn lookup(
+        &self,
+        input: Option<TextureInput>,
+        texture: Texture,
+        color_space: TextureColorSpace,
+    ) -> Option<&Handle<Image>> {
+        self.variants.get(&input)?.get(&(texture, color_space))
     }
 
     pub(crate) fn for_role(&self, texture: Texture, role: TextureRole) -> Option<&Handle<Image>> {
@@ -430,13 +449,11 @@ impl TextureImages {
         texture: Texture,
         role: TextureRole,
     ) -> Option<&Handle<Image>> {
-        self.lookup(TextureRequestKey {
-            input: self.input.map(|input| input.with_slot(slot)),
-            resource: texture.resource,
-            declared: texture.color_space,
-            color_space: TextureColorSpace::selected(texture.color_space, role),
-            sampler: texture.sampler,
-        })
+        self.lookup(
+            self.input.map(|input| input.with_slot(slot)),
+            texture,
+            TextureColorSpace::selected(texture.color_space, role),
+        )
     }
     #[cfg(test)]
     pub(crate) fn from_colors(model: &Model<'_>, images: HashMap<Texture, Handle<Image>>) -> Self {
