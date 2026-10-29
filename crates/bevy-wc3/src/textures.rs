@@ -298,11 +298,25 @@ pub fn texture_requests<'view, 'data>(
 }
 
 type ImageVariants = HashMap<(Texture, TextureColorSpace), Handle<Image>>;
+type ImageScopes = HashMap<Option<TextureInput>, ImageVariants>;
+
+/// Maps each shared source table once during one model-image substitution.
+/// Use the same substitution for all views, then discard this operation's cache.
+/// Retaining source owners prevents pointer identities from being reused.
+#[derive(Default)]
+pub(crate) struct TextureImageRemapper {
+    tables: HashMap<*const ImageScopes, RemappedImages>,
+}
+
+struct RemappedImages {
+    _source: Arc<ImageScopes>,
+    mapped: Arc<ImageScopes>,
+}
 
 /// Shared resolved images indexed by input; interpretations remain distinct within each scope.
 #[derive(Clone, Default)]
 pub(crate) struct TextureImages {
-    variants: Arc<HashMap<Option<TextureInput>, ImageVariants>>,
+    variants: Arc<ImageScopes>,
     input: Option<TextureInput>,
 }
 impl TextureImages {
@@ -349,6 +363,10 @@ impl TextureImages {
             input: None,
         }
     }
+    #[cfg(test)]
+    pub(crate) fn shares_storage(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.variants, &other.variants)
+    }
     pub(crate) fn material(&self, material: MaterialId, step: u32) -> Self {
         Self {
             variants: self.variants.clone(),
@@ -377,6 +395,7 @@ impl TextureImages {
             input: self.input.map(|input| input.with_slot(slot)),
         }
     }
+    #[cfg(test)]
     pub(crate) fn color_images(&self) -> Arc<HashMap<Texture, Handle<Image>>> {
         Arc::new(
             self.variants
@@ -416,20 +435,30 @@ impl TextureImages {
     }
     pub(crate) fn map_images(
         &mut self,
+        remapper: &mut TextureImageRemapper,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
-        self.variants = Arc::new(
-            self.variants
-                .iter()
-                .map(|(input, variants)| {
-                    let variants = variants
-                        .iter()
-                        .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
-                        .collect();
-                    (*input, variants)
-                })
-                .collect(),
-        );
+        let remapped = remapper
+            .tables
+            .entry(Arc::as_ptr(&self.variants))
+            .or_insert_with(|| {
+                let mapped = self
+                    .variants
+                    .iter()
+                    .map(|(input, variants)| {
+                        let variants = variants
+                            .iter()
+                            .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
+                            .collect();
+                        (*input, variants)
+                    })
+                    .collect();
+                RemappedImages {
+                    _source: self.variants.clone(),
+                    mapped: Arc::new(mapped),
+                }
+            });
+        self.variants = remapped.mapped.clone();
     }
     fn lookup(
         &self,

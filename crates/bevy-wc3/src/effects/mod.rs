@@ -1,5 +1,6 @@
 //! Semantic effect compilation, shared simulation clocks, and composed transports.
 use crate::diagnostics::RenderIssue;
+use crate::textures::TextureImageRemapper;
 mod age_appearance;
 mod uploads;
 pub use uploads::{effect_upload_stats, EffectUploadStats, EffectUploadTraffic};
@@ -352,11 +353,12 @@ mod ribbon_definition;
 impl RuntimeParticles {
     pub(crate) fn map_images(
         &mut self,
+        remapper: &mut TextureImageRemapper,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
         self.m2.map_images(map);
         self.atlas.map_images(map);
-        self.ribbons.map_images(map);
+        self.ribbons.map_images(remapper, map);
         self.programmes.map_images(map);
     }
 }

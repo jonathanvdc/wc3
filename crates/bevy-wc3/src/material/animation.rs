@@ -332,7 +332,8 @@ impl SurfaceAnimation {
         }
         if let Some(texture) = &self.texture {
             let selected = sample.animated(texture);
-            let next = selected.and_then(|id| self.images.get(&id));
+            let next =
+                selected.and_then(|id| self.images.as_ref()?.for_role(id, TextureRole::Color));
             if material.base_color_texture.as_ref() != next {
                 material.base_color_texture = next.cloned();
                 changed = true;

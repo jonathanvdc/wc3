@@ -12,7 +12,9 @@ use crate::error::ModelError;
 use bevy::material::OpaqueRendererMethod;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
-use std::{array::from_fn, collections::HashMap, fmt::Debug, sync::Arc};
+#[cfg(test)]
+use std::sync::Arc;
+use std::{array::from_fn, collections::HashMap, fmt::Debug};
 
 use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
@@ -33,31 +35,30 @@ pub(crate) fn compile_material_with_images(
 pub(crate) fn compile_materials_with_images(
     model: &Model<'_, Universal>,
     ids: impl IntoIterator<Item = MaterialId>,
-    images: Arc<TextureImages>,
+    images: &TextureImages,
     targets: &AnimationTargets,
 ) -> Result<HashMap<MaterialId, Vec<SurfacePass>>, ModelError> {
     ids.into_iter()
-        .map(|id| compile_material(model, id, &images, targets).map(|passes| (id, passes)))
+        .map(|id| compile_material(model, id, images, targets).map(|passes| (id, passes)))
         .collect()
 }
 
 fn compile_material(
     model: &Model<'_, Universal>,
     id: MaterialId,
-    images: &Arc<TextureImages>,
+    images: &TextureImages,
     targets: &AnimationTargets,
 ) -> Result<Vec<SurfacePass>, ModelError> {
     let material = model
         .material(id)
         .ok_or_else(|| ModelError::new(format!("missing semantic material {id:?}")))?;
     let stack = &material.surface;
-    let mut passes = Vec::new();
+    let mut passes = Vec::with_capacity(stack.steps.len());
     for (step_index, step) in stack.steps.iter().enumerate() {
-        let scoped = Arc::new(images.material(id, step_index as u32));
+        let scoped = images.material(id, step_index as u32);
         let images = &scoped;
-        let resolved_images = images.as_ref();
-        let mut compiled = match step {
-            MaterialStep::Mdlx(layer) => vec![compile_mdlx(
+        let mut pass = match step {
+            MaterialStep::Mdlx(layer) => compile_mdlx(
                 model,
                 layer,
                 stack
@@ -65,17 +66,13 @@ fn compile_material(
                     .as_ref()
                     .unwrap_or(&mdlx::MaterialDeclaration::default()),
                 images,
-            )?],
-            MaterialStep::M2(surface) => {
-                vec![compile_m2(model, surface, resolved_images)?]
-            }
-            MaterialStep::Wmo(surface) => vec![compile_wmo(model, surface, resolved_images)?],
+            )?,
+            MaterialStep::M2(surface) => compile_m2(model, surface, images)?,
+            MaterialStep::Wmo(surface) => compile_wmo(model, surface, images)?,
         };
 
-        for pass in &mut compiled {
-            pass.animation.images = images.color_images();
-        }
-        passes.extend(compiled);
+        pass.animation.images = pass.animation.texture.map(|_| scoped);
+        passes.push(pass);
     }
     for pass in &mut passes {
         pass.animation.prune_static_bindings(targets);
@@ -197,7 +194,7 @@ fn compile_mdlx(
     model: &Model<'_, Universal>,
     surface: &mdlx::MaterialStep,
     declaration: &mdlx::MaterialDeclaration<'_>,
-    images: &Arc<TextureImages>,
+    images: &TextureImages,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
     let state = &surface.state;

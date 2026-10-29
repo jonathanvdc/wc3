@@ -14,6 +14,7 @@ mod wmo;
 #[cfg(test)]
 use self::wmo::compile_wmo;
 use crate::diagnostics::RenderIssue;
+use crate::textures::TextureImageRemapper;
 use crate::ModelError;
 use animation::layered_uv;
 pub(super) use animation::mesh_alpha_mode;
@@ -36,7 +37,9 @@ use compile::{blend, depth};
 use native_fixtures::wmo as wmo_shader;
 use opacity::M2Opacity;
 pub(crate) use ribbon_material::effect_state;
+#[cfg(test)]
 use std::collections::HashMap;
+#[cfg(test)]
 use std::sync::Arc;
 use wc3::model::materials::{m2::GuildPalette, mdlx};
 use wc3::model::{Property, Texture, TextureTransform};
@@ -421,7 +424,7 @@ pub(crate) struct SurfaceAnimation {
     emissive_gain: Option<Property<f32>>,
     emission: Option<Property<Vec4>>,
     emission_scale: f32,
-    images: Arc<HashMap<Texture, Handle<Image>>>,
+    images: Option<TextureImages>,
     uv_convention: UvConvention,
     hd: Option<HdAnimation>,
 }
@@ -439,7 +442,7 @@ struct HdAnimation {
     slots: [Option<Property<Option<Texture>>>; 6],
     fresnel: Option<mdlx::Fresnel>,
     gain: Option<Property<f32>>,
-    images: Arc<TextureImages>,
+    images: TextureImages,
 }
 impl SurfacePass {
     /// Only authored HD occlusion is optional when the draw has no second UV
@@ -533,16 +536,14 @@ pub(crate) fn map_material_images(
 impl SurfaceAnimation {
     pub(crate) fn map_images(
         &mut self,
+        remapper: &mut TextureImageRemapper,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
-        self.images = Arc::new(
-            self.images
-                .iter()
-                .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
-                .collect(),
-        );
+        if let Some(images) = &mut self.images {
+            images.map_images(remapper, map);
+        }
         if let Some(hd) = &mut self.hd {
-            Arc::make_mut(&mut hd.images).map_images(map);
+            hd.images.map_images(remapper, map);
         }
     }
 }
@@ -583,3 +584,7 @@ mod image_rebinding_tests {
 #[cfg(test)]
 #[path = "material/crystal_tests.rs"]
 mod crystal_tests;
+
+#[cfg(test)]
+#[path = "material/shared_images_tests.rs"]
+mod shared_images_tests;

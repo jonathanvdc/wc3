@@ -15,6 +15,7 @@ use crate::effects::simulation::{split_time, EmissionPhase, EmissionRounding, Li
 use crate::effects::trails::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
 use crate::layers::ModelOwnedRenderEntity;
 use crate::material::map_material_images;
+use crate::textures::TextureImageRemapper;
 use crate::textures::{TextureImages, TextureRole};
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::math::Affine2;
@@ -631,12 +632,13 @@ fn interpolated(a: Mat4, b: Mat4, t: f32) -> Mat4 {
 impl RuntimeRibbons {
     pub(crate) fn map_images(
         &mut self,
+        remapper: &mut TextureImageRemapper,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
         for emitter in &mut self.emitters {
             for pass in &mut emitter.passes {
                 map_material_images(&mut pass.material, map);
-                pass.animation.map_images(map);
+                pass.animation.map_images(remapper, map);
             }
         }
     }

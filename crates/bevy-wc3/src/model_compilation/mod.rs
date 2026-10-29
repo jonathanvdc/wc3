@@ -148,12 +148,12 @@ pub(crate) fn compile_with_geometry(
         });
         Some(symbol)
     };
-    let images = Arc::new(match selected_textures.as_ref() {
+    let images = match selected_textures.as_ref() {
         Some(selected) => {
             TextureImages::resolve_selected(model, Some(selected), &mut resolve_symbol)
         }
         None => TextureImages::resolve(model, &mut resolve_symbol),
-    });
+    };
     let materials = compile_materials_with_images(
         model,
         model.materials().iter().filter_map(|(id, _)| {
@@ -162,7 +162,7 @@ pub(crate) fn compile_with_geometry(
                 .is_none_or(|selected| selected.contains(&id))
                 .then_some(id)
         }),
-        images.clone(),
+        &images,
         &targets,
     )?;
     for (&id, passes) in &materials {

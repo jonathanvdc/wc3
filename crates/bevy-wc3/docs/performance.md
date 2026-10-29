@@ -343,20 +343,38 @@ changing-pose work from repeated render preparation and GPU drawing. The
 benchmark reports measurements rather than asserting a production FPS target or
 native rendering fidelity; use `capture` for matched image checks.
 
-## Measure scoped texture lookup
 
-A CPU-only comparison isolates animated color-map construction across 128, 512,
-and 2,048 material steps. Each step has one resolved image; the comparison builds
-all maps ten times through the current scope index and the previous full-table
-scan. Run it explicitly:
 
-```sh
-cargo test -p bevy-wc3 --lib textures::tests::scoped_color_lookup_scaling \
-  -- --ignored --exact --nocapture
-```
+## Measure material compilation
 
-The scope index visits each input's images instead of scanning the entire model
-for every step. It allocates a map per populated input, so this timing check does
-not establish a memory reduction. Compare the same build profile and machine;
-the test reports timings without a speed threshold. It excludes model loading,
-texture decoding, GPU preparation and rendering, and does not measure frame rate.
+`cargo bench -p bevy-wc3 --bench material_preparation` measures complete CPU
+`compile_model` calls and result destruction for classic and HD models with one material/one draw,
+eight materials/32 draws, and 32 materials/256 draws. Every draw has tiny quad
+geometry; each logical image request receives a distinct deterministic handle.
+Native decoding/import, image decoding, asset insertion, uploads and rendering
+are excluded. These workloads expose material/default-image preparation costs,
+including shared-table remapping, without large geometry projections hiding them.
+They do not isolate the remapper or measure animation-update/GPU frame time.
+
+Animation bindings retain one complete resolved table per model interpretation.
+Classic-only models may retain more distinct table entries than per-pass color-only
+maps, including unscoped defaults. Classic animated selection also performs a scope
+lookup before its image lookup. Repeated draws share the table; this is not a claim
+of lower memory or faster animation sampling for every model.
+
+One cloud CPU comparison with Rust 1.99.0 and the default optimized bench profile
+used 20 samples, a one-second warmup and three-second measurement per case.
+Median times for complete compilation and result destruction were:
+
+| Family | Materials / draws | Before shared remapping | Shared remapping |
+| --- | ---: | ---: | ---: |
+| HD | 1 / 1 | 45.84 µs | 39.42 µs |
+| HD | 8 / 32 | 984.06 µs | 528.44 µs |
+| HD | 32 / 256 | 28.99 ms | 3.25 ms |
+| Classic | 1 / 1 | 27.09 µs | 23.66 µs |
+| Classic | 8 / 32 | 473.45 µs | 390.24 µs |
+| Classic | 32 / 256 | 3.47 ms | 3.03 ms |
+
+The amplified HD case has 200 resolved entries: remapping their shared table once
+avoids visiting it separately for each of 256 draws. This is one host's synthetic
+preparation workload, not a frame-rate or universal memory claim.

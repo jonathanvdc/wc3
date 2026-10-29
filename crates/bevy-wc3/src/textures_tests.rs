@@ -351,7 +351,7 @@ fn image_remapping_updates_scoped_animation_maps_without_changing_clones() {
     // Construct the animation map before mapping to catch stale derived storage.
     let previous_colors = mapped.color_images();
     let mut calls = 0;
-    mapped.map_images(&mut |image| {
+    mapped.map_images(&mut TextureImageRemapper::default(), &mut |image| {
         assert_eq!(image, &old);
         calls += 1;
         Some(replacement.clone())
@@ -374,7 +374,7 @@ fn image_remapping_updates_scoped_animation_maps_without_changing_clones() {
             );
         }
     }
-    mapped.map_images(&mut |_| None);
+    mapped.map_images(&mut TextureImageRemapper::default(), &mut |_| None);
     assert!(mapped.color_images().is_empty());
     assert!(mapped.for_role(textures[0], TextureRole::Color).is_none());
     assert_eq!(
@@ -419,71 +419,6 @@ fn selected_images_filter_resources_independently_of_sampler_and_declaration() {
         panic!("empty selection must not resolve requests")
     });
     assert!(empty.color_images().is_empty());
-}
-
-#[test]
-#[ignore = "manual CPU comparison of scoped lookup and the previous full-table scan"]
-fn scoped_color_lookup_scaling() {
-    use std::hint::black_box;
-    use std::time::Instant;
-
-    for count in [32, 128, 512] {
-        let (model, materials, _) = scoped_texture_model(count);
-        let mut images = Assets::<Image>::default();
-        let image = images.add(Image::default());
-        let resolved = TextureImages::resolve(&model, |_| Some(image.clone()));
-        let flat = texture_requests(&model)
-            .into_iter()
-            .map(|request| (request.key(), image.clone()))
-            .collect::<HashMap<_, _>>();
-        let start = Instant::now();
-        for _ in 0..10 {
-            for &material in &materials {
-                for step in 0..4 {
-                    black_box(resolved.material(material, step).color_images());
-                }
-            }
-        }
-        let scoped = start.elapsed();
-        let start = Instant::now();
-        for _ in 0..10 {
-            for &material in &materials {
-                for step in 0..4 {
-                    let input = Some(TextureInput::Material {
-                        material,
-                        step,
-                        slot: 0,
-                    });
-                    black_box(
-                        flat.iter()
-                            .filter(|(key, _)| key.input == input)
-                            .filter_map(|(key, image)| {
-                                (key.color_space
-                                    == TextureColorSpace::selected(
-                                        key.declared,
-                                        TextureRole::Color,
-                                    ))
-                                .then_some((
-                                    Texture {
-                                        resource: key.resource,
-                                        color_space: key.declared,
-                                        sampler: key.sampler,
-                                    },
-                                    image.clone(),
-                                ))
-                            })
-                            .collect::<HashMap<_, _>>(),
-                    );
-                }
-            }
-        }
-        eprintln!(
-            "{} material steps: scoped {:?}, flat scan {:?} (10 repetitions)",
-            count * 4,
-            scoped,
-            start.elapsed()
-        );
-    }
 }
 
 #[test]
@@ -671,4 +606,78 @@ fn repeated_animated_textures_resolve_once_per_input_in_source_order() {
         5,
         "one unscoped resolution and four scoped resolutions"
     );
+}
+
+#[test]
+fn remapping_shared_views_visits_each_table_once_and_keeps_sources_alive() {
+    let (model, materials, _textures) = scoped_texture_model(2);
+    let mut assets = Assets::<Image>::default();
+    let mut flat = HashMap::new();
+    let original = TextureImages::resolve(&model, |request| {
+        let image = assets.add(Image::default());
+        flat.insert(request.key(), image.clone());
+        Some(image)
+    });
+    let weak_source = Arc::downgrade(&original.variants);
+    let mut views = materials
+        .iter()
+        .flat_map(|&material| (0..2).map(move |step| (material, step)))
+        .map(|(material, step)| original.material(material, step))
+        .collect::<Vec<_>>();
+    // Independent resolutions with equal handles still own independent tables.
+    let mut independent =
+        TextureImages::resolve(&model, |request| flat.get(&request.key()).cloned());
+    let mut replacements = HashMap::new();
+    for (index, image) in flat.values().enumerate() {
+        let replacement = (index % 2 == 0).then(|| assets.add(Image::default()));
+        replacements.insert(image.id(), replacement);
+    }
+    let mut remapper = TextureImageRemapper::default();
+    let mut calls = 0;
+    let mut substitute = |image: &Handle<Image>| {
+        calls += 1;
+        replacements[&image.id()].clone()
+    };
+    for view in &mut views {
+        view.map_images(&mut remapper, &mut substitute);
+    }
+    assert_eq!(calls, flat.len());
+    assert!(views.iter().all(|view| view.shares_storage(&views[0])));
+    for request in texture_requests(&model) {
+        let expected = replacements[&flat[&request.key()].id()].as_ref();
+        let view = TextureImages {
+            input: request.input,
+            variants: views[0].variants.clone(),
+        };
+        assert_eq!(
+            view.get_with_sampler(
+                request.texture,
+                request.texture.color_space,
+                request.role,
+                request.sampler
+            ),
+            expected
+        );
+    }
+    let mut independent_calls = 0;
+    independent.map_images(&mut remapper, &mut |image| {
+        independent_calls += 1;
+        replacements[&image.id()].clone()
+    });
+    assert_eq!(independent_calls, flat.len());
+    assert!(!independent.shares_storage(&views[0]));
+    drop(original);
+    assert!(
+        weak_source.upgrade().is_some(),
+        "cache retains source ownership for its pointer keys"
+    );
+    drop(remapper);
+    assert!(weak_source.upgrade().is_none());
+    let old_mapped = views[0].clone();
+    views[0].map_images(&mut TextureImageRemapper::default(), &mut |_| None);
+    assert!(views[0].variants.values().all(HashMap::is_empty));
+    assert!(old_mapped
+        .variants
+        .values()
+        .any(|variants| !variants.is_empty()));
 }

@@ -30,12 +30,16 @@ local preparation behavior; manual clients can reuse a `PreparedGeometryCache`
 with `CompiledModel::prepare_with_cache` across calls.
 
 Resolved image interpretations are indexed by material step or effect input.
-Building an animated color-selection map visits only that input's resolved images,
-rather than rescanning the model's entire request table for every material step.
-Authored color declarations, effective transfer functions, samplers and slots
-remain distinct. Compilation filters selected images through a resource-ID set;
-resolution still visits accepted requests in their original order. Remapping
-images creates independent lookup storage for the remapped model.
+Classic and HD animation bindings retain scoped views of the same immutable table;
+they do not copy image handles into per-pass color maps. Passes without classic
+image selection retain no classic lookup view. Authored color declarations,
+effective transfer functions, samplers and slots remain distinct. Compilation
+filters selected images through a resource-ID set; resolution still visits accepted
+requests in their original order. Default-image substitution and instance replacements
+remap each shared source table once per operation, then share the resulting table
+across draw, liquid and ribbon animation bindings. The operation retains source
+owners while matching table identities. Templates and other replacement variants
+keep their original storage; omitted images disappear from the new table.
 
 Animated materials remain private to an instance and only change their Bevy assets
 when sampled values change. On capable devices, `ModelMaterial` uses Bevy's

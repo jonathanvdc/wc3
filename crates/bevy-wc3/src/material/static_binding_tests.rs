@@ -183,7 +183,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
                 opacity: scalar(),
                 team_color: scalar(),
             }),
-            images: Arc::default(),
+            images: TextureImages::default(),
         }),
         ..SlotConstruct::construct(&mut slot_values)
     };

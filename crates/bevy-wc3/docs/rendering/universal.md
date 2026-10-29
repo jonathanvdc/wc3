@@ -91,6 +91,10 @@ See [assembly image selection](assembly.md#select-appearance-geometry-and-images
 When a selected material contains a texture-valued animation slot, discovery
 conservatively retains all sampled images in the model, including images that may
 only be selected by a curve.
+Classic and HD animation bindings share the resolved table through scoped views.
+Applying defaults or replacements builds one new table per shared source table,
+independent of how many draws reuse those bindings. Each resulting model keeps its
+own image interpretation; remapping does not mutate its template or other variants.
 
 ## Native loading
 

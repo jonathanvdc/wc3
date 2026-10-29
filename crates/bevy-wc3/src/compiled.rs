@@ -9,6 +9,7 @@ use crate::material::map_material_images;
 use crate::material::SurfaceAnimation;
 use crate::mesh_animation::MeshMaterialState;
 use crate::physics::{PhysicsBodyInfo, PhysicsDefinition};
+use crate::textures::TextureImageRemapper;
 use crate::world::WorldRuntime;
 use crate::TextureRequest;
 use crate::{
@@ -486,15 +487,16 @@ impl CompiledModel {
         &mut self,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
+        let mut remapper = TextureImageRemapper::default();
         for draw in &mut self.draws {
             map_material_images(&mut draw.material, map);
-            Arc::make_mut(&mut draw.animation).map_images(map);
+            Arc::make_mut(&mut draw.animation).map_images(&mut remapper, map);
         }
-        Arc::make_mut(&mut self.particles).map_images(map);
+        Arc::make_mut(&mut self.particles).map_images(&mut remapper, map);
         for liquid in &mut self.liquids {
             if let Some((material, animation)) = &mut liquid.surface {
                 map_material_images(material, map);
-                Arc::make_mut(animation).map_images(map);
+                Arc::make_mut(animation).map_images(&mut remapper, map);
             }
         }
     }
@@ -504,15 +506,16 @@ impl PreparedModel {
         &mut self,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
+        let mut remapper = TextureImageRemapper::default();
         for draw in Arc::make_mut(&mut self.draws) {
             map_material_images(&mut draw.material, map);
-            Arc::make_mut(&mut draw.animation).map_images(map);
+            Arc::make_mut(&mut draw.animation).map_images(&mut remapper, map);
         }
-        Arc::make_mut(&mut self.particles).map_images(map);
+        Arc::make_mut(&mut self.particles).map_images(&mut remapper, map);
         for liquid in Arc::make_mut(&mut self.liquids) {
             if let Some((material, animation)) = &mut liquid.surface {
                 map_material_images(material, map);
-                Arc::make_mut(animation).map_images(map);
+                Arc::make_mut(animation).map_images(&mut remapper, map);
             }
         }
         self.material_cache = Arc::new(Mutex::new(HashMap::new()));

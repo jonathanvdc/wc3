@@ -13,7 +13,7 @@ of several models.
 - [Viewer and captures](tools.md): inspect local models and produce repeatable PNGs.
 - [Model assembly](rendering/assembly.md): appearance choices, prepared dependencies, texture atlases, and mounted or skinned parts.
 - [WoW characters and equipment](rendering/characters.md): translate native appearance choices into an assembly.
-- [Performance measurements](performance.md): frozen or advancing completed frames, effect upload receipts, and model or character crowds.
+- [Performance measurements](performance.md): CPU material compilation, frozen or advancing completed frames, effect upload receipts, and model or character crowds.
 
 ## Rendering reference
 
