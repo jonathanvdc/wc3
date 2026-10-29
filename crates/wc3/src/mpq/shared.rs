@@ -149,6 +149,11 @@ impl<S: ReadAt> SharedEntryReader<S> {
     pub fn diagnostics(&self) -> &[RecoveryDiagnostic] {
         &self.diagnostics
     }
+    /// Consumes this reader and returns its unread decoded bytes.
+    /// See [`EntryReader::into_bytes`] for buffer reuse and validation semantics.
+    pub fn into_bytes(self) -> Result<Vec<u8>, Error> {
+        self.stream.into_bytes()
+    }
     /// Storage metadata for this entry.
     pub fn metadata(&self) -> &BlockEntry {
         self.stream.metadata()
@@ -246,9 +251,7 @@ impl<S: ReadAt> SharedArchive<S> {
     }
     /// Extracts a complete entry. Use `open_file` for bounded streaming memory.
     pub fn read_file(&self, name: impl AsRef<[u8]>) -> Result<Vec<u8>, Error> {
-        let mut bytes = Vec::new();
-        self.open_file(name)?.read_to_end(&mut bytes)?;
-        Ok(bytes)
+        self.open_file(name)?.into_bytes()
     }
 }
 impl<R: Read + Seek + Send> Archive<R> {

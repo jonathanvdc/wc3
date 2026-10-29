@@ -591,3 +591,28 @@ fn differing_classic_and_bet_record_order_is_remapped() {
     assert_eq!(archive.index().blocks.len(), 2);
     assert_eq!(archive.index().find("Units/Encrypted.bin", 0, 0), Some(1));
 }
+
+#[test]
+fn consuming_read_reuses_decoded_buffer_and_rejects_failed_readers() {
+    for prefix in [0, 3, 7] {
+        let mut archive = Archive::open(Cursor::new(archive())).unwrap();
+        let mut entry = archive.open_file("data").unwrap();
+        entry.fill().unwrap();
+        let pointer = entry.buffer.as_ptr();
+        let mut consumed = vec![0; prefix];
+        entry.read_exact(&mut consumed).unwrap();
+        let bytes = entry.into_bytes().unwrap();
+        assert_eq!(bytes, &b"payload"[prefix..]);
+        if prefix != 7 {
+            assert_eq!(bytes.as_ptr(), pointer);
+        }
+    }
+    let mut archive = Archive::open(Cursor::new(archive())).unwrap();
+    archive.source.get_mut().clear();
+    let mut entry = archive.open_file("data").unwrap();
+    assert!(entry.read(&mut [0]).is_err());
+    assert!(matches!(
+        entry.into_bytes(),
+        Err(Error::InvalidArchive("entry reader previously failed"))
+    ));
+}

@@ -580,16 +580,13 @@ impl<R: Read + Seek> Archive<R> {
 
     /// Convenience extraction. Prefer `open_file` for bounded payload memory.
     pub fn read_file(&mut self, name: impl AsRef<[u8]>) -> Result<Vec<u8>, Error> {
-        let mut reader = self.open_file(name)?;
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes)?;
-        Ok(bytes)
+        self.open_file(name)?.into_bytes()
     }
 
     /// Returns names supplied by `(listfile)`, without asserting completeness.
     /// Names remain bytes rather than imposing UTF-8 on old game archives.
     pub fn known_names(&mut self) -> Result<Vec<Vec<u8>>, Error> {
-        let mut entry = match self.open_file(b"(listfile)") {
+        let entry = match self.open_file(b"(listfile)") {
             Ok(entry) => entry,
             Err(Error::FileNotFound) => return Ok(Vec::new()),
             Err(e) => return Err(e),
@@ -598,8 +595,7 @@ impl<R: Read + Seek> Archive<R> {
         if entry.block.file_size > 16 << 20 {
             return Err(Error::LimitExceeded("listfile size"));
         }
-        let mut bytes = Vec::new();
-        entry.read_to_end(&mut bytes)?;
+        let bytes = entry.into_bytes()?;
         Ok(bytes
             .split(|b| matches!(b, b'\r' | b'\n'))
             .filter(|line| !line.is_empty())
@@ -780,6 +776,43 @@ impl<R: Read + Seek> EntryReader<R> {
     /// Returns the encoded storage metadata for this entry.
     pub fn metadata(&self) -> &BlockEntry {
         &self.block
+    }
+
+    /// Consumes this reader and returns its unread decoded bytes.
+    ///
+    /// Reuses the decoded buffer when the remaining entry fits in one unit;
+    /// otherwise allocates the remaining decoded size once. Already delivered
+    /// bytes are excluded. All remaining sectors are decoded and validated,
+    /// and codec or checksum failures retain their structured MPQ error.
+    pub fn into_bytes(mut self) -> Result<Vec<u8>, Error> {
+        if self.failed {
+            return Err(Error::InvalidArchive("entry reader previously failed"));
+        }
+        let remaining = (self.block.file_size - self.delivered) as usize;
+        if remaining == 0 {
+            return Ok(Vec::new());
+        }
+        if self.cursor == self.buffer.len() {
+            self.fill()?;
+        }
+        if remaining == self.buffer.len() - self.cursor {
+            self.buffer.copy_within(self.cursor.., 0);
+            self.buffer.truncate(remaining);
+            return Ok(self.buffer);
+        }
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(remaining)
+            .map_err(|_| Error::LimitExceeded("decoded entry buffer"))?;
+        loop {
+            let available = &self.buffer[self.cursor..];
+            bytes.extend_from_slice(available);
+            self.delivered += available.len() as u32;
+            if self.delivered == self.block.file_size {
+                return Ok(bytes);
+            }
+            self.fill()?;
+        }
     }
 
     fn fill(&mut self) -> Result<(), Error> {

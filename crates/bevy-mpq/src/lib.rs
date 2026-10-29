@@ -52,7 +52,7 @@ use bevy_asset::io::{
 use blocking::unblock;
 use std::error::Error as StdError;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::io::{self, Read};
+use std::io;
 use std::num::NonZeroUsize;
 use std::path::{Component, Path};
 use std::sync::Arc;
@@ -130,16 +130,21 @@ impl<R: ReadAt + 'static> MpqAssetReader<R> {
 
     fn contains(&self, path: &Path) -> Result<bool, AssetReaderError> {
         let name = asset_name(path)?;
-        Ok(self
-            .archive
-            .index()
+        Ok(self.selected_locale(&name).is_some())
+    }
+
+    fn selected_locale(&self, name: &str) -> Option<u16> {
+        let index = self.archive.index();
+        if index
             .find(name.as_bytes(), self.locale, self.platform)
             .is_some()
-            || self
-                .archive
-                .index()
-                .find(name.as_bytes(), 0, self.platform)
-                .is_some())
+        {
+            Some(self.locale)
+        } else if self.locale != 0 && index.find(name.as_bytes(), 0, self.platform).is_some() {
+            Some(0)
+        } else {
+            None
+        }
     }
 
     /// Selects the requested locale/platform, falling back to neutral locale on
@@ -159,26 +164,16 @@ impl<R: ReadAt + 'static> AssetReader for MpqAssetReader<R> {
         let label = self.label.clone();
         let path = path.to_owned();
         let platform = self.platform;
-        let selected = if archive
-            .index()
-            .find(name.as_bytes(), self.locale, platform)
-            .is_some()
-        {
-            self.locale
-        } else if archive.index().find(name.as_bytes(), 0, platform).is_some() {
-            0
-        } else {
+        let Some(selected) = self.selected_locale(&name) else {
             return Err(AssetReaderError::NotFound(path));
         };
         let permit = self.permits.acquire_arc().await;
         let bytes = unblock(move || {
             let _permit = permit;
             let result = (|| {
-                let mut entry =
-                    archive.open_file_with_locale(name.as_bytes(), selected, platform)?;
-                let mut bytes = Vec::new();
-                entry.read_to_end(&mut bytes)?;
-                Ok::<_, Error>(bytes)
+                archive
+                    .open_file_with_locale(name.as_bytes(), selected, platform)?
+                    .into_bytes()
             })();
             match result {
                 Ok(bytes) => Ok(bytes),

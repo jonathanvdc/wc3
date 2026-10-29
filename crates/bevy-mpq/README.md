@@ -83,6 +83,11 @@ once. Use `with_max_concurrent_reads` with a `NonZeroUsize` value before cloning
 to choose a different limit. Requests wait asynchronously for capacity, which
 is released when extraction finishes.
 
+Complete extraction consumes the MPQ entry reader: single-unit entries transfer
+their decoded buffer directly, while multi-sector entries reserve the decoded
+output size once. Sector validation and filename-based encryption keys apply to
+both paths.
+
 The extraction limit controls work in progress. Decoded bytes can remain in use
 after extraction finishes, and their memory is not covered by that limit.
 Configure `SharedArchive::with_options` to bound individual file sizes and other

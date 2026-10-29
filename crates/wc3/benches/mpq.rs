@@ -3,7 +3,7 @@ use std::{
     env,
     fs::{self, File},
     hint::black_box,
-    io::Cursor,
+    io::{Cursor, Read},
     path::PathBuf,
     process::id,
     sync::Arc,
@@ -48,6 +48,46 @@ impl Drop for TemporaryArchive {
     fn drop(&mut self) {
         fs::remove_file(&self.0).unwrap();
     }
+}
+
+fn complete_reads(c: &mut Criterion) {
+    let payload = fixtures::payload(1 << 20, false);
+    let mut group = c.benchmark_group("complete-read");
+    group.throughput(Throughput::Bytes(payload.len() as u64));
+    for (name, bytes) in [
+        ("single-stored", single_unit(&payload, payload.len(), 0)),
+        (
+            "sector-stored",
+            fixtures::archive(&payload, 1, Compression::Stored, false, 0),
+        ),
+        (
+            "sector-zlib",
+            fixtures::archive(&payload, 1, Compression::Zlib, true, 0),
+        ),
+    ] {
+        let archive = SharedArchive::open(Arc::<[u8]>::from(bytes)).unwrap();
+        let entry = if name == "single-stored" {
+            "entry"
+        } else {
+            "entry-0"
+        };
+        assert_eq!(archive.read_file(entry).unwrap(), payload);
+        group.bench_function(format!("{name}/stream"), |b| {
+            b.iter(|| {
+                let mut bytes = Vec::new();
+                archive
+                    .open_file(entry)
+                    .unwrap()
+                    .read_to_end(&mut bytes)
+                    .unwrap();
+                black_box(bytes)
+            })
+        });
+        group.bench_function(format!("{name}/consume"), |b| {
+            b.iter(|| black_box(archive.open_file(entry).unwrap().into_bytes().unwrap()))
+        });
+    }
+    group.finish();
 }
 
 fn archives(c: &mut Criterion) {
@@ -252,5 +292,5 @@ fn archives(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, archives);
+criterion_group!(benches, archives, complete_reads);
 criterion_main!(benches);

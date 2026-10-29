@@ -77,8 +77,13 @@
 //! # Ok::<(), Error>(())
 //! ```
 //!
-//! `read_file` allocates the complete decoded entry. For streaming, use `open_file`
-//! and the standard I/O `Read` trait. Configure [`ReadOptions`](crate::mpq::ReadOptions) through
+//! `read_file` allocates the complete decoded entry. Consuming an entry with
+//! [`EntryReader::into_bytes`](crate::mpq::EntryReader::into_bytes) or
+//! [`SharedEntryReader::into_bytes`](crate::mpq::SharedEntryReader::into_bytes) returns its
+//! unread bytes, reusing its decoded buffer when possible and reserving the
+//! remaining decoded size once for multi-sector entries. Codec and checksum
+//! validation still apply. For bounded streaming memory, use `open_file` and the
+//! standard I/O `Read` trait. Configure [`ReadOptions`](crate::mpq::ReadOptions) through
 //! [`SharedArchive::with_options`](crate::mpq::SharedArchive::with_options) to limit allocations and select recovery policy.
 //! Keep source contents unchanged for the lifetime of the archive and its readers.
 //! Indexing recoveries are available from [`SharedArchive::diagnostics`](crate::mpq::SharedArchive::diagnostics); payload
